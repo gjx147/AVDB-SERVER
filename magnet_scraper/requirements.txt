@@ -1,0 +1,5 @@
+# magnet_scraper 独立依赖（scraper 作为子进程运行）
+# 与 backend 共用同一 venv，这里仅声明 scraper 额外需要的包
+
+playwright>=1.44,<1.50
+playwright-stealth>=1.0.6,<2.0
