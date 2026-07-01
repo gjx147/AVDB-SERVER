@@ -1,0 +1,47 @@
+# ============================================================
+# AVDB-SERVER backend dependencies
+# Python >= 3.11
+# ============================================================
+
+# --- Web framework ---
+fastapi>=0.110,<0.116
+uvicorn[standard]>=0.29,<0.32
+python-multipart>=0.0.9        # FastAPI form parsing
+websockets>=12.0               # crawl progress WS
+
+# --- Database (SQLAlchemy ORM, SQLite default / PG optional) ---
+SQLAlchemy>=2.0.30,<2.1
+alembic>=1.13,<1.15            # migrations
+# psycopg2-binary>=2.9         # uncomment for PostgreSQL
+
+# --- Scheduling ---
+APScheduler>=3.10,<3.12
+
+# --- Auth ---
+python-jose[cryptography]>=3.3,<4.0   # JWT
+passlib[bcrypt]>=1.7,<2.0             # password hashing
+
+# --- HTTP / scraping ---
+httpx>=0.27,<0.29
+playwright>=1.44,<1.50
+playwright-stealth>=1.0.6,<2.0
+
+# --- Cloudflare bypass fallback (optional service) ---
+# Used as a sidecar proxy when Playwright stealth is insufficient.
+# No python lib needed; we call FlareSolverr's HTTP API via httpx.
+
+# --- Downloaders ---
+qbittorrent-api>=2024.1,<2025.0
+grpcio>=1.60,<1.70              # CloudDrive2 gRPC
+protobuf>=4.25,<5.0
+
+# --- Notifications ---
+httpx  # (reused) Bark / Telegram / Discord / WeChat Work / Webhook
+
+# --- AI (OpenAI-compatible) ---
+openai>=1.30,<2.0
+
+# --- Utils ---
+python-dotenv>=1.0,<2.0
+pydantic>=2.7,<3.0
+pydantic-settings>=2.2,<3.0
