@@ -82,3 +82,41 @@ def login():
     from auth import create_access_token
     token = create_access_token("admin")
     return {"access_token": token, "token_type": "bearer"}
+
+
+# --- 前端 SPA 静态文件服务 ---
+# 静态文件最后挂载（否则会覆盖 API 路由）。
+# frontend/dist 在容器内为 /app/frontend/dist，本地开发为项目根 frontend/dist。
+from pathlib import Path  # noqa: E402
+from fastapi.responses import FileResponse, Response  # noqa: E402
+from starlette.staticfiles import StaticFiles  # noqa: E402
+
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+
+class SPAStaticFiles(StaticFiles):
+    """SPA 静态文件：API 路径返回 404，其余未匹配路径 fallback 到 index.html。"""
+
+    async def __call__(self, scope, receive, send):
+        request_path = scope["path"]
+        if request_path.startswith("/api/"):
+            # API 路径未匹配到路由，返回 404
+            await Response("Not Found", status_code=404)(scope, receive, send)
+            return
+        path = request_path.lstrip("/")
+        file_path = Path(self.directory) / path
+        if path and file_path.exists() and file_path.is_file():
+            await super().__call__(scope, receive, send)
+            return
+        index_file = Path(self.directory) / "index.html"
+        if index_file.exists():
+            await FileResponse(str(index_file))(scope, receive, send)
+        else:
+            await Response("Not Found", status_code=404)(scope, receive, send)
+
+
+if _FRONTEND_DIST.exists():
+    app.mount("/", SPAStaticFiles(directory=str(_FRONTEND_DIST), html=True), name="frontend")
+else:
+    logger.warning(f"前端构建目录不存在: {_FRONTEND_DIST}（请先 npm run build）")
+

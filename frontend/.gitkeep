@@ -1,2 +1,0 @@
-# 前端构建产物将放在此目录的 dist/ 下（Phase 1 末尾从 admin-new 复制）
-# 占位文件，确保 Docker COPY frontend/ 不会失败
