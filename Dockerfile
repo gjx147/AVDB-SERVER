@@ -32,12 +32,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # 先装依赖（利用 Docker 层缓存）
+# backend/requirements.txt 已含 magnet_scraper 所需的 playwright + playwright-stealth
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 ENV PIP_NO_CACHE_DIR=1
-COPY backend/requirements.txt magnet_scraper/requirements.txt ./
+COPY backend/requirements.txt ./
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt \
-    && pip install -r magnet_scraper.requirements.txt
+    && pip install -r requirements.txt
 
 # 安装 Playwright Chromium 浏览器
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
