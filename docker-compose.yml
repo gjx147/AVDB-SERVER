@@ -1,0 +1,38 @@
+services:
+  avdb-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: avdb-server:latest
+    container_name: avdb-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 数据持久化（DB + 图片缓存 + 爬取状态）
+      - avdb_data:/app/data
+      # 开发时挂载源码（生产注释掉）
+      # - ./backend:/app/backend
+      # - ./magnet_scraper:/app/magnet_scraper
+    environment:
+      - AUTH_DISABLED=true            # 开发期关闭鉴权；生产设 false 并配 SECRET_KEY/ADMIN_PASSWORD
+      - SECRET_KEY=change-me-in-production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin
+      - JAVDB_URL=https://javdb.com
+      - DATABASE_URL=                 # 空则用默认 SQLite /app/data/javdb.db
+      - DEBUG=false
+      # 代理（Playwright 访问 javdb 用）
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      # - http_proxy=http://192.168.x.x:port
+      # - https_proxy=http://192.168.x.x:port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  avdb_data:
