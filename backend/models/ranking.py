@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -27,9 +27,9 @@ class Ranking(Base):
 
     # 与 tasks 表关联（入库后回填）
     task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
-    is_in_library: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_in_library: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
 
     __table_args__ = (
         Index("idx_rankings_type_date", "rank_type", "rank_date"),

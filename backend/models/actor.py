@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -42,14 +42,14 @@ class Actor(Base):
     movie_count: Mapped[int | None] = mapped_column(Integer)
 
     # 状态标记（JavdBviewed 移植）
-    is_followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 收藏
-    is_blacklisted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 拉黑
+    is_followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")  # 收藏
+    is_blacklisted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")  # 拉黑
 
     note: Mapped[str | None] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()
     )
 
     tasks = relationship("Task", secondary=actor_movies, backref="actor_refs")

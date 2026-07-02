@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -22,8 +22,8 @@ class Task(Base):
     # --- 基础字段（strivek） ---
     list_source_id: Mapped[int] = mapped_column(Integer, ForeignKey("list_sources.id"), nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending/visited/failed
-    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")  # pending/visited/failed
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     # --- 磁力（strivek + AVDB 结构升级：magnets_json 带 name） ---
     best_magnet: Mapped[str | None] = mapped_column(Text)
@@ -54,7 +54,7 @@ class Task(Base):
     file_size: Mapped[str | None] = mapped_column(String(20))
 
     # --- 收藏 / 笔记（AVDB 扩展） ---
-    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     favorite_at: Mapped[datetime | None] = mapped_column(DateTime)
     note: Mapped[str | None] = mapped_column(Text)
 
@@ -73,9 +73,9 @@ class Task(Base):
     # --- 下载状态（AVDB patch 层并入） ---
     download_status: Mapped[str | None] = mapped_column(String(20))
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()
     )
 
     # --- 关系 ---
