@@ -98,3 +98,21 @@ class ActorDetailOut(ActorOut):
     debut_date: Optional[str] = None
     note: Optional[str] = None
     movie_ids: list[int] = []
+
+
+class RankingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    rank_type: str
+    rank_date: str
+    rank_position: int
+    video_code: Optional[str] = None
+    title: Optional[str] = None
+    cover_url: Optional[str] = None
+    score: Optional[float] = None
+    task_id: Optional[int] = None
+    is_in_library: bool = False
+
+
+class BatchAddTasksRequest(BaseModel):
+    ranking_ids: list[int]
