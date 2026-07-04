@@ -40,8 +40,18 @@ async def lifespan(app: FastAPI):
     from database import Base, engine
     Base.metadata.create_all(bind=engine)
     logger.info("数据库就绪")
-    # TODO Phase 3+: 启动 APScheduler / watchdog
+    # 启动浏览器池（按需启动，首次 acquire 时才真正 launch）
+    from services.browser_pool import browser_pool
+    try:
+        await browser_pool.start()
+    except Exception as e:
+        logger.warning(f"浏览器池启动失败（按需重试）: {e}")
     yield
+    # 关闭浏览器池
+    try:
+        await browser_pool.stop()
+    except Exception:
+        pass
     logger.info("AVDB-SERVER 关闭")
 
 
