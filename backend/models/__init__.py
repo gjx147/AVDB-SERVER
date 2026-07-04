@@ -10,6 +10,7 @@ from models.actor import Actor, ActorMovie, actor_movies
 from models.ranking import Ranking
 from models.setting import Setting
 from models.log import CrawlLog
+from models.subscription import Subscription
 
 __all__ = [
     "Task",
@@ -20,4 +21,5 @@ __all__ = [
     "Ranking",
     "Setting",
     "CrawlLog",
+    "Subscription",
 ]

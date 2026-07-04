@@ -116,3 +116,31 @@ class RankingOut(BaseModel):
 
 class BatchAddTasksRequest(BaseModel):
     ranking_ids: list[int]
+
+
+class SubscriptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    sub_type: str
+    rank_type: Optional[str] = None
+    actor_id: Optional[int] = None
+    filters_json: Optional[str] = None
+    auto_add: bool = True
+    target_list_source_id: Optional[int] = None
+    enabled: bool = True
+    check_interval_hours: int = 6
+    last_checked_at: Optional[datetime] = None
+    last_result: Optional[str] = None
+
+
+class SubscriptionCreate(BaseModel):
+    name: str
+    sub_type: str  # ranking/actor/composite
+    rank_type: Optional[str] = None
+    actor_id: Optional[int] = None
+    filters_json: Optional[str] = None
+    auto_add: bool = True
+    target_list_source_id: Optional[int] = None
+    enabled: bool = True
+    check_interval_hours: int = 6
