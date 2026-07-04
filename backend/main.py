@@ -46,7 +46,18 @@ async def lifespan(app: FastAPI):
         await browser_pool.start()
     except Exception as e:
         logger.warning(f"浏览器池启动失败（按需重试）: {e}")
+    # 启动调度中心
+    from services.scheduler import start_scheduler, stop_scheduler
+    try:
+        await start_scheduler()
+    except Exception as e:
+        logger.warning(f"调度中心启动失败: {e}")
     yield
+    # 关闭调度中心
+    try:
+        await stop_scheduler()
+    except Exception:
+        pass
     # 关闭浏览器池
     try:
         await browser_pool.stop()
@@ -85,6 +96,13 @@ app.include_router(rankings.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/api/scheduler/jobs")
+def scheduler_jobs():
+    """列出调度中心所有任务。"""
+    from services.scheduler import list_jobs
+    return {"jobs": list_jobs()}
 
 
 @app.post("/api/auth/login")
