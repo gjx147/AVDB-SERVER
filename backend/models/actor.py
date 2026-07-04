@@ -16,7 +16,7 @@ actor_movies = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("actor_id", Integer, ForeignKey("actors.id", ondelete="CASCADE"), nullable=False),
     Column("task_id", Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
-    Column("created_at", DateTime, nullable=False, default=datetime.utcnow),
+    Column("created_at", DateTime, nullable=False, default=datetime.utcnow, server_default=func.now()),
     Index("idx_actor_movies_actor", "actor_id"),
     Index("idx_actor_movies_task", "task_id"),
 )

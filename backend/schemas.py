@@ -68,3 +68,33 @@ class MessageResponse(BaseModel):
     ok: bool
     message: str
     data: Optional[dict] = None
+
+
+class ActorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    name_en: Optional[str] = None
+    avatar_url: Optional[str] = None
+    avatar_local: Optional[str] = None
+    gender: Optional[str] = None
+    birth_date: Optional[str] = None
+    height: Optional[str] = None
+    cup: Optional[str] = None
+    movie_count: Optional[int] = None
+    is_followed: bool = False
+    is_blacklisted: bool = False
+
+
+class ActorListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[ActorOut]
+
+
+class ActorDetailOut(ActorOut):
+    measurements: Optional[str] = None
+    debut_date: Optional[str] = None
+    note: Optional[str] = None
+    movie_ids: list[int] = []
