@@ -236,6 +236,48 @@ export const api = {
       http.get<{ tasks: Task[]; total: number }>(`/api/v2/tasks/${taskId}/similar`).then((r) => r.data),
   },
 
+  // ════════ View Status（Phase 2：viewed/browsed/want 三态）════════
+  status: {
+    stats: () => http.get<{ total: number; by_status: Record<string, number>; unmarked: number }>('/api/status/stats').then((r) => r.data),
+    list: (status: 'viewed' | 'browsed' | 'want', page = 1, page_size = 20) =>
+      http.get<{ total: number; page: number; page_size: number; items: Task[] }>(`/api/status/${status}`, { params: { page, page_size } }).then((r) => r.data),
+    batch: (taskIds: number[], status: 'viewed' | 'browsed' | 'want' | '') =>
+      http.post<{ ok: boolean; updated: number }>('/api/status/batch', { task_ids: taskIds, status }).then((r) => r.data),
+  },
+
+  // ════════ Actors（Phase 2）════════
+  actorsNew: {
+    list: (params: { q?: string; followed?: boolean; blacklisted?: boolean; page?: number; page_size?: number } = {}) =>
+      http.get<{ total: number; page: number; page_size: number; items: Actor[] }>('/api/actors', { params }).then((r) => r.data),
+    detail: (id: number) =>
+      http.get<Actor & { movie_ids: number[] }>(`/api/actors/${id}`).then((r) => r.data),
+    toggleFollow: (id: number) =>
+      http.post<{ ok: boolean; is_followed: boolean }>(`/api/actors/${id}/follow`).then((r) => r.data),
+    toggleBlacklist: (id: number) =>
+      http.post<{ ok: boolean; is_blacklisted: boolean }>(`/api/actors/${id}/blacklist`).then((r) => r.data),
+    delete: (id: number) =>
+      http.delete<{ ok: boolean }>(`/api/actors/${id}`).then((r) => r.data),
+    movies: (id: number) =>
+      http.get<{ id: number; video_code: string; title: string; status: string }[]>(`/api/actors/${id}/movies`).then((r) => r.data),
+  },
+
+  // ════════ Rankings（Phase 2）════════
+  rankingsNew: {
+    list: (type: 'hot' | 'weekly' | 'monthly' | 'daily', date?: string) =>
+      http.get<Ranking[]>(`/api/rankings/${type}`, { params: { date } }).then((r) => r.data),
+    dates: () => http.get<Record<string, string[]>>('/api/rankings/types/dates').then((r) => r.data),
+    batchAdd: (rankingIds: number[]) =>
+      http.post<{ ok: boolean; added: number; skipped: number }>('/api/rankings/batch-add-tasks', { ranking_ids: rankingIds }).then((r) => r.data),
+  },
+
+  // ════════ Aggregate（Phase 2：多源元数据补充）════════
+  aggregate: {
+    enrich: (taskId: number, overwrite = false) =>
+      http.post<{ ok: boolean; changed: boolean; source: string; title?: string; rating?: number }>(
+        `/api/aggregate/${taskId}`, null, { params: { overwrite } },
+      ).then((r) => r.data),
+  },
+
   // ════════ Settings ════════
   settings: {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),
