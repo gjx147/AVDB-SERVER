@@ -25,6 +25,8 @@ passlib[bcrypt]>=1.7,<2.0             # password hashing
 httpx>=0.27,<0.29
 playwright>=1.44,<1.50
 playwright-stealth>=1.0.6,<2.0
+beautifulsoup4>=4.12,<4.14
+lxml>=5.0,<6.0
 
 # --- Cloudflare bypass fallback (optional service) ---
 # Used as a sidecar proxy when Playwright stealth is insufficient.
