@@ -11,6 +11,7 @@ from models.ranking import Ranking
 from models.setting import Setting
 from models.log import CrawlLog
 from models.subscription import Subscription
+from models.new_release import NewRelease
 
 __all__ = [
     "Task",
@@ -22,4 +23,5 @@ __all__ = [
     "Setting",
     "CrawlLog",
     "Subscription",
+    "NewRelease",
 ]
