@@ -50,11 +50,20 @@ async def lifespan(app: FastAPI):
     from services.scheduler import start_scheduler, stop_scheduler
     try:
         await start_scheduler()
-        # 注册 auto_crawl 默认任务（可由环境变量 AUTO_CRAWL_ENABLED 关闭）
         import os
+        # 注册 auto_crawl（需 AUTO_CRAWL_ENABLED=true）
         if os.environ.get("AUTO_CRAWL_ENABLED", "false").lower() == "true":
             from services.auto_crawl import register_jobs
             register_jobs()
+        # 注册订阅巡检（需 SUBSCRIPTION_MONITOR_ENABLED=true，默认开）
+        if os.environ.get("SUBSCRIPTION_MONITOR_ENABLED", "true").lower() == "true":
+            from services.subscription_monitor import register_job
+            register_job(interval_hours=int(os.environ.get("SUBSCRIPTION_CHECK_INTERVAL_H", "6")))
+        # 注册下载进度追踪（需 DOWNLOAD_TRACKER_ENABLED=true，默认开）
+        if os.environ.get("DOWNLOAD_TRACKER_ENABLED", "true").lower() == "true":
+            from services.download_tracker import register_job as register_tracker
+            register_tracker(interval=int(os.environ.get("DOWNLOAD_TRACK_INTERVAL_S", "60")))
+        logger.info("调度任务注册完成")
     except Exception as e:
         logger.warning(f"调度中心启动失败: {e}")
     yield

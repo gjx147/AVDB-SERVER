@@ -8,13 +8,16 @@ AVDB auto_crawl.py 的去补丁化重写。修复两个已知 bug：
 - async 函数，挂 APScheduler（不阻塞事件循环）
 - asyncio.create_subprocess_exec 调 scraper（非阻塞）
 - 串行处理所有列表源（避免并发抢浏览器）
-- 失败自适应退避
+- 进程树杀（start_new_session + 整组 kill）
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import signal
+import subprocess
 import sys
 from pathlib import Path
 
@@ -39,32 +42,59 @@ def _python_exe() -> str:
 
 
 async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
-    """非阻塞执行 scraper 子进程。返回是否成功(exit 0)。"""
+    """非阻塞执行 scraper 子进程。返回是否成功(exit 0)。
+
+    架构修复：start_new_session 创建进程组，超时时整组 kill（Chromium 子树不残留）。
+    """
     cmd = [_python_exe(), str(_scraper_path())] + args
-    env = dict(__import__("os").environ)
+    env = dict(os.environ)
     logger.info("启动 scraper: %s", " ".join(args))
+
+    # 创建子进程：进程组隔离（支持整树杀）
+    popen_kwargs: dict = {"env": env}
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            **popen_kwargs,
         )
         try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            await asyncio.wait_for(proc.wait(), timeout=timeout)
             if proc.returncode == 0:
                 logger.info("scraper 完成: %s", " ".join(args))
                 return True
-            logger.warning("scraper 退出码 %d: %s", proc.returncode, (stdout or b"")[:500])
+            logger.warning("scraper 退出码 %d: %s", proc.returncode, " ".join(args))
             return False
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            logger.warning("scraper 超时(%ds)被kill: %s", timeout, " ".join(args))
+            _kill_process_tree(proc)
+            logger.warning("scraper 超时(%ds)被kill整树: %s", timeout, " ".join(args))
             return False
     except Exception as e:
         logger.error("scraper 执行异常: %s", e)
         return False
+
+
+def _kill_process_tree(proc) -> None:
+    """杀整个进程树（包括 Playwright Chromium 子进程）。"""
+    if proc.returncode is not None:
+        return  # 已退出
+    pid = proc.pid
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10)
+        else:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 async def run_scan_cycle() -> dict:

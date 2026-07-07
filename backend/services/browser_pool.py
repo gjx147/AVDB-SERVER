@@ -36,18 +36,24 @@ class BrowserPool:
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
-        """启动 Playwright + 浏览器（在 lifespan startup 调用）。"""
+        """启动 Playwright + 浏览器（在 lifespan startup 调用）。
+
+        架构修复：用 self._lock 防止并发 acquire() 各自 launch。
+        """
         if self._browser:
             return
-        settings = get_settings()
-        logger.info("启动浏览器池…")
-        self._pw = await async_playwright().start()
-        launch_args = ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
-        proxy_arg = {}
-        if settings.HTTP_PROXY:
-            proxy_arg = {"server": settings.HTTP_PROXY}
-        self._browser = await self._pw.chromium.launch(args=launch_args, **proxy_arg)
-        logger.info("浏览器池就绪")
+        async with self._lock:
+            if self._browser:  # 双重检查
+                return
+            settings = get_settings()
+            logger.info("启动浏览器池…")
+            self._pw = await async_playwright().start()
+            launch_args = ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            proxy_arg = {}
+            if settings.HTTP_PROXY:
+                proxy_arg = {"server": settings.HTTP_PROXY}
+            self._browser = await self._pw.chromium.launch(args=launch_args, **proxy_arg)
+            logger.info("浏览器池就绪")
 
     async def stop(self) -> None:
         """关闭浏览器 + Playwright（在 lifespan shutdown 调用）。"""
