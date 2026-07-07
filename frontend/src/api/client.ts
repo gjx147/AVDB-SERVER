@@ -392,6 +392,22 @@ export const api = {
     analytics: () => http.get<Record<string, unknown>>('/api/v2/analytics').then((r) => r.data),
   },
 
+  // ════════ Drive115（Phase 6：115网盘）════════
+  drive115New: {
+    authInit: () => http.post('/api/drive115/auth/init').then((r) => r.data),
+    authPoll: (uid: string, sign: string) => http.get('/api/drive115/auth/poll', { params: { uid, sign } }).then((r) => r.data),
+    authExchange: (uid: string) => http.post('/api/drive115/auth/exchange', null, { params: { uid } }).then((r) => r.data),
+    offlineAdd: (magnet: string) => http.post('/api/drive115/offline/add', { magnet }).then((r) => r.data),
+    offlineTasks: () => http.get('/api/drive115/offline/tasks').then((r) => r.data),
+    quota: () => http.get('/api/drive115/quota').then((r) => r.data),
+  },
+
+  // ════════ Magnet Search（Phase 6：多源搜索）════════
+  magnetSearchNew: {
+    search: (code: string, sources?: string) =>
+      http.get<{ total: number; by_source: Record<string, unknown[]>; items: unknown[] }>(`/api/magnet-search/${code}`, { params: { sources } }).then((r) => r.data),
+  },
+
   // ════════ Settings (original AVDB) ════════
   settings: {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),
