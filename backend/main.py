@@ -78,6 +78,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+# 保留引用避免被下方 routers.settings 覆盖
+app_settings = settings
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,7 +90,7 @@ app.add_middleware(
 )
 
 # 挂载路由
-from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads  # noqa: E402
+from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads, settings, dashboard, v2  # noqa: E402
 app.include_router(list_sources.router)
 app.include_router(tasks.router)
 app.include_router(crawl.router)
@@ -105,11 +107,14 @@ app.include_router(images.router)
 app.include_router(favorites.router)
 app.include_router(downloaders.router)
 app.include_router(downloads.router)
+app.include_router(settings.router)
+app.include_router(dashboard.router)
+app.include_router(v2.router)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": settings.APP_NAME}
+    return {"status": "ok", "app": app_settings.APP_NAME}
 
 
 @app.get("/api/scheduler/jobs")

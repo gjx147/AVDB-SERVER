@@ -1,0 +1,63 @@
+"""配置中心路由 —— settings 表 CRUD。
+
+安全设计（修 AVDB P0-4 密码脱敏覆盖 bug）：
+- GET 时排除敏感字段（password/token/secret/key）
+- PUT 时检测 *** 哨兵值，跳过（不覆盖真实值）
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+from sqlalchemy import select
+
+from deps import CurrentUser, DbSession
+from models import Setting
+
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+# 敏感字段：GET 时排除，PUT 时跳过哨兵值
+SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key")
+
+
+def _is_sensitive(key: str) -> bool:
+    return any(p in key.lower() for p in SENSITIVE_PATTERNS)
+
+
+@router.get("")
+def get_settings(db: DbSession, _user: CurrentUser):
+    """读取全部配置（排除敏感字段值）。"""
+    rows = db.execute(select(Setting)).scalars().all()
+    result = {}
+    for r in rows:
+        result[r.key] = "***" if _is_sensitive(r.key) else r.value
+    return result
+
+
+@router.put("")
+def update_settings(payload: dict, db: DbSession, _user: CurrentUser):
+    """批量更新配置。值含 *** 的敏感字段跳过（哨兵值保护）。"""
+    updated = 0
+    skipped = 0
+    for key, value in payload.items():
+        if _is_sensitive(key) and value == "***":
+            skipped += 1
+            continue
+        row = db.get(Setting, key)
+        if row:
+            row.value = str(value) if value is not None else ""
+        else:
+            db.add(Setting(key=key, value=str(value) if value is not None else ""))
+        updated += 1
+    db.commit()
+    return {"ok": True, "updated": updated, "skipped_sentinel": skipped}
+
+
+@router.get("/{key}")
+def get_setting(key: str, db: DbSession, _user: CurrentUser):
+    """读取单个配置。"""
+    row = db.get(Setting, key)
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="配置项不存在")
+    return {"key": key, "value": "***" if _is_sensitive(key) else row.value}
