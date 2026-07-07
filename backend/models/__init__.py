@@ -15,6 +15,7 @@ from models.new_release import NewRelease
 from models.insight import InsightReport
 from models.llm_cache import LLMCache, ContentFilterRule
 from models.collection import Collection, task_collections
+from models.download import Download
 
 __all__ = [
     "Task",
@@ -32,4 +33,5 @@ __all__ = [
     "ContentFilterRule",
     "Collection",
     "task_collections",
+    "Download",
 ]
