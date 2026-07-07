@@ -12,6 +12,7 @@ from models.setting import Setting
 from models.log import CrawlLog
 from models.subscription import Subscription
 from models.new_release import NewRelease
+from models.insight import InsightReport
 
 __all__ = [
     "Task",
@@ -24,4 +25,5 @@ __all__ = [
     "CrawlLog",
     "Subscription",
     "NewRelease",
+    "InsightReport",
 ]
