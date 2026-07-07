@@ -88,7 +88,7 @@ app.add_middleware(
 )
 
 # 挂载路由
-from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server  # noqa: E402
+from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites  # noqa: E402
 app.include_router(list_sources.router)
 app.include_router(tasks.router)
 app.include_router(crawl.router)
@@ -101,6 +101,8 @@ app.include_router(insights.router)
 app.include_router(ai.router)
 app.include_router(content_filter.router)
 app.include_router(media_server.router)
+app.include_router(images.router)
+app.include_router(favorites.router)
 
 
 @app.get("/api/health")
