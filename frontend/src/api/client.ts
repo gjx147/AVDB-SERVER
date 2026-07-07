@@ -278,6 +278,39 @@ export const api = {
       ).then((r) => r.data),
   },
 
+  // ════════ Subscriptions（Phase 3：多维订阅）════════
+  subscriptions: {
+    list: (enabled?: boolean) =>
+      http.get<unknown[]>('/api/subscriptions', { params: { enabled } }).then((r) => r.data),
+    create: (body: Record<string, unknown>) =>
+      http.post<unknown>('/api/subscriptions', body).then((r) => r.data),
+    get: (id: number) => http.get<unknown>(`/api/subscriptions/${id}`).then((r) => r.data),
+    update: (id: number, body: Record<string, unknown>) =>
+      http.put<unknown>(`/api/subscriptions/${id}`, body).then((r) => r.data),
+    delete: (id: number) => http.delete<{ ok: boolean }>(`/api/subscriptions/${id}`).then((r) => r.data),
+    toggle: (id: number) => http.post<{ ok: boolean; enabled: boolean }>(`/api/subscriptions/${id}/toggle`).then((r) => r.data),
+  },
+
+  // ════════ Insights（Phase 3：数据洞察/月报）════════
+  insights: {
+    stats: (month?: string) =>
+      http.get<Record<string, unknown>>('/api/insights/stats', { params: { month } }).then((r) => r.data),
+    createReport: (month: string) =>
+      http.post<Record<string, unknown>>(`/api/insights/reports/${month}`).then((r) => r.data),
+    getReport: (month: string) =>
+      http.get<Record<string, unknown>>(`/api/insights/reports/${month}`).then((r) => r.data),
+  },
+
+  // ════════ Notify（Phase 3：通知测试）════════
+  notifyNew: {
+    test: () => http.post<Record<string, boolean>>('/api/notify/test').then((r) => r.data),
+  },
+
+  // ════════ Scheduler（Phase 3：调度状态）════════
+  schedulerStatus: {
+    jobs: () => http.get<{ jobs: Array<{ id: string; next_run: string | null; trigger: string }> }>('/api/scheduler/jobs').then((r) => r.data),
+  },
+
   // ════════ Settings ════════
   settings: {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),

@@ -171,8 +171,9 @@ function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastE
     setTesting(true)
     try {
       await save()
-      const r = await api.notify.test()
-      toastOk(`测试完成：${r.results.bark} / ${r.results.telegram} / ${r.results.webhook}`)
+      const r = await api.notify.test() as unknown as { results?: Record<string, boolean> }
+      const res = r.results || {}
+      toastOk(`测试完成：bark=${res.bark} / telegram=${res.telegram} / webhook=${res.webhook}`)
     } catch (e) { toastErr(String((e as Error).message)) }
     finally { setTesting(false) }
   }
