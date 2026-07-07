@@ -13,6 +13,7 @@ from models.log import CrawlLog
 from models.subscription import Subscription
 from models.new_release import NewRelease
 from models.insight import InsightReport
+from models.llm_cache import LLMCache, ContentFilterRule
 
 __all__ = [
     "Task",
@@ -26,4 +27,6 @@ __all__ = [
     "Subscription",
     "NewRelease",
     "InsightReport",
+    "LLMCache",
+    "ContentFilterRule",
 ]
