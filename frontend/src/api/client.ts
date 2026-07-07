@@ -311,6 +311,52 @@ export const api = {
     jobs: () => http.get<{ jobs: Array<{ id: string; next_run: string | null; trigger: string }> }>('/api/scheduler/jobs').then((r) => r.data),
   },
 
+  // ════════ AI（Phase 4：翻译/标签/摘要/增强）════════
+  aiNew: {
+    translate: (text: string, model?: string) =>
+      http.post<{ ok: boolean; translated: string }>('/api/ai/translate', { text, model }).then((r) => r.data),
+    tags: (text: string, model?: string) =>
+      http.post<{ ok: boolean; tags: string[] }>('/api/ai/tags', { text, model }).then((r) => r.data),
+    summary: (text: string, model?: string) =>
+      http.post<{ ok: boolean; summary: string }>('/api/ai/summary', { text, model }).then((r) => r.data),
+    enrich: (taskId: number) =>
+      http.post<{ ok: boolean; translated: string; tags: string[]; changed: boolean }>(`/api/ai/enrich/${taskId}`).then((r) => r.data),
+  },
+
+  // ════════ Content Filter（Phase 4：过滤规则）════════
+  filters: {
+    listRules: () => http.get<unknown[]>('/api/filters/rules').then((r) => r.data),
+    createRule: (body: Record<string, unknown>) => http.post('/api/filters/rules', body).then((r) => r.data),
+    updateRule: (id: number, body: Record<string, unknown>) => http.put(`/api/filters/rules/${id}`, body).then((r) => r.data),
+    deleteRule: (id: number) => http.delete(`/api/filters/rules/${id}`).then((r) => r.data),
+    apply: (listSourceId?: number, limit = 100) =>
+      http.post('/api/filters/apply', null, { params: { list_source_id: listSourceId, limit } }).then((r) => r.data),
+  },
+
+  // ════════ Media Server（Phase 4：Emby/Jellyfin 在库）════════
+  mediaServerNew: {
+    check: (videoCode: string) => http.get<{ video_code: string; in_library: boolean }>(`/api/media-server/check/${videoCode}`).then((r) => r.data),
+    sync: (limit = 200) => http.post<{ ok: boolean; checked: number; in_library: number }>('/api/media-server/sync', null, { params: { limit } }).then((r) => r.data),
+  },
+
+  // ════════ Images（Phase 4：高清图文件服务）════════
+  imagesNew: {
+    posterUrl: (taskId: number) => `/api/images/poster/${taskId}`,
+    backdropUrl: (taskId: number) => `/api/images/backdrop/${taskId}`,
+    thumbUrl: (taskId: number, index: number) => `/api/images/thumb/${taskId}/${index}`,
+    thumbnails: (taskId: number) => http.get<{ thumbnails: string[]; count: number }>(`/api/images/thumbnails/${taskId}`).then((r) => r.data),
+  },
+
+  // ════════ Favorites/Collections（Phase 4：RESTful 收藏分组）════════
+  favoritesNew: {
+    list: () => http.get<{ total: number; items: Task[] }>('/api/favorites').then((r) => r.data),
+    listCollections: () => http.get<Array<{ id: number; name: string; description: string | null; task_count: number }>>('/api/collections').then((r) => r.data),
+    createCollection: (name: string, description?: string) => http.post('/api/collections', { name, description }).then((r) => r.data),
+    deleteCollection: (id: number) => http.delete(`/api/collections/${id}`).then((r) => r.data),
+    addTask: (collectionId: number, taskId: number) => http.post(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
+    removeTask: (collectionId: number, taskId: number) => http.delete(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
+  },
+
   // ════════ Settings ════════
   settings: {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),
