@@ -357,7 +357,42 @@ export const api = {
     removeTask: (collectionId: number, taskId: number) => http.delete(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
   },
 
-  // ════════ Settings ════════
+  // ════════ Downloaders（Phase 5：磁力推送）════════
+  downloadersNew: {
+    push: (magnet: string, downloader: string, taskId?: number) =>
+      http.post<{ ok: boolean; download_id: number; message?: string }>('/api/downloaders/push', { magnet, downloader, task_id: taskId }).then((r) => r.data),
+    test: (downloader: string) =>
+      http.get<{ ok: boolean; version?: string; message?: string }>('/api/downloaders/test', { params: { downloader } }).then((r) => r.data),
+  },
+
+  // ════════ Downloads（Phase 5：下载历史）════════
+  downloadsNew: {
+    list: (params: { status?: string; downloader?: string; page?: number; page_size?: number } = {}) =>
+      http.get<{ total: number; page: number; page_size: number; items: unknown[] }>('/api/downloads', { params }).then((r) => r.data),
+    stats: () => http.get<{ by_status: Record<string, number>; by_downloader: Record<string, number> }>('/api/downloads/stats').then((r) => r.data),
+  },
+
+  // ════════ Settings（Phase 5：配置中心）════════
+  settingsNew: {
+    get: () => http.get<Record<string, string>>('/api/settings').then((r) => r.data),
+    update: (body: Record<string, string>) => http.put<{ ok: boolean; updated: number; skipped_sentinel: number }>('/api/settings', body).then((r) => r.data),
+  },
+
+  // ════════ Dashboard（Phase 5：聚合统计）════════
+  dashboardNew: {
+    stats: () => http.get<Record<string, unknown>>('/api/dashboard/stats').then((r) => r.data),
+    recent: (limit = 12) => http.get<unknown[]>('/api/dashboard/recent', { params: { limit } }).then((r) => r.data),
+  },
+
+  // ════════ V2（Phase 5：多维筛选/相似/分析）════════
+  v2New: {
+    tasks: (params: { status?: string; actor?: string; tag?: string; maker?: string; min_rating?: number; sort?: string; limit?: number; offset?: number }) =>
+      http.get<{ tasks: Task[]; total: number }>('/api/v2/tasks', { params }).then((r) => r.data),
+    similar: (taskId: number) => http.get<{ tasks: Task[]; total: number }>(`/api/v2/tasks/${taskId}/similar`).then((r) => r.data),
+    analytics: () => http.get<Record<string, unknown>>('/api/v2/analytics').then((r) => r.data),
+  },
+
+  // ════════ Settings (original AVDB) ════════
   settings: {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),
     update: (body: SettingsUpdate) => http.put<ApiOk>('/api/settings', body).then((r) => r.data),
