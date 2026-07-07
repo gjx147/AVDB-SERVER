@@ -40,13 +40,17 @@ class PushRequest(BaseModel):
     downloader: str = "qbittorrent"  # qbittorrent/aria2/transmission
 
 
-async def _push_qbittorrent(magnet: str, config: dict) -> dict:
-    """推送到 qBittorrent。"""
+def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
+    """同步函数：推送磁力到 qBittorrent（供 asyncio.to_thread 调用）。
+
+    架构修复：加 REQUESTS_ARGS timeout，防止网络挂起阻塞。
+    """
     import qbittorrentapi
     qbc = qbittorrentapi.Client(
         host=config.get("qb_url", ""),
         username=config.get("qb_username", ""),
         password=config.get("qb_password", ""),
+        REQUESTS_ARGS={"timeout": 10},
     )
     try:
         qbc.auth_log_in()
@@ -59,6 +63,12 @@ async def _push_qbittorrent(magnet: str, config: dict) -> dict:
             qbc.auth_log_out()
         except Exception:
             pass
+
+
+async def _push_qbittorrent(magnet: str, config: dict) -> dict:
+    """推送到 qBittorrent（同步 API 包 asyncio.to_thread，不阻塞事件循环）。"""
+    import asyncio
+    return await asyncio.to_thread(_push_qbittorrent_sync, magnet, config)
 
 
 async def _push_aria2(magnet: str, config: dict) -> dict:
@@ -118,23 +128,31 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
+def _test_qbittorrent_sync(config: dict) -> dict:
+    """同步函数：测试 qBittorrent 连接（供 to_thread 调用）。"""
+    import qbittorrentapi
+    qbc = qbittorrentapi.Client(
+        host=config["qb_url"], username=config["qb_username"], password=config["qb_password"],
+        REQUESTS_ARGS={"timeout": 10},
+    )
+    try:
+        qbc.auth_log_in()
+        version = qbc.app_version()
+        qbc.auth_log_out()
+        return {"ok": True, "version": version}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 @router.get("/test")
 async def test_connection(downloader: str, db: DbSession, _user: CurrentUser):
-    """测试下载器连接。"""
+    """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。"""
+    import asyncio
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
-        try:
-            import qbittorrentapi
-            qbc = qbittorrentapi.Client(
-                host=config["qb_url"], username=config["qb_username"], password=config["qb_password"])
-            qbc.auth_log_in()
-            version = qbc.app_version()
-            qbc.auth_log_out()
-            return {"ok": True, "version": version}
-        except Exception as e:
-            return {"ok": False, "message": str(e)}
+        return await asyncio.to_thread(_test_qbittorrent_sync, config)
     elif downloader == "aria2":
         if not config["aria2_url"]:
             return {"ok": False, "message": "未配置"}

@@ -9,6 +9,7 @@ AVDB download_tracker 的去补丁化重写：
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -32,10 +33,49 @@ def _get_setting(db, key: str) -> str:
     return row.value if row and row.value else ""
 
 
-async def _poll_qbittorrent(db) -> int:
-    """轮询 qBittorrent，更新所有 pushed/downloading 的 qB 下载记录。返回更新数。"""
+def _poll_qbittorrent_sync(config: dict, hashes: list[tuple[int, str]]) -> list[dict]:
+    """同步函数：连接 qBittorrent 查询状态（供 asyncio.to_thread 调用）。
+
+    hashes: [(download_id, info_hash), ...]
+    返回: [{id, status, progress, error}, ...]
+    """
     import qbittorrentapi
 
+    results: list[dict] = []
+    qbc = qbittorrentapi.Client(
+        host=config["qb_url"],
+        username=config["qb_username"],
+        password=config["qb_password"],
+        REQUESTS_ARGS={"timeout": 10},  # 10s 超时，防止网络挂起
+    )
+    try:
+        qbc.auth_log_in()
+        torrents = {t.infohash_v1.lower(): t for t in qbc.torrents_info() if t.infohash_v1}
+        for dl_id, info_hash in hashes:
+            t = torrents.get(info_hash)
+            if not t:
+                continue
+            state = str(t.state)
+            progress = round(float(t.progress) * 100, 1) if t.progress else 0
+            if state in _QB_COMPLETED:
+                results.append({"id": dl_id, "status": "completed", "progress": progress, "error": None})
+            elif state in _QB_DOWNLOADING:
+                results.append({"id": dl_id, "status": "downloading", "progress": progress, "error": None})
+            elif state in _QB_FAILED:
+                results.append({"id": dl_id, "status": "failed", "progress": progress, "error": f"qB state: {state}"})
+    finally:
+        try:
+            qbc.auth_log_out()
+        except Exception:
+            pass
+    return results
+
+
+async def _poll_qbittorrent(db) -> int:
+    """轮询 qBittorrent，更新所有 pushed/downloading 的 qB 下载记录。返回更新数。
+
+    架构修复：同步 qB API 调用包 asyncio.to_thread，不阻塞事件循环。
+    """
     config = {k: _get_setting(db, k) for k in ["qb_url", "qb_username", "qb_password"]}
     if not config["qb_url"]:
         return 0
@@ -50,41 +90,32 @@ async def _poll_qbittorrent(db) -> int:
     if not pending:
         return 0
 
-    qbc = qbittorrentapi.Client(
-        host=config["qb_url"], username=config["qb_username"], password=config["qb_password"]
-    )
-    updated = 0
+    hashes = [(dl.id, dl.info_hash) for dl in pending if dl.info_hash]
+    if not hashes:
+        return 0
+
+    # 关键修复：同步调用放线程池，不阻塞事件循环
     try:
-        qbc.auth_log_in()
-        torrents = {t.infohash_v1.lower(): t for t in qbc.torrents_info() if t.infohash_v1}
-        for dl in pending:
-            if not dl.info_hash:
-                continue
-            t = torrents.get(dl.info_hash)
-            if not t:
-                continue
-            state = str(t.state)
-            progress = round(float(t.progress) * 100, 1) if t.progress else 0
-            dl.progress = progress
-            if state in _QB_COMPLETED:
-                dl.status = "completed"
-                dl.completed_at = datetime.utcnow()
-                updated += 1
-            elif state in _QB_DOWNLOADING:
-                dl.status = "downloading"
-                updated += 1
-            elif state in _QB_FAILED:
-                dl.status = "failed"
-                dl.error_message = f"qBittorrent state: {state}"
-                updated += 1
-        db.commit()
+        results = await asyncio.to_thread(_poll_qbittorrent_sync, config, hashes)
     except Exception as e:
         logger.warning(f"qBittorrent 轮询失败: {e}")
-    finally:
-        try:
-            qbc.auth_log_out()
-        except Exception:
-            pass
+        return 0
+
+    # 回写 DB
+    updated = 0
+    dl_map = {dl.id: dl for dl in pending}
+    for r in results:
+        dl = dl_map.get(r["id"])
+        if not dl:
+            continue
+        dl.progress = r["progress"]
+        dl.status = r["status"]
+        dl.error_message = r["error"]
+        if r["status"] == "completed":
+            dl.completed_at = datetime.utcnow()
+        updated += 1
+    if updated:
+        db.commit()
     return updated
 
 
