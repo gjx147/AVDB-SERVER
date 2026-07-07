@@ -111,6 +111,13 @@ def scheduler_jobs():
     return {"jobs": list_jobs()}
 
 
+@app.post("/api/notify/test")
+async def notify_test():
+    """测试通知（发送到所有已配置通道）。"""
+    from services.notifier import test_notify
+    return {"results": await test_notify()}
+
+
 @app.post("/api/auth/login")
 def login():
     """占位登录端点 —— Phase 1 暂不启用强鉴权（AUTH_DISABLED）。
