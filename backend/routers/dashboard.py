@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlalchemy import func, select
 
 from config import get_settings
@@ -54,7 +54,7 @@ def dashboard_stats(db: DbSession, _user: CurrentUser):
 
 
 @router.get("/recent")
-def recent_tasks(db: DbSession, _user: CurrentUser, limit: int = 12):
+def recent_tasks(db: DbSession, _user: CurrentUser, limit: int = Query(12, le=200)):
     """最近入库任务。"""
     tasks = db.execute(
         select(Task).where(Task.status == "visited").order_by(Task.created_at.desc()).limit(limit)
@@ -63,3 +63,15 @@ def recent_tasks(db: DbSession, _user: CurrentUser, limit: int = 12):
         {"id": t.id, "video_code": t.video_code, "title": t.title, "poster_url": t.poster_url, "created_at": str(t.created_at)}
         for t in tasks
     ]
+
+
+@router.get("/monthly")
+def monthly_stats(db: DbSession, _user: CurrentUser):
+    """月度统计（兼容 AVDB 前端 Dashboard 月视图）。按 created_at 年月聚合。"""
+    rows = db.execute(
+        select(func.substr(Task.created_at, 1, 7).label("month"), func.count(Task.id))
+        .where(Task.status == "visited")
+        .group_by("month")
+        .order_by("month")
+    ).all()
+    return [{"month": r[0], "count": r[1]} for r in rows]

@@ -17,11 +17,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from config import get_settings
-from deps import CurrentUser
+from deps import CurrentUser, DbSession
+from sqlalchemy import select
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -227,3 +228,23 @@ def _is_timed_out(info: dict) -> bool:
         return datetime.utcnow() - start > timedelta(seconds=_DEFAULT_TIMEOUT)
     except Exception:
         return False
+
+
+# ── Phase 1 补端点：日志查询 ──
+
+@router.get("/logs")
+def crawl_logs(
+    db: DbSession,
+    _user: CurrentUser,
+    limit: int = Query(100, ge=1, le=500),
+):
+    """爬取日志列表（兼容 AVDB 前端）。"""
+    from models import CrawlLog
+    logs = db.execute(
+        select(CrawlLog).order_by(CrawlLog.created_at.desc()).limit(limit)
+    ).scalars().all()
+    return [
+        {"id": l.id, "crawl_type": l.crawl_type, "level": l.level,
+         "message": l.message, "created_at": str(l.created_at)}
+        for l in logs
+    ]

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -61,3 +63,20 @@ def get_setting(key: str, db: DbSession, _user: CurrentUser):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="配置项不存在")
     return {"key": key, "value": "***" if _is_sensitive(key) else row.value}
+
+
+# ── Phase 1 补端点：备份/恢复 ──
+
+@router.post("/backup")
+def backup_settings(db: DbSession, _user: CurrentUser):
+    """导出全量设置为 JSON（兼容 AVDB 前端）。"""
+    import json
+    rows = db.execute(select(Setting)).scalars().all()
+    data = {r.key: r.value for r in rows}
+    return {"settings": data, "exported_at": str(datetime.utcnow())}
+
+
+@router.post("/restore")
+async def restore_settings():
+    """恢复设置（Phase 1 占位：前端传文件，后端尚未处理）。"""
+    return {"ok": True, "message": "恢复功能待实现"}

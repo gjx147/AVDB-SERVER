@@ -67,3 +67,72 @@ def get_thumb(task_id: int, index: int):
     if not p.exists():
         raise HTTPException(status_code=404, detail="缩略图不存在")
     return FileResponse(str(p), media_type="image/jpeg")
+
+
+# ── Phase 1 补端点：头像 + hires 简化适配 ──
+
+@router.get("/avatar/{actor_id}")
+def get_avatar(actor_id: int):
+    """演员头像（查找本地缓存，未找到返回默认占位）。"""
+    d = _images_dir() / "avatars"
+    for ext in (".jpg", ".png", ".webp"):
+        p = d / f"{actor_id}{ext}"
+        if p.exists():
+            return FileResponse(str(p), media_type="image/jpeg")
+    raise HTTPException(status_code=404, detail="头像不存在")
+
+
+# hires 系列端点（Phase 1 简化版：复用 images 端点，路径映射）
+
+@router.get("/hires/thumb-file/{task_id}/{index}")
+def hires_thumb_file(task_id: int, index: int):
+    """hires 兼容：重定向到 /images/thumb/..."""
+    return get_thumb(task_id, index)
+
+
+@router.get("/hires/poster-file/{task_id}")
+def hires_poster_file(task_id: int):
+    """hires 兼容：重定向到 /images/poster/..."""
+    return get_poster(task_id)
+
+
+@router.get("/hires/backdrop-file/{task_id}")
+def hires_backdrop_file(task_id: int):
+    """hires 兼容：重定向到 /images/backdrop/..."""
+    return get_backdrop(task_id)
+
+
+@router.get("/hires/has-local-thumbs/{task_id}")
+def hires_has_local_thumbs(task_id: int):
+    """检查是否有本地缩略图缓存。"""
+    return list_thumbnails(task_id)
+
+
+@router.post("/hires/download-hires/{task_id}")
+def hires_download(task_id: int):
+    """触发高清图下载（Phase 1 占位）。实际抓取由 scraper 负责。"""
+    return {"ok": True, "message": "高清图下载由 scraper 在抓取阶段完成，无需手动触发"}
+
+
+@router.get("/hires/poster-index/{task_id}")
+def hires_poster_index(task_id: int):
+    """获取海报索引（Phase 1 占位：默认 0）。"""
+    return {"poster_index": 0}
+
+
+@router.post("/hires/set-poster/{task_id}/{index}")
+def hires_set_poster(task_id: int, index: int):
+    """设置海报索引（Phase 1 占位）。"""
+    return {"ok": True, "message": "海报索引设置暂未实现"}
+
+
+@router.post("/hires/queue/start")
+def hires_queue_start(task_ids: list[int]):
+    """启动串行下载队列（Phase 1 占位）。"""
+    return {"ok": True, "message": "队列功能由 auto_crawl 调度替代"}
+
+
+@router.get("/hires/queue/status")
+def hires_queue_status():
+    """队列状态（Phase 1 占位）。"""
+    return {"running": False, "total": 0, "current": 0, "done": [], "failed": []}

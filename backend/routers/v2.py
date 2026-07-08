@@ -114,6 +114,7 @@ def similar_tasks(task_id: int, db: DbSession, _user: CurrentUser, limit: int = 
 
 
 @router.get("/analytics")
+@router.get("/dashboard/analytics")  # 兼容前端旧路径
 def analytics(db: DbSession, _user: CurrentUser):
     """Top 演员/标签/厂牌 + 评分分布（用于 Dashboard 图表）。"""
     tasks = db.execute(select(Task).where(Task.status == "visited")).scalars().all()
