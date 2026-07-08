@@ -87,6 +87,9 @@ class Task(Base):
         Index("idx_tasks_status", "status"),
         Index("idx_tasks_favorite", "is_favorite", "favorite_at"),
         Index("idx_tasks_view_status", "view_status"),
+        Index("idx_tasks_maker", "maker"),           # Phase 4: v2 按厂牌筛选
+        Index("idx_tasks_rating", "rating"),         # Phase 4: 评分排序
+        Index("idx_tasks_status_created", "status", "created_at"),  # Phase 4: visited列表排序
     )
 
     def __repr__(self) -> str:

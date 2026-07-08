@@ -27,6 +27,16 @@ from models import Task
 
 logger = logging.getLogger("avdb.aggregator")
 
+# 模块级共享 httpx 客户端（Phase 4：连接复用）
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=15, follow_redirects=True)
+    return _http_client
+
 # 番号标准化：SSIS-001 / ssis001 / SSIS001 -> SSIS-001
 _CODE_RE = re.compile(r"^([A-Za-z]{2,6})[-_]?(\d{2,5})$")
 
@@ -63,10 +73,8 @@ async def _fetch_javlibrary(code: str) -> VideoMetadata | None:
     base = "https://www.javlibrary.com"
     search_url = f"{base}/cn/vl_searchbyid.php?keyword={code}"
     try:
-        async with httpx.AsyncClient(
-            timeout=15, follow_redirects=True, headers={"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
-        ) as client:
-            resp = await client.get(search_url)
+        client = _get_client()
+        resp = await client.get(search_url)
             if resp.status_code != 200:
                 return None
             html = resp.text
@@ -83,8 +91,8 @@ async def _fetch_javlibrary(code: str) -> VideoMetadata | None:
     if not href.startswith("http"):
         href = base + href
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            detail = await client.get(href)
+        client = _get_client()
+        detail = await client.get(href)
             if detail.status_code != 200:
                 return None
             html = detail.text
