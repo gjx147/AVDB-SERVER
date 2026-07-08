@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from deps import CurrentUser, DbSession, Pagination
@@ -31,8 +31,8 @@ def list_favorites(db: DbSession, _user: CurrentUser, pagination: Pagination):
 
 # ── 分组 CRUD ──
 class CollectionCreate(BaseModel):
-    name: str
-    description: str | None = None
+    name: str = Field(max_length=100)
+    description: str | None = Field(default=None, max_length=500)
 
 
 @router.get("/api/collections")

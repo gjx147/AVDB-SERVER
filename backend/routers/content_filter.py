@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from deps import CurrentUser, DbSession
@@ -16,13 +16,13 @@ VALID_ACTIONS = {"hide", "highlight", "blur", "mark"}
 
 
 class FilterRuleCreate(BaseModel):
-    name: str
-    keyword: str
+    name: str = Field(max_length=100)
+    keyword: str = Field(max_length=200)
     is_regex: bool = False
     case_sensitive: bool = False
-    action: str = "hide"
-    fields_json: str | None = None
-    message: str | None = None
+    action: str = Field(default="hide", max_length=20)
+    fields_json: str | None = Field(default=None, max_length=500)
+    message: str | None = Field(default=None, max_length=200)
     enabled: bool = True
 
 

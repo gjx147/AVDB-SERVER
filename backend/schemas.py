@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ListSourceOut(BaseModel):
@@ -20,10 +20,10 @@ class ListSourceOut(BaseModel):
 
 
 class ListSourceCreate(BaseModel):
-    list_code: str
-    list_path: Optional[str] = None
-    list_params: str = "f=download"
-    max_pages: int = 100
+    list_code: str = Field(max_length=50)
+    list_path: Optional[str] = Field(default=None, max_length=200)
+    list_params: str = Field(default="f=download", max_length=100)
+    max_pages: int = Field(default=100, ge=1, le=10000)
 
 
 class TaskOut(BaseModel):

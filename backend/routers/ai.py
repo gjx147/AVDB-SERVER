@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from deps import CurrentUser
 from services.ai_service import enrich_task, generate_tags, summarize, translate
@@ -12,18 +12,18 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
 class TranslateRequest(BaseModel):
-    text: str
-    model: str | None = None
+    text: str = Field(max_length=5000)
+    model: str | None = Field(default=None, max_length=100)
 
 
 class TagsRequest(BaseModel):
-    text: str
-    model: str | None = None
+    text: str = Field(max_length=5000)
+    model: str | None = Field(default=None, max_length=100)
 
 
 class SummaryRequest(BaseModel):
-    text: str
-    model: str | None = None
+    text: str = Field(max_length=5000)
+    model: str | None = Field(default=None, max_length=100)
 
 
 @router.post("/translate")
