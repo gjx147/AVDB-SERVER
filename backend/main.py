@@ -218,3 +218,15 @@ if _FRONTEND_DIST.exists():
 else:
     logger.warning(f"前端构建目录不存在: {_FRONTEND_DIST}（请先 npm run build）")
 
+
+# ── 全局异常处理器（Phase 3：统一 500 格式，不泄露 traceback）──
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    from starlette.responses import JSONResponse
+    logger.exception("未处理的异常: %s", str(exc))
+    return JSONResponse(
+        status_code=500,
+        content={"ok": False, "message": "服务器内部错误"},
+    )
+
