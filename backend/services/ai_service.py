@@ -112,7 +112,9 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
             logger.warning("AI 空响应(attempt %d)", attempt + 1)
         except Exception as e:
             logger.warning("AI 调用失败(attempt %d): %s", attempt + 1, e)
-            if attempt == 2:
+        if attempt < 2:
+            wait = 2 ** attempt  # 1s, 2s 指数退避
+            await asyncio.sleep(wait)
                 return ""
     return ""
 

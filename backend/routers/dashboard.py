@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from fastapi import APIRouter, Query
 from sqlalchemy import func, select
@@ -42,7 +43,7 @@ def dashboard_stats(db: DbSession, _user: CurrentUser):
         usage = shutil.disk_usage(data_dir)
         disk = {"total": usage.total, "used": usage.used, "free": usage.free}
     except Exception:
-        pass
+        logger.warning("磁盘用量查询失败", exc_info=True)
 
     return {
         "tasks": {"total": total, "by_status": by_status},

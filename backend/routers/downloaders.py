@@ -144,7 +144,7 @@ def _test_qbittorrent_sync(config: dict) -> dict:
         return {"ok": False, "message": str(e)}
 
 
-@router.get("/test")
+@router.post("/test")
 async def test_connection(downloader: str, db: DbSession, _user: CurrentUser):
     """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。"""
     import asyncio

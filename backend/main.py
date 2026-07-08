@@ -81,13 +81,11 @@ async def lifespan(app: FastAPI):
     try:
         await stop_scheduler()
     except Exception:
-        pass
-    # 关闭浏览器池
+        logger.warning("调度中心关闭异常", exc_info=True)
     try:
         await browser_pool.stop()
     except Exception:
-        pass
-    logger.info("AVDB-SERVER 关闭")
+        logger.warning("浏览器池关闭异常", exc_info=True)
 
 
 settings = get_settings()
