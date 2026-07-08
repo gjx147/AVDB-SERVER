@@ -13,15 +13,22 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-# 让 backend 目录自身可被 import（uvicorn 在 backend/ 下启动时 __package__ 为空）
+from fastapi import Depends, FastAPI, Form, HTTPException
+from fastapi import status as http_status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from pathlib import Path
+from starlette.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
+
+# 让 backend 目录自身可被 import
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from config import get_settings
+from database import get_db
+from deps import get_current_admin
 
-logger = logging.getLogger("avdb")
+logger = logging.getLogger("avdb.main")
 logging.basicConfig(
     level=logging.DEBUG if get_settings().DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -36,6 +43,9 @@ async def lifespan(app: FastAPI):
     后台服务（scheduler/watchdog）在后续 Phase 接入。
     """
     logger.info("AVDB-SERVER 启动中…")
+    # 确保管理员账号存在（首次启动创建，SECRET_KEY 默认值告警）
+    from auth import ensure_admin_exists
+    ensure_admin_exists()
     # 开发环境兜底：确保表存在（生产用 alembic upgrade head）
     from database import Base, engine
     Base.metadata.create_all(bind=engine)
@@ -92,7 +102,7 @@ app_settings = settings
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -129,28 +139,46 @@ def health():
 
 
 @app.get("/api/scheduler/jobs")
-def scheduler_jobs():
-    """列出调度中心所有任务。"""
+def scheduler_jobs(_admin: str = Depends(get_current_admin)):
+    """列出调度中心所有任务（需要管理员权限）。"""
     from services.scheduler import list_jobs
     return {"jobs": list_jobs()}
 
 
 @app.post("/api/notify/test")
-async def notify_test():
-    """测试通知（发送到所有已配置通道）。"""
+async def notify_test(_admin: str = Depends(get_current_admin)):
+    """测试通知（需要管理员权限）。"""
     from services.notifier import test_notify
     return {"results": await test_notify()}
 
 
 @app.post("/api/auth/login")
-def login():
-    """占位登录端点 —— Phase 1 暂不启用强鉴权（AUTH_DISABLED）。
+def login(
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """用户登录 —— 校验凭据，签发 JWT。
 
-    后续接入用户表 + OAuth2PasswordRequestForm。
+    接收 OAuth2PasswordRequestForm 格式的 username/password，
+    查 User 表验证，返回 access_token。
     """
-    from auth import create_access_token
-    token = create_access_token("admin")
-    return {"access_token": token, "token_type": "bearer"}
+    from auth import authenticate_user, create_access_token
+
+    user = authenticate_user(db, username, password)
+    if user is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = create_access_token(user.username)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": user.username,
+        "is_admin": user.is_admin,
+    }
 
 
 # --- 前端 SPA 静态文件服务 ---

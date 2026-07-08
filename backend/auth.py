@@ -1,6 +1,7 @@
-"""鉴权：JWT 签发与校验、密码哈希。
+"""鉴权：JWT 签发与校验、密码哈希、用户认证。
 
 取代 AVDB 补丁层的"恒定时间 token 比较"方案，用标准 OAuth2 Password Flow。
+Phase 0 新增：authenticate_user 查 User 表校验凭据。
 """
 
 from __future__ import annotations
@@ -8,19 +9,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+from sqlalchemy import select
 
 from config import get_settings
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 def create_access_token(subject: str, expires_minutes: int | None = None) -> str:
@@ -43,3 +43,68 @@ def decode_token(token: str) -> str | None:
         return payload.get("sub")
     except JWTError:
         return None
+
+
+def authenticate_user(db, username: str, password: str):
+    """校验用户名密码，成功返回 User 对象，失败返回 None。
+
+    Args:
+        db: SQLAlchemy Session
+        username: 明文用户名
+        password: 明文密码
+    Returns:
+        User | None
+    """
+    from models import User
+    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    if user is None:
+        return None
+    if not user.is_active:
+        return None
+    if not verify_password(password, user.password_hash):
+        return None
+    return user
+
+
+def ensure_admin_exists() -> None:
+    """首次启动时创建管理员账号（若不存在）。
+
+    读取 ADMIN_USERNAME / ADMIN_PASSWORD 环境变量，hash 后写入 users 表。
+    若环境变量值为默认值("admin"/"admin")，打印醒目告警。
+    """
+    from database import SessionLocal
+    from models import User
+
+    settings = get_settings()
+    username = settings.ADMIN_USERNAME
+    password = settings.ADMIN_PASSWORD
+
+    # 检查默认密钥告警
+    if settings.SECRET_KEY == "change-me-in-production":
+        import logging
+        logging.getLogger("avdb").critical(
+            "⚠️  SECRET_KEY 仍为默认值！请设置环境变量 SECRET_KEY。默认值可被任何人伪造 JWT。"
+        )
+    if password == "admin" or password == "change-me":
+        import logging
+        logging.getLogger("avdb").warning(
+            "⚠️  ADMIN_PASSWORD 为弱默认值，请通过环境变量设置强密码。"
+        )
+
+    db = SessionLocal()
+    try:
+        existing = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+        if existing:
+            return  # 管理员已存在
+
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            is_admin=True,
+        )
+        db.add(user)
+        db.commit()
+        import logging
+        logging.getLogger("avdb.auth").info("管理员账号 %s 已创建", username)
+    finally:
+        db.close()

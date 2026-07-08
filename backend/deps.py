@@ -56,3 +56,31 @@ def get_current_user(
 
 
 CurrentUser = Annotated[str, Depends(get_current_user)]
+
+
+def get_current_admin(
+    current_user: CurrentUser,
+    db: DbSession,
+) -> str:
+    """要求管理员权限。非管理员返回 403。"""
+    from auth import decode_token
+    # current_user 已经是 username(anonymous 表示未认证)
+    if current_user == "anonymous":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # 查用户表确认 admin 身份
+    from models import User
+    from sqlalchemy import select
+    user = db.execute(select(User).where(User.username == current_user)).scalar_one_or_none()
+    if user is None or not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
+    return current_user
+
+
+CurrentAdmin = Annotated[str, Depends(get_current_admin)]
