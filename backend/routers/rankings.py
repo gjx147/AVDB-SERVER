@@ -141,7 +141,7 @@ def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser
 
 
 @router.delete("/{rank_type}/{date}")
-def delete_ranking_snapshot(rank_type: str, date: str, db: DbSession, _user: CurrentUser):
+def delete_ranking(rank_type: str, date: str, db: DbSession, _user: CurrentUser):
     """删除某类型某日的整张排行榜快照。"""
     if rank_type not in VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"无效类型")

@@ -26,7 +26,7 @@ class Actor(Base):
     __tablename__ = "actors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)  # index via idx_actors_name
     name_en: Mapped[str | None] = mapped_column(String(100))
 
     # 头像（远程 URL 与本地缓存路径）

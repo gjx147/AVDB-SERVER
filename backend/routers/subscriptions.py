@@ -39,17 +39,17 @@ def create_subscription(payload: SubscriptionCreate, db: DbSession, _user: Curre
     return sub
 
 
-@router.get("/{sub_id}", response_model=SubscriptionOut)
-def get_subscription(sub_id: int, db: DbSession, _user: CurrentUser):
-    sub = db.get(Subscription, sub_id)
+@router.get("/{subscription_id}", response_model=SubscriptionOut)
+def get_subscription(subscription_id: int, db: DbSession, _user: CurrentUser):
+    sub = db.get(Subscription, subscription_id)
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
     return sub
 
 
-@router.put("/{sub_id}", response_model=SubscriptionOut)
-def update_subscription(sub_id: int, payload: SubscriptionCreate, db: DbSession, _user: CurrentUser):
-    sub = db.get(Subscription, sub_id)
+@router.put("/{subscription_id}", response_model=SubscriptionOut)
+def update_subscription(subscription_id: int, payload: SubscriptionCreate, db: DbSession, _user: CurrentUser):
+    sub = db.get(Subscription, subscription_id)
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
     for k, v in payload.model_dump().items():
@@ -59,9 +59,9 @@ def update_subscription(sub_id: int, payload: SubscriptionCreate, db: DbSession,
     return sub
 
 
-@router.delete("/{sub_id}")
-def delete_subscription(sub_id: int, db: DbSession, _user: CurrentUser):
-    sub = db.get(Subscription, sub_id)
+@router.delete("/{subscription_id}")
+def delete_subscription(subscription_id: int, db: DbSession, _user: CurrentUser):
+    sub = db.get(Subscription, subscription_id)
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
     db.delete(sub)
@@ -69,10 +69,10 @@ def delete_subscription(sub_id: int, db: DbSession, _user: CurrentUser):
     return {"ok": True, "message": "已删除"}
 
 
-@router.post("/{sub_id}/toggle")
-def toggle_subscription(sub_id: int, db: DbSession, _user: CurrentUser):
+@router.post("/{subscription_id}/toggle")
+def toggle_subscription(subscription_id: int, db: DbSession, _user: CurrentUser):
     """启用/停用订阅。"""
-    sub = db.get(Subscription, sub_id)
+    sub = db.get(Subscription, subscription_id)
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
     sub.enabled = not sub.enabled
