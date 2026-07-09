@@ -64,7 +64,9 @@ VOLUME ["/app/data"]
 EXPOSE 8000
 
 # 非 root 用户运行（安全最佳实践）
+# 先创建用户，再确保 /app/data 目录存在且属主正确
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
+    && mkdir -p /app/data /app/data/images /app/data/backups \
     && chown -R appuser:appuser /app /ms-playwright
 USER appuser
 
