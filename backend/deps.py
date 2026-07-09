@@ -63,7 +63,6 @@ def get_current_admin(
     db: DbSession,
 ) -> str:
     """要求管理员权限。非管理员返回 403。"""
-    from auth import decode_token
     # current_user 已经是 username(anonymous 表示未认证)
     if current_user == "anonymous":
         raise HTTPException(
