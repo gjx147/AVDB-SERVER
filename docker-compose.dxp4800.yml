@@ -1,0 +1,63 @@
+# AVDB-SERVER — 绿联 DXP4800 部署配置
+#
+# 使用方法：
+#   1. SSH 登录 DXP4800，创建目录 /volume3/docker/avdb-server
+#   2. 上传此文件到该目录
+#   3. cd /volume3/docker/avdb-server && docker compose up -d
+#   4. 查看日志获取自动生成的密码：docker logs avdb-server | grep ADMIN_PASSWORD
+#   5. 浏览器访问 http://DXP4800的IP:8000
+
+services:
+  avdb-server:
+    image: gjx147/avdb-server:latest
+    container_name: avdb-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 数据持久化 —— 映射到 NAS 共享文件夹，便于备份和管理
+      - /volume3/docker/avdb-server/data:/app/data
+    environment:
+      # ── 鉴权（生产必须配）──
+      AUTH_DISABLED: "false"
+      # 留空则首次启动自动生成随机密钥（持久化到 data/.secret_key）
+      SECRET_KEY: ""
+      ADMIN_USERNAME: "admin"
+      # 留空则首次启动自动生成随机密码（在日志中打印一次）
+      ADMIN_PASSWORD: ""
+
+      # ── 数据库 ──
+      # 空=默认 SQLite (/app/data/javdb.db)
+      DATABASE_URL: ""
+
+      # ── 爬虫 ──
+      JAVDB_URL: "https://javdb.com"
+
+      # ── 代理（如需翻墙访问 JavDB）──
+      # HTTP_PROXY: "http://192.168.31.220:20171"
+      # HTTPS_PROXY: "http://192.168.31.220:20171"
+
+      # ── 定时任务 ──
+      # 留 false 则不自动爬取，手动在前端触发
+      AUTO_CRAWL_ENABLED: "false"
+      SUBSCRIPTION_MONITOR_ENABLED: "true"
+      DOWNLOAD_TRACKER_ENABLED: "true"
+
+      # ── 其他 ──
+      DEBUG: "false"
+      TZ: "Asia/Shanghai"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+    # ── 资源限制（DXP4800 通常 8-16GB 内存）──
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
