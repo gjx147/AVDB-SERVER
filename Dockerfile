@@ -63,5 +63,10 @@ VOLUME ["/app/data"]
 
 EXPOSE 8000
 
-# 启动前跑 Alembic 迁移，再启动 uvicorn
-CMD ["sh", "-c", "cd /app && alembic upgrade head && cd backend && exec uvicorn main:app --host 0.0.0.0 --port 8000"]
+# 非 root 用户运行（安全最佳实践）
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
+    && chown -R appuser:appuser /app /ms-playwright
+USER appuser
+
+# 启动前跑 Alembic 迁移，再启动 uvicorn（单 worker，SQLite 安全）
+CMD ["sh", "-c", "cd /app && alembic upgrade head && cd backend && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1"]
