@@ -140,7 +140,26 @@ app.include_router(system.router)
 
 @app.get("/api/health")
 def health():
+    """存活探针（liveness）—— 不检查依赖，仅确认进程存活。"""
     return {"status": "ok", "app": app_settings.APP_NAME}
+
+
+@app.get("/api/health/ready")
+def health_ready(db: Session = Depends(get_db)):
+    """就绪探针（readiness）—— 检查 DB 连接，迁移完成前返回 503。
+
+    用于反向代理/Docker healthcheck 判断服务是否可接受流量。
+    """
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        return {"status": "ready", "db": "ok"}
+    except Exception as e:
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "error": str(e)},
+        )
 
 
 @app.get("/api/scheduler/jobs")

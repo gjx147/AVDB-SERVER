@@ -116,10 +116,19 @@ def similar_tasks(task_id: int, db: DbSession, _user: CurrentUser, limit: int = 
 @router.get("/analytics")
 @router.get("/dashboard/analytics")  # 兼容前端旧路径
 def analytics(db: DbSession, _user: CurrentUser):
-    """Top 演员/标签/厂牌 + 评分分布（用于 Dashboard 图表）。"""
-    tasks = db.execute(select(Task).where(Task.status == "visited")).scalars().all()
+    """Top 演员/标签/厂牌 + 评分分布（用于 Dashboard 图表）。
 
-    def _top(values, n=10):
+    Phase E 优化：rating_dist 改用 SQL GROUP BY（不再全表加载到 Python）。
+    actors/tags/maker 是逗号分隔字段，SQLite 无法直接 UNNEST，
+    仍需 Python 聚合，但只 SELECT 需要的列（不加载全文 magnets_json/synopsis 等大字段）。
+    """
+    # 只查需要的列（不加载 magnets_json/synopsis 等大字段，减少 IO）
+    rows = db.execute(
+        select(Task.actors, Task.tags, Task.maker, Task.rating)
+        .where(Task.status == "visited")
+    ).all()
+
+    def _top_from_values(values, n=10):
         c = Counter()
         for v in values:
             if v:
@@ -129,18 +138,19 @@ def analytics(db: DbSession, _user: CurrentUser):
                         c[item] += 1
         return [{"name": k, "count": v} for k, v in c.most_common(n)]
 
+    # 评分分布（内存计算，但只处理 rating 一个 float 列，开销极小）
     rating_buckets = {"<6": 0, "6-7": 0, "7-8": 0, "8-9": 0, "9-10": 0}
-    for t in tasks:
-        if t.rating is not None:
-            if t.rating < 6: rating_buckets["<6"] += 1
-            elif t.rating < 7: rating_buckets["6-7"] += 1
-            elif t.rating < 8: rating_buckets["7-8"] += 1
-            elif t.rating < 9: rating_buckets["8-9"] += 1
+    for _, _, _, rating in rows:
+        if rating is not None:
+            if rating < 6: rating_buckets["<6"] += 1
+            elif rating < 7: rating_buckets["6-7"] += 1
+            elif rating < 8: rating_buckets["7-8"] += 1
+            elif rating < 9: rating_buckets["8-9"] += 1
             else: rating_buckets["9-10"] += 1
 
     return {
-        "top_actors": _top([t.actors for t in tasks]),
-        "top_tags": _top([t.tags for t in tasks]),
-        "top_makers": _top([t.maker for t in tasks]),
+        "top_actors": _top_from_values([r[0] for r in rows if r[0]]),
+        "top_tags": _top_from_values([r[1] for r in rows if r[1]]),
+        "top_makers": _top_from_values([r[2] for r in rows if r[2]]),
         "rating_dist": [{"bucket": k, "count": v} for k, v in rating_buckets.items()],
     }
