@@ -75,9 +75,9 @@ async def _fetch_javlibrary(code: str) -> VideoMetadata | None:
     try:
         client = _get_client()
         resp = await client.get(search_url)
-            if resp.status_code != 200:
-                return None
-            html = resp.text
+        if resp.status_code != 200:
+            return None
+        html = resp.text
     except Exception as e:
         logger.debug(f"JavLibrary 抓取失败({code}): {e}")
         return None
@@ -93,9 +93,9 @@ async def _fetch_javlibrary(code: str) -> VideoMetadata | None:
     try:
         client = _get_client()
         detail = await client.get(href)
-            if detail.status_code != 200:
-                return None
-            html = detail.text
+        if detail.status_code != 200:
+            return None
+        html = detail.text
     except Exception:
         return None
 

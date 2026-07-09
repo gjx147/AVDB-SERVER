@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import hashlib
+import logging
+import secrets
+
 from jose import JWTError, jwt
 import bcrypt
 from sqlalchemy import select
@@ -79,17 +83,36 @@ def ensure_admin_exists() -> None:
     username = settings.ADMIN_USERNAME
     password = settings.ADMIN_PASSWORD
 
-    # 检查默认密钥告警
-    if settings.SECRET_KEY == "change-me-in-production":
-        import logging
-        logging.getLogger("avdb").critical(
-            "⚠️  SECRET_KEY 仍为默认值！请设置环境变量 SECRET_KEY。默认值可被任何人伪造 JWT。"
-        )
-    if password == "admin" or password == "change-me":
-        import logging
-        logging.getLogger("avdb").warning(
-            "⚠️  ADMIN_PASSWORD 为弱默认值，请通过环境变量设置强密码。"
-        )
+    # SECRET_KEY 为空时自动生成随机密钥并持久化
+    if not settings.SECRET_KEY:
+        import os as _os
+        from pathlib import Path as _Path
+        secret_file = _Path(settings.DATA_DIR) / ".secret_key"
+        if secret_file.exists():
+            settings.SECRET_KEY = secret_file.read_text().strip()
+        else:
+            new_key = _secrets.token_urlsafe(48)
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.write_text(new_key)
+            settings.SECRET_KEY = new_key
+            # 清除 lru_cache 使后续 get_settings() 返回新值
+            get_settings.cache_clear()
+            import logging as _log
+            _log.getLogger("avdb.auth").info("已自动生成随机 SECRET_KEY 并持久化到 %s", secret_file)
+
+    if password == "admin" or password == "change-me" or not password:
+        import secrets as _secrets2
+        import logging as _log2
+        if not password:
+            # 自动生成随机密码
+            password = _secrets2.token_urlsafe(16)
+            _log2.getLogger("avdb.auth").warning(
+                "⚠️  ADMIN_PASSWORD 未设置，已生成随机密码: %s (请妥善保存)", password
+            )
+        else:
+            _log2.getLogger("avdb.auth").warning(
+                "⚠️  ADMIN_PASSWORD 为弱默认值 '%s'，请通过环境变量设置强密码。", password
+            )
 
     db = SessionLocal()
     try:

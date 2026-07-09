@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import shutil
 from fastapi import APIRouter, Query
+
+logger = logging.getLogger("avdb.dashboard")
 from sqlalchemy import func, select
 
 from config import get_settings

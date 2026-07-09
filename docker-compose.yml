@@ -15,10 +15,10 @@ services:
       # - ./backend:/app/backend
       # - ./magnet_scraper:/app/magnet_scraper
     environment:
-      - AUTH_DISABLED=false           # 用户系统就绪后开启鉴权
-      - SECRET_KEY=${SECRET_KEY:-}    # 留空则在首次启动时生成随机密钥(建议设置)
+      - AUTH_DISABLED=false             # 生产环境必须 false
+      - SECRET_KEY=${SECRET_KEY:-}      # 留空则首次启动自动生成随机密钥持久化到 data/.secret_key
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}  # 留空则在首次启动时生成随机密码(建议设置)
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}  # 留空则首次启动自动生成随机密码(日志中打印一次)
       - JAVDB_URL=https://javdb.com
       - DATABASE_URL=                 # 空则用默认 SQLite /app/data/javdb.db
       - DEBUG=false

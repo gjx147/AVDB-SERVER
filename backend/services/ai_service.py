@@ -115,7 +115,6 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
         if attempt < 2:
             wait = 2 ** attempt  # 1s, 2s 指数退避
             await asyncio.sleep(wait)
-                return ""
     return ""
 
 

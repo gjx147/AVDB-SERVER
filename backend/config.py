@@ -27,7 +27,8 @@ class Settings(BaseSettings):
 
     # --- 鉴权 ---
     # JWT 密钥；生产环境务必通过环境变量覆盖。
-    SECRET_KEY: str = "change-me-in-production"
+    # 留空时首次启动自动生成随机密钥并持久化到 data/.secret_key
+    SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 天
 
