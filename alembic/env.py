@@ -22,7 +22,7 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 # 导入 Base 与全部模型（触发 metadata 注册）
-from database import Base, DATABASE_URL  # noqa: E402
+from database import Base, DATABASE_URL, engine as app_engine  # noqa: E402
 import models  # noqa: E402,F401  # 注册所有表
 
 # Alembic 配置对象
@@ -52,12 +52,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """在线模式：创建 Engine 并执行迁移。"""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    """在线模式：复用 backend/database.py 的 engine（已注册 PRAGMA）。
+
+    Phase C 修复：原 engine_from_config 未注册 PRAGMA 监听器，
+    导致迁移期间 foreign_keys=ON / WAL / busy_timeout 不生效。
+    """
+    # 复用已配置 PRAGMA 的 app engine
+    connectable = app_engine
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,

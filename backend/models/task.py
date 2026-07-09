@@ -20,7 +20,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # --- 基础字段（strivek） ---
-    list_source_id: Mapped[int] = mapped_column(Integer, ForeignKey("list_sources.id"), nullable=False)
+    list_source_id: Mapped[int] = mapped_column(Integer, ForeignKey("list_sources.id", ondelete="RESTRICT"), nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")  # pending/visited/failed
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

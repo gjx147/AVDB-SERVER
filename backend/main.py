@@ -48,8 +48,11 @@ async def lifespan(app: FastAPI):
     ensure_admin_exists()
     # 开发环境兜底：确保表存在（生产用 alembic upgrade head）
     from database import Base, engine
-    Base.metadata.create_all(bind=engine)
-    logger.info("数据库就绪")
+    if app_settings.DEBUG:
+        Base.metadata.create_all(bind=engine)
+        logger.info("开发模式：create_all 兜底建表")
+    else:
+        logger.info("生产模式：依赖 alembic upgrade head（已在 CMD 中执行）")
     # 启动浏览器池（按需启动，首次 acquire 时才真正 launch）
     from services.browser_pool import browser_pool
     try:
@@ -73,6 +76,9 @@ async def lifespan(app: FastAPI):
         if os.environ.get("DOWNLOAD_TRACKER_ENABLED", "true").lower() == "true":
             from services.download_tracker import register_job as register_tracker
             register_tracker(interval=int(os.environ.get("DOWNLOAD_TRACK_INTERVAL_S", "60")))
+        # 注册数据库定时备份（默认每天凌晨 3 点）
+        from services.backup import register_job as register_backup
+        register_backup()
         logger.info("调度任务注册完成")
     except Exception as e:
         logger.warning(f"调度中心启动失败: {e}")
