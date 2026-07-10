@@ -13,19 +13,23 @@ import type {
 
 const http = axios.create({ baseURL: '', timeout: 60000 })
 
-// P0-1: API Token 认证 —— 自动附加 X-Api-Token 请求头
+// JWT Bearer Token 认证 —— 自动附加 Authorization 头
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('apiToken')
   if (token) {
-    config.headers['X-Api-Token'] = token
+    config.headers['Authorization'] = `Bearer ${token}`
   }
   return config
 })
 
-// 统一错误信息提取
+// 401 自动跳转登录页
 http.interceptors.response.use(
   (r) => r,
   (err) => {
+    if (err?.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      localStorage.removeItem('apiToken')
+      window.location.href = '/login'
+    }
     const detail = err?.response?.data?.detail || err?.message || '请求失败'
     return Promise.reject(new Error(String(detail)))
   },

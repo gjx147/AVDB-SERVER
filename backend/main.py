@@ -216,12 +216,15 @@ _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 class SPAStaticFiles(StaticFiles):
-    """SPA 静态文件：API 路径返回 404，其余未匹配路径 fallback 到 index.html。"""
+    """SPA 静态文件：API 路径返回 404，WebSocket 直通，其余 fallback 到 index.html。"""
 
     async def __call__(self, scope, receive, send):
-        request_path = scope["path"]
-        if request_path.startswith("/api/"):
-            # API 路径未匹配到路由，返回 404
+        # WebSocket 连接不走静态文件（scope 里没有 method 字段）
+        if scope.get("type") == "websocket":
+            await Response("Not Found", status_code=404)(scope, receive, send)
+            return
+        request_path = scope.get("path", "")
+        if request_path.startswith("/api/") or request_path.startswith("/ws"):
             await Response("Not Found", status_code=404)(scope, receive, send)
             return
         path = request_path.lstrip("/")
