@@ -132,9 +132,15 @@ export const api = {
   // ════════ Actors ════════
   actors: {
     list: (skip = 0, limit = 100) =>
-      http.get<Actor[]>('/api/actors', { params: { skip, limit } }).then((r) => r.data),
+      http.get<Actor[]>('/api/actors', { params: { page: Math.floor(skip / limit) + 1, page_size: limit } }).then((r) => {
+        const d = r.data as unknown
+        return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
+      }),
     search: (keyword: string) =>
-      http.get<Actor[]>('/api/actors/search', { params: { q: keyword } }).then((r) => r.data),
+      http.get<Actor[]>('/api/actors', { params: { q: keyword, page: 1, page_size: 120 } }).then((r) => {
+        const d = r.data as unknown
+        return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
+      }),
     get: (id: number) =>
       http.get<Actor>(`/api/actors/${id}`).then((r) => r.data),
     movies: (id: number) =>

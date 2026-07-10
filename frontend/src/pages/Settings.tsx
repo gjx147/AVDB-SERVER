@@ -71,7 +71,16 @@ export function Settings() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="field"><label htmlFor="max-pages">默认最大页数</label><input id="max-pages" className="input" type="number" value={s.max_pages_default} onChange={(e) => upd({ max_pages_default: +e.target.value })} /></div>
-                <div className="field"><label htmlFor="preferred-suffixes">磁力后缀优先级</label><input id="preferred-suffixes" className="input" value={s.preferred_suffixes} onChange={(e) => upd({ preferred_suffixes: e.target.value })} /></div>
+                <div className="field"><label htmlFor="preferred-suffixes">磁力后缀优先级</label>
+                  <select id="preferred-suffixes" className="input" value={s.preferred_suffixes} onChange={(e) => upd({ preferred_suffixes: e.target.value })}>
+                    <option value="-UC,-C,-U">无码有字 → 有字 → 无码</option>
+                    <option value="-UC,-U,-C">无码有字 → 无码 → 有字</option>
+                    <option value="-C,-UC,-U">有字 → 无码有字 → 无码</option>
+                    <option value="-U,-UC,-C">无码 → 无码有字 → 有字</option>
+                    <option value="-C,-U,-UC">有字 → 无码 → 无码有字</option>
+                    <option value="-U,-C,-UC">无码 → 有字 → 无码有字</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
