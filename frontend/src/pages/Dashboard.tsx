@@ -160,7 +160,7 @@ export function Dashboard() {
 function Stat({ num, unit, label, trend, down }: { num: number; unit: string; label: string; trend: string; down?: boolean }) {
   return (
     <div className="stat">
-      <div className="stat-num">{num.toLocaleString()} <small>{unit}</small></div>
+      <div className="stat-num">{(num ?? 0).toLocaleString()} <small>{unit}</small></div>
       <div className="stat-label">{label}</div>
       <div className={`stat-trend${down ? ' down' : ''}`}>{trend}</div>
     </div>

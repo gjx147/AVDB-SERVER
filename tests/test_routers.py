@@ -37,7 +37,7 @@ def test_status_stats(client):
 def test_dashboard_stats(client):
     r = client.get("/api/dashboard/stats")
     assert r.status_code == 200
-    assert "tasks" in r.json()
+    assert "total_tasks" in r.json()
 
 
 def test_v2_analytics(client):

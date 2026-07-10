@@ -18,24 +18,17 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 @router.get("/stats")
 def dashboard_stats(db: DbSession, _user: CurrentUser):
-    """总览统计。"""
+    """总览统计。返回前端 DashboardStats 期望的扁平结构。"""
+    from models import Actor
     total = db.execute(select(func.count(Task.id))).scalar_one()
     by_status = {
         r[0]: r[1]
         for r in db.execute(select(Task.status, func.count(Task.id)).group_by(Task.status)).all()
     }
-    by_view = {
-        r[0]: r[1]
-        for r in db.execute(
-            select(Task.view_status, func.count(Task.id))
-            .where(Task.view_status.isnot(None))
-            .group_by(Task.view_status)
-        ).all()
-    }
     favorite = db.execute(select(func.count(Task.id)).where(Task.is_favorite == True)).scalar_one()  # noqa: E712
-    downloads_total = db.execute(select(func.count(Download.id))).scalar_one()
-    downloads_active = db.execute(
-        select(func.count(Download.id)).where(Download.status.in_(["pushed", "downloading"]))
+    actor_count = db.execute(select(func.count(Actor.id))).scalar_one()
+    total_magnets = db.execute(
+        select(func.count(Task.id)).where(Task.best_magnet.isnot(None))
     ).scalar_one()
 
     # 磁盘
@@ -47,12 +40,16 @@ def dashboard_stats(db: DbSession, _user: CurrentUser):
     except Exception:
         logger.warning("磁盘用量查询失败", exc_info=True)
 
+    # 返回前端期望的扁平结构（兼容 AVDB admin-new DashboardStats 类型）
     return {
-        "tasks": {"total": total, "by_status": by_status},
-        "view": by_view,
-        "favorite": favorite,
-        "downloads": {"total": downloads_total, "active": downloads_active},
-        "disk": disk,
+        "total_tasks": total,
+        "visited_tasks": by_status.get("visited", 0),
+        "pending_tasks": by_status.get("pending", 0),
+        "failed_tasks": by_status.get("failed", 0),
+        "favorite_count": favorite,
+        "actor_count": actor_count,
+        "total_magnets": total_magnets,
+        "db_size_mb": round(disk["used"] / 1024 / 1024, 1),
     }
 
 
