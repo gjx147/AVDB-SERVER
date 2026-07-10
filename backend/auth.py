@@ -18,6 +18,8 @@ from sqlalchemy import select
 
 from config import get_settings
 
+logger = logging.getLogger("avdb.auth")
+
 
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -91,7 +93,7 @@ def ensure_admin_exists() -> None:
         if secret_file.exists():
             settings.SECRET_KEY = secret_file.read_text().strip()
         else:
-            new_key = _secrets.token_urlsafe(48)
+            new_key = secrets.token_urlsafe(48)
             secret_file.parent.mkdir(parents=True, exist_ok=True)
             secret_file.write_text(new_key)
             settings.SECRET_KEY = new_key
@@ -101,16 +103,14 @@ def ensure_admin_exists() -> None:
             _log.getLogger("avdb.auth").info("已自动生成随机 SECRET_KEY 并持久化到 %s", secret_file)
 
     if password == "admin" or password == "change-me" or not password:
-        import secrets as _secrets2
-        import logging as _log2
         if not password:
             # 自动生成随机密码
-            password = _secrets2.token_urlsafe(16)
-            _log2.getLogger("avdb.auth").warning(
+            password = secrets.token_urlsafe(16)
+            logger.warning(
                 "⚠️  ADMIN_PASSWORD 未设置，已生成随机密码: %s (请妥善保存)", password
             )
         else:
-            _log2.getLogger("avdb.auth").warning(
+            logger.warning(
                 "⚠️  ADMIN_PASSWORD 为弱默认值 '%s'，请通过环境变量设置强密码。", password
             )
 
