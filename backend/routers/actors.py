@@ -72,7 +72,18 @@ def toggle_follow(actor_id: int, db: DbSession, _user: CurrentUser):
         raise HTTPException(status_code=404, detail="演员不存在")
     actor.is_followed = not actor.is_followed
     db.commit()
-    return {"ok": True, "is_followed": actor.is_followed}
+    return {"ok": True, "is_followed": actor.is_followed, "actor_id": actor_id}
+
+
+@router.post("/{actor_id}/unfollow")
+def unfollow(actor_id: int, db: DbSession, _user: CurrentUser):
+    """取消关注（兼容前端独立 unfollow 调用）。"""
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    actor.is_followed = False
+    db.commit()
+    return {"ok": True, "is_followed": False, "actor_id": actor_id}
 
 
 @router.post("/{actor_id}/blacklist")

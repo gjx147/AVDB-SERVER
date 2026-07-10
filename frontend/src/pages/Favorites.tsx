@@ -24,7 +24,7 @@ export function Favorites() {
     } else {
       api.tasks.favorites(0, 100).then(setTasks).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
     }
-    api.collections.list().then((r) => setCollections(r.collections)).catch(() => {})
+    api.collections.list().then((r) => setCollections(r.collections as unknown as Collection[])).catch(() => {})
   }
   useEffect(() => { load() }, [activeCol])
 

@@ -95,6 +95,7 @@ async def _push_aria2(magnet: str, config: dict) -> dict:
 
 
 @router.post("/push")
+@router.post("/download")  # 兼容前端旧路径
 async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     """推送磁力到下载器并记录到 downloads 表。"""
     # 读配置
@@ -145,6 +146,7 @@ def _test_qbittorrent_sync(config: dict) -> dict:
 
 
 @router.post("/test")
+@router.post("/test-connection")  # 兼容前端旧路径
 async def test_connection(downloader: str, db: DbSession, _user: CurrentUser):
     """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。"""
     import asyncio

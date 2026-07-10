@@ -46,11 +46,36 @@ def task_stats(db: DbSession, _user: CurrentUser):
 
 
 @router.post("/batch-delete")
+@router.post("/batch/delete")  # 兼容前端旧路径
 def batch_delete(task_ids: list[int], db: DbSession, _user: CurrentUser):
     if not task_ids: return {"ok": True, "deleted": 0}
     deleted = db.execute(Task.__table__.delete().where(Task.id.in_(task_ids))).rowcount
     db.commit()
     return {"ok": True, "deleted": deleted}
+
+
+@router.post("/batch/retry")
+def batch_retry(task_ids: list[int], db: DbSession, _user: CurrentUser):
+    """批量重置失败任务为 pending。"""
+    updated = db.execute(
+        Task.__table__.update().where(
+            Task.id.in_(task_ids), Task.status == "failed"
+        ).values(status="pending", retry_count=0)
+    ).rowcount
+    db.commit()
+    return {"ok": True, "updated": updated}
+
+
+@router.post("/batch/favorite")
+def batch_favorite(task_ids: list[int], db: DbSession, _user: CurrentUser):
+    """批量设为收藏。"""
+    from datetime import datetime
+    updated = db.execute(
+        Task.__table__.update().where(Task.id.in_(task_ids))
+        .values(is_favorite=True, favorite_at=datetime.utcnow())
+    ).rowcount
+    db.commit()
+    return {"ok": True, "updated": updated}
 
 
 @router.get("/search")
@@ -85,6 +110,26 @@ def get_task(task_id: int, db: DbSession, _user: CurrentUser):
     task = db.get(Task, task_id)
     if not task: raise HTTPException(status_code=404, detail="任务不存在")
     return task
+
+
+@router.post("/{task_id}/extract")
+def extract_single(task_id: int, db: DbSession, _user: CurrentUser):
+    """触发单任务提取（fire-and-forget subprocess）。"""
+    import asyncio, os, sys, subprocess
+    task = db.get(Task, task_id)
+    if not task: raise HTTPException(status_code=404, detail="任务不存在")
+    # 异步触发 scraper extract-single
+    from config import get_settings
+    settings = get_settings()
+    scraper = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "magnet_scraper", "scraper.py")
+    python = settings.SCRAPER_PYTHON or sys.executable
+    try:
+        subprocess.Popen([python, scraper, "extract-single", "--url", task.url],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env=dict(os.environ))
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+    return {"ok": True, "message": "已触发提取"}
 
 
 @router.delete("/{task_id}")

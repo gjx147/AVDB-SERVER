@@ -80,3 +80,14 @@ def backup_settings(db: DbSession, _user: CurrentUser):
 async def restore_settings():
     """恢复设置（Phase 1 占位：前端传文件，后端尚未处理）。"""
     return {"ok": True, "message": "恢复功能待实现"}
+
+
+@router.delete("/clean-failed")
+def clean_failed(db: DbSession, _user: CurrentUser):
+    """清理所有失败任务。"""
+    from models import Task
+    deleted = db.execute(
+        Task.__table__.delete().where(Task.status == "failed")
+    ).rowcount
+    db.commit()
+    return {"ok": True, "deleted": deleted}

@@ -54,6 +54,23 @@ def list_tasks_v2(
     return {"tasks": tasks, "total": total}
 
 
+@router.get("/tasks/search-fts")
+def search_fts(
+    db: DbSession,
+    _user: CurrentUser,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(48, le=200),
+):
+    """FTS 全文搜索（兼容前端，实际用 LIKE 降级）。"""
+    from sqlalchemy import or_
+    stmt = select(Task).where(
+        or_(Task.title.like(f"%{q}%"), Task.video_code.like(f"%{q}%"))
+    )
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    tasks = db.execute(stmt.order_by(Task.id.desc()).limit(limit)).scalars().all()
+    return {"tasks": tasks, "total": total, "engine": "like"}
+
+
 @router.get("/tasks/{task_id}/similar")
 def similar_tasks(task_id: int, db: DbSession, _user: CurrentUser, limit: int = Query(10, le=50)):
     """相似推荐（Jaccard 相似度，基于 actors/tags/maker/series）。"""

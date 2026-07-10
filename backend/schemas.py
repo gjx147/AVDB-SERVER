@@ -33,15 +33,33 @@ class TaskOut(BaseModel):
     url: str
     status: str
     retry_count: int
-    video_code: Optional[str] = None
     best_magnet: Optional[str] = None
+    magnets_json: Optional[str] = None
+    video_code: Optional[str] = None
+    error_message: Optional[str] = None
     title: Optional[str] = None
     poster_url: Optional[str] = None
+    thumbnail_urls: Optional[str] = None
+    synopsis: Optional[str] = None
+    description: Optional[str] = None
     actors: Optional[str] = None
     tags: Optional[str] = None
+    release_date: Optional[str] = None
+    duration: Optional[str] = None
+    director: Optional[str] = None
+    maker: Optional[str] = None
+    label: Optional[str] = None
+    series: Optional[str] = None
     rating: Optional[float] = None
-    view_status: Optional[str] = None
+    file_size: Optional[str] = None
     is_favorite: bool = False
+    favorite_at: Optional[datetime] = None
+    note: Optional[str] = None
+    view_status: Optional[str] = None
+    ai_title_translated: Optional[str] = None
+    ai_tags: Optional[str] = None
+    media_in_library: Optional[bool] = None
+    download_status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

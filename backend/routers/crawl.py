@@ -174,9 +174,33 @@ def crawl_status(_user: CurrentUser):
 
     return {
         "running": proc_running,
+        "paused": False,
         "process": _running_info if proc_running else None,
         "task": task_status,
+        # 兼容前端 CrawlStatus 类型
+        "list_code": _running_info.get("list_code") if proc_running else (task_status.get("list_code") if task_status else None),
+        "crawl_type": _running_info.get("mode") if proc_running else (task_status.get("crawl_type") if task_status else None),
+        "progress": task_status,
     }
+
+
+@router.post("/pause")
+def pause_crawl(_user: CurrentUser):
+    """暂停（当前实现等同 stop，因为 scraper 子进程不支持暂停）。"""
+    return stop_crawl(_user)
+
+
+@router.post("/resume")
+def resume_crawl(_user: CurrentUser):
+    """恢复（需重新触发 scan/extract）。"""
+    return {"ok": True, "message": "请重新触发 scan 或 extract"}
+
+
+@router.post("/extract-failed")
+def extract_failed(req: CrawlRequest, _user: CurrentUser):
+    """重试失败任务（兼容前端，转调 extract --failed-only）。"""
+    req.failed_only = True
+    return start_extract(req, _user)
 
 
 @router.post("/stop")
@@ -243,8 +267,10 @@ def crawl_logs(
     logs = db.execute(
         select(CrawlLog).order_by(CrawlLog.created_at.desc()).limit(limit)
     ).scalars().all()
-    return [
-        {"id": l.id, "crawl_type": l.crawl_type, "level": l.level,
-         "message": l.message, "created_at": str(l.created_at)}
-        for l in logs
-    ]
+    return {
+        "lines": [
+            f"[{l.level}] {l.message}"
+            for l in logs
+        ],
+        "running": _running_proc is not None and _running_proc.poll() is None,
+    }

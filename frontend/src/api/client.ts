@@ -94,7 +94,10 @@ export const api = {
       http.delete<ApiOk>(`/api/tasks/${id}`).then((r) => r.data),
 
     favorites: (skip = 0, limit = 50) =>
-      http.get<Task[]>('/api/tasks/favorites/list', { params: { skip, limit } }).then((r) => r.data),
+      http.get<Task[]>('/api/tasks/favorites/list', { params: { skip, limit } }).then((r) => {
+        const d = r.data as unknown
+        return Array.isArray(d) ? d : (d as { items?: Task[] }).items || []
+      }),
 
     batchDelete: (task_ids: number[]) =>
       http.post<ApiOk>('/api/tasks/batch/delete', { task_ids }).then((r) => r.data),
@@ -195,7 +198,10 @@ export const api = {
   // ════════ Downloads（下载历史 + 状态）════════
   downloads: {
     list: (status?: string, limit = 100, offset = 0) =>
-      http.get<{ downloads: DownloadRecord[]; total: number }>('/api/downloads', { params: { status, limit, offset } }).then((r) => r.data),
+      http.get<{ downloads: DownloadRecord[]; total: number }>('/api/downloads', { params: { status, limit, offset } }).then((r) => {
+        const d = r.data as unknown as { downloads?: DownloadRecord[]; items?: DownloadRecord[]; total?: number }
+        return { downloads: d.downloads || d.items || [], total: d.total || 0 }
+      }),
   },
 
   // ════════ System ════════
@@ -220,12 +226,19 @@ export const api = {
 
   // ════════ Collections 收藏分组（F13）════════
   collections: {
-    list: () => http.get<{ collections: { id: number; name: string; icon: string; sort_order: number; task_count: number }[] }>('/api/collections').then((r) => r.data),
-    create: (name: string, icon?: string) => http.post<{ ok: boolean; id: number }>('/api/collections', { name, icon }).then((r) => r.data),
+    list: () => http.get<{ collections: { id: number; name: string; icon: string; sort_order: number; task_count: number }[] }>('/api/collections').then((r) => {
+      const d = r.data as unknown
+      if (Array.isArray(d)) return { collections: d as { id: number; name: string; icon: string; sort_order: number; task_count: number }[] }
+      return { collections: (d as { collections?: unknown[] }).collections || [] }
+    }),
+    create: (name: string, _icon?: string) => http.post('/api/collections', { name }).then((r) => r.data),
     remove: (id: number) => http.delete<ApiOk>(`/api/collections/${id}`).then((r) => r.data),
     addTask: (collectionId: number, taskId: number) => http.post<ApiOk>(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
     removeTask: (collectionId: number, taskId: number) => http.delete<ApiOk>(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
-    tasks: (collectionId: number) => http.get<{ tasks: Task[] }>(`/api/collections/${collectionId}/tasks`).then((r) => r.data),
+    tasks: (collectionId: number) => http.get<{ tasks: Task[] }>(`/api/collections/${collectionId}/tasks`).then((r) => {
+      const d = r.data as unknown as { tasks?: Task[]; items?: Task[] }
+      return { tasks: d.tasks || d.items || [] }
+    }),
   },
 
   // ════════ Tasks 编辑（F20）════════

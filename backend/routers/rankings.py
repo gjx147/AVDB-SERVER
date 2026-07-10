@@ -36,6 +36,47 @@ def list_dates(db: DbSession, _user: CurrentUser, rank_type: str | None = Query(
 
 # ── 兼容 AVDB 原始格式：GET /api/rankings?rank_type=X&skip=Y&limit=Z ──
 
+@router.get("/latest")
+def latest_rankings(db: DbSession, _user: CurrentUser, rank_type: str = Query("hot")):
+    """获取最新一天的排行榜（兼容前端 /api/rankings/latest）。"""
+    latest_date = db.execute(
+        select(func.max(Ranking.rank_date)).where(Ranking.rank_type == rank_type)
+    ).scalar_one()
+    if not latest_date:
+        return {"rankings": [], "rank_date": None}
+    rows = db.execute(
+        select(Ranking).where(Ranking.rank_type == rank_type, Ranking.rank_date == latest_date)
+        .order_by(Ranking.rank_position)
+    ).scalars().all()
+    return {"rankings": rows, "rank_date": latest_date}
+
+
+@router.post("/{ranking_id}/add-task")
+def add_single_task(ranking_id: int, db: DbSession, _user: CurrentUser):
+    """单条排行榜入库为 task。"""
+    r = db.get(Ranking, ranking_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="排行条目不存在")
+    if not r.video_code:
+        return {"ok": False, "message": "无番号"}
+    existing = db.execute(select(Task).where(Task.video_code == r.video_code)).scalar_one_or_none()
+    if existing:
+        r.task_id = existing.id
+        r.is_in_library = True
+        db.commit()
+        return {"ok": True, "task_id": existing.id, "ranking_id": ranking_id}
+    src = db.execute(select(ListSource).where(ListSource.list_code == "RANKING")).scalar_one_or_none()
+    if not src:
+        src = ListSource(list_code="RANKING", list_path="/rankings")
+        db.add(src); db.flush()
+    t = Task(list_source_id=src.id, url=f"/v/{r.video_code}", video_code=r.video_code)
+    db.add(t); db.flush()
+    r.task_id = t.id
+    r.is_in_library = True
+    db.commit()
+    return {"ok": True, "task_id": t.id, "ranking_id": ranking_id}
+
+
 @router.get("", response_model=list[RankingOut])
 def list_rankings_compat(
     db: DbSession,
@@ -137,7 +178,15 @@ def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser
         r.is_in_library = True
         added += 1
     db.commit()
-    return {"ok": True, "added": added, "skipped": skipped}
+    # 返回前端期望的 results 数组格式
+    results = []
+    for r in rankings:
+        results.append({
+            "ranking_id": r.id,
+            "task_id": r.task_id,
+            "error": None if r.is_in_library else "跳过",
+        })
+    return {"ok": True, "added": added, "skipped": skipped, "results": results}
 
 
 @router.delete("/{rank_type}/{date}")

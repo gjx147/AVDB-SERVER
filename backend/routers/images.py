@@ -104,8 +104,13 @@ def hires_backdrop_file(task_id: int):
 
 @router.get("/hires/has-local-thumbs/{task_id}")
 def hires_has_local_thumbs(task_id: int):
-    """检查是否有本地缩略图缓存。"""
-    return list_thumbnails(task_id)
+    """检查是否有本地缩略图缓存。返回前端期望的 {has_local, count}。"""
+    d = _task_dir(task_id)
+    if not d.exists():
+        return {"has_local": False, "count": 0}
+    thumbs = list(d.glob("thumb_*.jpg"))
+    count = len(thumbs)
+    return {"has_local": count > 0, "count": count}
 
 
 @router.post("/hires/download-hires/{task_id}")
