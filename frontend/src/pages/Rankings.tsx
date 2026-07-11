@@ -66,7 +66,7 @@ export function Rankings() {
   const nav = useNavigate()
   const [tab, setTab] = useState<RankType>('hot')
   const [list, setList] = useState<Ranking[] | null>(null)
-  const [latest, setLatest] = useState<Record<string, string>>({})
+  const [latest, setLatest] = useState<Record<string, string[]>>({})
   const [view, setView] = useState<'grid' | 'row'>('grid')
   const [searchQ, setSearchQ] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>('all')
@@ -85,7 +85,7 @@ export function Rankings() {
     api.images.queueStatus().then((s) => { if (s.running) { setQueueRunning(true); setQueueInfo(s) } }).catch(() => {})
   }, [])
 
-  useEffect(() => { api.rankings.latest().then(setLatest).catch(() => {}) }, [])
+  useEffect(() => { api.rankingsNew.dates().then(setLatest).catch(() => {}) }, [])
 
   const load = useCallback(async (t: RankType) => {
     const reqId = ++reqSeqRef.current  // P1#6: 丢弃旧标签的响应
@@ -166,7 +166,7 @@ export function Rankings() {
           <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>画廊</button>
           <button className={view === 'row' ? 'on' : ''} onClick={() => setView('row')}>列表</button>
         </div>
-        {latest[tab] && <span style={{ fontSize: 11, color: 'var(--t-faint)', whiteSpace: 'nowrap' }}>更新于 {latest[tab]}</span>}
+        {latest[tab]?.[0] && <span style={{ fontSize: 11, color: 'var(--t-faint)', whiteSpace: 'nowrap' }}>更新于 {latest[tab][0]}</span>}
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => load(tab)} /> :

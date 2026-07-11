@@ -128,8 +128,11 @@ class RankingOut(BaseModel):
     title: Optional[str] = None
     cover_url: Optional[str] = None
     score: Optional[float] = None
+    views: int = 0
+    detail_url: Optional[str] = None
     task_id: Optional[int] = None
     is_in_library: bool = False
+    created_at: Optional[datetime] = None
 
 
 class BatchAddTasksRequest(BaseModel):

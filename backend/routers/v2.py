@@ -24,28 +24,42 @@ def list_tasks_v2(
     actor: str | None = Query(None),
     tag: str | None = Query(None),
     maker: str | None = Query(None),
+    list_source_id: int | None = Query(None),
     min_rating: float | None = Query(None),
-    sort: str = Query("created_desc", description="created_desc/rating_desc/title"),
+    sort: str = Query("created_desc", description="created_desc/rating_desc/title_asc/date_desc/favorite_desc"),
     limit: int = Query(48, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """多维筛选 + 排序。"""
-    stmt = select(Task).where(Task.status == "visited")
+    """多维筛选 + 排序。
+
+    Bug 修复：
+    - 默认只显示 visited，但前端可传 status=pending/failed 看待处理/失败任务，
+      之前的写法「先 WHERE visited 再叠加 status」会矛盾返回空。改为：不传 status
+      时默认 visited，传了就尊重用户选择。
+    - sort 支持前端发送的 date_desc / rating_desc / title_asc / favorite_desc。
+    - 新增 list_source_id 筛选（前端下拉列表源）。
+    """
     if status:
-        stmt = stmt.where(Task.status == status)
+        stmt = select(Task).where(Task.status == status)
+    else:
+        stmt = select(Task).where(Task.status == "visited")
     if actor:
         stmt = stmt.where(Task.actors.like(f"%{actor}%"))
     if tag:
         stmt = stmt.where(Task.tags.like(f"%{tag}%"))
     if maker:
         stmt = stmt.where(Task.maker == maker)
+    if list_source_id is not None:
+        stmt = stmt.where(Task.list_source_id == list_source_id)
     if min_rating is not None:
         stmt = stmt.where(Task.rating >= min_rating)
 
     sort_map = {
         "created_desc": Task.created_at.desc(),
+        "date_desc": Task.release_date.desc().nullslast(),
         "rating_desc": Task.rating.desc().nullslast(),
-        "title": Task.title,
+        "title_asc": Task.title.asc().nullslast(),
+        "favorite_desc": Task.is_favorite.desc(),
     }
     stmt = stmt.order_by(sort_map.get(sort, Task.created_at.desc()))
 
