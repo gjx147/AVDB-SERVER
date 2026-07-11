@@ -453,34 +453,34 @@ export const api = {
     /** 重新抓取高清预览图（从页面 tile-item href）并下载到本地 */
     downloadHires: (taskId: number) =>
       http.post<{ ok: boolean; message: string; downloaded: { cover: boolean; thumbnails: number; total_found: number } }>(
-        `/api/hires/download-hires/${taskId}`,
+        `/api/images/hires/download-hires/${taskId}`,
       ).then((r) => r.data),
     /** 检查是否有本地高清预览图缓存 */
     hasLocalThumbs: (taskId: number) =>
-      http.get<{ has_local: boolean; count: number }>(`/api/hires/has-local-thumbs/${taskId}`).then((r) => r.data),
+      http.get<{ has_local: boolean; count: number }>(`/api/images/hires/has-local-thumbs/${taskId}`).then((r) => r.data),
     /** 获取海报索引（自动检测+手动设置的结果） */
     posterIndex: (taskId: number) =>
-      http.get<{ poster_index: number }>(`/api/hires/poster-index/${taskId}`).then((r) => r.data),
+      http.get<{ poster_index: number }>(`/api/images/hires/poster-index/${taskId}`).then((r) => r.data),
     /** 手动选择海报：0=gallery-1, 1=gallery-2, 2=gallery-3... */
     setPoster: (taskId: number, index: number) =>
-      http.post<{ ok: boolean; message: string }>(`/api/hires/set-poster/${taskId}/${index}`).then((r) => r.data),
+      http.post<{ ok: boolean; message: string }>(`/api/images/hires/set-poster/${taskId}/${index}`).then((r) => r.data),
     /** 启动串行队列：逐个处理任务（下载图片+提取磁力） */
     queueStart: (taskIds: number[]) =>
-      http.post<{ ok: boolean; message: string; total: number }>(`/api/hires/queue/start`, taskIds).then((r) => r.data),
+      http.post<{ ok: boolean; message: string; total: number }>(`/api/images/hires/queue/start`, taskIds).then((r) => r.data),
     /** 查询串行队列状态 */
     queueStatus: () =>
       http.get<{
         running: boolean; total: number; current: number; current_task_id: number | null;
         current_video_code: string | null; stage: string; done: number[]; failed: number[]
-      }>(`/api/hires/queue/status`).then((r) => r.data),
+      }>(`/api/images/hires/queue/status`).then((r) => r.data),
   },
 }
 
 /** 本地缓存高清预览图文件 URL（download-hires 下载的） */
-export const thumbFileUrl = (taskId: number, index: number) => `/api/hires/thumb-file/${taskId}/${index}`
+export const thumbFileUrl = (taskId: number, index: number) => `/api/images/hires/thumb-file/${taskId}/${index}`
 
 /** gallery-1竖→它就是海报, gallery-1横→gallery-2是海报（自动检测+可手动设置） */
-export const coverFileUrl = (taskId: number) => `/api/hires/poster-file/${taskId}`
+export const coverFileUrl = (taskId: number) => `/api/images/hires/poster-file/${taskId}`
 
 /** 背景图：优先 backdrop.jpg，回退 gallery-1.jpg */
-export const backdropUrl = (taskId: number) => `/api/hires/backdrop-file/${taskId}`
+export const backdropUrl = (taskId: number) => `/api/images/hires/backdrop-file/${taskId}`

@@ -81,8 +81,8 @@ async def _send_bark(config: dict, title: str, body: str) -> bool:
     url = f"https://api.day.app/{key}/{quote(title)}/{quote(body)}"
     try:
         c = _get_notify_client()
-            r = await c.get(url)
-            return r.status_code == 200
+        r = await c.get(url)
+        return r.status_code == 200
     except Exception as e:
         logger.warning(f"Bark 发送失败: {e}")
         return False
@@ -96,8 +96,8 @@ async def _send_telegram(config: dict, title: str, body: str) -> bool:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         c = _get_notify_client()
-            r = await c.post(url, json={"chat_id": chat_id, "text": f"*{title}*\n{body}", "parse_mode": "Markdown"})
-            return r.status_code == 200
+        r = await c.post(url, json={"chat_id": chat_id, "text": f"*{title}*\n{body}", "parse_mode": "Markdown"})
+        return r.status_code == 200
     except Exception as e:
         logger.warning(f"Telegram 发送失败: {e}")
         return False
@@ -109,8 +109,8 @@ async def _send_discord(config: dict, title: str, body: str) -> bool:
         return False
     try:
         c = _get_notify_client()
-            r = await c.post(webhook, json={"content": f"**{title}**\n{body}"})
-            return r.status_code in (200, 204)
+        r = await c.post(webhook, json={"content": f"**{title}**\n{body}"})
+        return r.status_code in (200, 204)
     except Exception as e:
         logger.warning(f"Discord 发送失败: {e}")
         return False
@@ -123,8 +123,8 @@ async def _send_wecom(config: dict, title: str, body: str) -> bool:
     url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
     try:
         c = _get_notify_client()
-            r = await c.post(url, json={"msgtype": "text", "text": {"content": f"{title}\n{body}"}})
-            return r.status_code == 200 and r.json().get("errcode") == 0
+        r = await c.post(url, json={"msgtype": "text", "text": {"content": f"{title}\n{body}"}})
+        return r.status_code == 200 and r.json().get("errcode") == 0
     except Exception as e:
         logger.warning(f"企业微信发送失败: {e}")
         return False
@@ -136,8 +136,8 @@ async def _send_webhook(config: dict, title: str, body: str, event: str) -> bool
         return False
     try:
         c = _get_notify_client()
-            r = await c.post(url, json={"event": event, "title": title, "body": body})
-            return r.status_code < 400
+        r = await c.post(url, json={"event": event, "title": title, "body": body})
+        return r.status_code < 400
     except Exception as e:
         logger.warning(f"Webhook 发送失败: {e}")
         return False
