@@ -256,6 +256,61 @@ def _is_timed_out(info: dict) -> bool:
 
 # ── Phase 1 补端点：日志查询 ──
 
+@router.post("/ranking")
+def crawl_ranking(body: dict, _user: CurrentUser):
+    """触发排行榜爬取（兼容前端 POST /api/crawl/ranking）。
+
+    前端传 {rank_type, max_pages}，后端启动 scraper ranking 子命令。
+    """
+    global _running_proc, _running_info
+    if _running_proc and _running_proc.poll() is None:
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+
+    rank_type = body.get("rank_type", "hot")
+    max_pages = str(body.get("max_pages", 5))
+    cmd = ["ranking", "--type", rank_type, "-p", max_pages]
+
+    proc = _start_scraper(cmd)
+    _running_proc = proc
+    _running_info = {
+        "mode": "ranking", "rank_type": rank_type, "pid": proc.pid,
+        "started_at": _now_iso(),
+    }
+    return {"ok": True, "pid": proc.pid, "mode": "ranking"}
+
+
+@router.post("/actor")
+def crawl_actor(body: dict, _user: CurrentUser):
+    """触发演员爬取（兼容前端 POST /api/crawl/actor）。"""
+    global _running_proc, _running_info
+    if _running_proc and _running_proc.poll() is None:
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+
+    actor_url = body.get("actor_url", "")
+    list_source_id = body.get("list_source_id")
+    cmd = ["crawl-actor", "--url", actor_url]
+    if list_source_id:
+        cmd += ["--list-source-id", str(list_source_id)]
+
+    proc = _start_scraper(cmd)
+    _running_proc = proc
+    _running_info = {
+        "mode": "actor", "actor_url": actor_url, "pid": proc.pid,
+        "started_at": _now_iso(),
+    }
+    return {"ok": True, "pid": proc.pid, "mode": "actor"}
+
+
+@router.post("/actor-search")
+def actor_search(body: dict, _user: CurrentUser):
+    """搜索演员（兼容前端 POST /api/crawl/actor-search）。"""
+    name = body.get("actor_name", "") or body.get("q", "")
+    if not name:
+        raise HTTPException(status_code=400, detail="需要演员名")
+    # 直接返回空（实际搜索需要 Playwright，占位）
+    return {"ok": True, "results": [], "message": f"搜索 {name}（需要浏览器池支持）"}
+
+
 @router.get("/logs")
 def crawl_logs(
     db: DbSession,
