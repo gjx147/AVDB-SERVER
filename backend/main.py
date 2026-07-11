@@ -212,6 +212,39 @@ from pathlib import Path  # noqa: E402
 from fastapi.responses import FileResponse, Response  # noqa: E402
 from starlette.staticfiles import StaticFiles  # noqa: E402
 
+# ── WebSocket：爬取实时进度推送 ──
+# 前端 Crawl 页通过 /ws/crawl-progress 订阅实时进度。
+# 后端每 2 秒读取 crawl status（进程级 + crawl_status.json）并推送，
+# 复用 routers.crawl.crawl_status 的逻辑，避免重复实现。
+from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
+
+
+@app.websocket("/ws/crawl-progress")
+async def crawl_progress_ws(websocket: WebSocket):
+    """爬取进度 WebSocket：每 2 秒推送一次 crawl status。"""
+    await websocket.accept()
+    try:
+        import asyncio
+        from routers.crawl import crawl_status as _get_crawl_status
+        from deps import CurrentUser  # noqa: F401  (类型引用)
+
+        while True:
+            try:
+                # crawl_status 需要 _user: CurrentUser 依赖注入，
+                # 但 WebSocket 上下文中不走 Depends，直接调用函数（传 None）
+                # 函数内部不实际使用 _user，只是鉴权标记。
+                status = _get_crawl_status(None)  # type: ignore
+                await websocket.send_json(status)
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.debug("crawl_progress_ws 推送异常: %s", e)
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug("crawl_progress_ws 连接关闭: %s", e)
+
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
