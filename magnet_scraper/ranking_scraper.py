@@ -21,11 +21,16 @@ import config
 logger = logging.getLogger(__name__)
 
 # JavDB 排行榜 URL 映射（rank_type → 路径参数）
+# 用户提供的正确地址：
+#   日榜: /rankings/movies?p=daily&t=censored
+#   周榜: /rankings/movies?p=weekly&t=censored
+#   月榜: /rankings/movies?p=monthly&t=censored
+#   演员月榜: /rankings/actors?t=censored
 RANKING_URLS = {
-    "hot": "/rankings/video?movie_type=censored&period=trend",
-    "weekly": "/rankings/video?movie_type=censored&period=week",
-    "monthly": "/rankings/video?movie_type=censored&period=month",
-    "daily": "/rankings/video?movie_type=censored&period=trend",
+    "hot": "/rankings/movies?p=daily&t=censored",
+    "weekly": "/rankings/movies?p=weekly&t=censored",
+    "monthly": "/rankings/movies?p=monthly&t=censored",
+    "daily": "/rankings/movies?p=daily&t=censored",
 }
 
 
@@ -339,7 +344,7 @@ class RankingScraper:
         logger.info(f"开始爬取演员排行榜 (最多 {max_pages} 页)")
 
         while page_num <= max_pages:
-            url = f"{self.BASE_URL}/actors?t=censored"
+            url = f"{self.BASE_URL}/rankings/actors?t=censored"
             if page_num > 1:
                 url += f"&page={page_num}"
 
