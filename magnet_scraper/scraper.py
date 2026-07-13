@@ -306,7 +306,7 @@ class MagnetScraper:
             selected_ua = random.choice(user_agents)
             logger.debug(f"设置User-Agent: {selected_ua}")
             
-            # 配置代理
+            # 配置代理（必须在 launch 时设置，context 级代理不生效）
             proxy_config = None
             proxy_url = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy") or os.environ.get("https_proxy")
             if proxy_url:
@@ -325,15 +325,15 @@ class MagnetScraper:
                 else:
                     proxy_config = {"server": proxy_url}
                 logger.info(f"已为浏览器设置代理: {proxy_url}")
-            
+                # 代理设置在 launch 级别（Chromium 只在启动时读代理）
+                launch_options["proxy"] = proxy_config
+
             context_options = {
                 "user_agent": selected_ua,
                 "viewport": {"width": 1920, "height": 1080},
                 "locale": "en-US",
                 "timezone_id": "America/New_York",
             }
-            if proxy_config:
-                context_options["proxy"] = proxy_config
             
             self.context = self.browser.new_context(**context_options)
 
