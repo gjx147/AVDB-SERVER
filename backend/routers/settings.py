@@ -120,15 +120,18 @@ async def test_proxy(req: ProxyTestRequest, db: DbSession, _user: CurrentUser):
 
     def _test_sync():
         import httpx
-        # 用代理访问 JavDB 首页，验证连通性
+        # 用代理访问 JavDB，验证连通性
+        # 注意：httpx 无法过 Cloudflare（403/503 是正常的），只要能收到
+        # HTTP 响应就说明代理工作正常。实际爬取用 Playwright+stealth 过验证。
         with httpx.Client(proxy=proxy, timeout=15, follow_redirects=True) as client:
             r = client.get(javdb_url)
             return r.status_code, len(r.text)
 
     try:
         code, body_len = await asyncio.to_thread(_test_sync)
-        if code == 200:
-            return {"ok": True, "message": f"代理连接成功 (HTTP {code}, 页面 {body_len} 字节)"}
-        return {"ok": False, "message": f"代理返回异常状态码: HTTP {code}"}
+        # 能收到 HTTP 响应就说明代理通（200/403/503 都算连通）
+        if code in (200, 403, 503):
+            return {"ok": True, "message": f"代理连接正常 (HTTP {code})。实际爬取用 Playwright 过验证。"}
+        return {"ok": True, "message": f"代理已连通 (HTTP {code}, 页面 {body_len} 字节)"}
     except Exception as e:
         return {"ok": False, "message": f"代理连接失败: {e}"}
