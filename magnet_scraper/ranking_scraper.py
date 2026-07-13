@@ -53,7 +53,7 @@ class RankingScraper:
 
         每个条目: {rank_position, detail_url, cover_url, title, video_code, score, views}
         """
-        path = RANKING_URLS.get(rank_type, RANKING_URLS["hot"])
+        path = RANKING_URLS.get(rank_type, RANKING_URLS["daily"])
         self._ensure_browser()
 
         all_entries = []
