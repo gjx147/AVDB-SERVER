@@ -12,8 +12,9 @@ services:
     image: gjx147/avdb-server:latest
     container_name: avdb-server
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # 使用 host 网络模式：容器直接用宿主网络
+    # 这样容器内访问 NAS 上的代理（如 V2Ray 192.168.31.220:20171）无需特殊路由
+    network_mode: host
     volumes:
       # 数据持久化 —— 映射到 NAS 共享文件夹，便于备份和管理
       - /volume3/docker/avdb-server/data:/app/data
