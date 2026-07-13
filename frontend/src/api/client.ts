@@ -442,6 +442,8 @@ export const api = {
       return http.post<ApiOk>('/api/settings/restore', fd).then((r) => r.data)
     },
     cleanFailed: () => http.delete<ApiOk>('/api/settings/clean-failed').then((r) => r.data),
+    testProxy: (proxy: string) =>
+      http.post<{ ok: boolean; message: string }>('/api/settings/test-proxy', { proxy }).then((r) => r.data),
   },
 
   // ════════ Images ════════

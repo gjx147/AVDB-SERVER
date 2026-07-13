@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -91,3 +92,43 @@ def clean_failed(db: DbSession, _user: CurrentUser):
     ).rowcount
     db.commit()
     return {"ok": True, "deleted": deleted}
+
+
+# ── 代理测试 ──
+
+class ProxyTestRequest(BaseModel):
+    proxy: str
+
+
+@router.post("/test-proxy")
+async def test_proxy(req: ProxyTestRequest, db: DbSession, _user: CurrentUser):
+    """测试代理是否能访问 JavDB。
+
+    优先用请求体中的 proxy；为空则读 DB settings 中的 http_proxy。
+    """
+    from config import get_settings
+
+    proxy = (req.proxy or "").strip()
+    if not proxy:
+        row = db.get(Setting, "http_proxy")
+        proxy = row.value.strip() if row and row.value else ""
+
+    if not proxy:
+        return {"ok": False, "message": "代理地址为空，请先填写代理地址"}
+
+    javdb_url = get_settings().JAVDB_URL or "https://javdb.com"
+
+    def _test_sync():
+        import httpx
+        # 用代理访问 JavDB 首页，验证连通性
+        with httpx.Client(proxy=proxy, timeout=15, follow_redirects=True) as client:
+            r = client.get(javdb_url)
+            return r.status_code, len(r.text)
+
+    try:
+        code, body_len = await asyncio.to_thread(_test_sync)
+        if code == 200:
+            return {"ok": True, "message": f"代理连接成功 (HTTP {code}, 页面 {body_len} 字节)"}
+        return {"ok": False, "message": f"代理返回异常状态码: HTTP {code}"}
+    except Exception as e:
+        return {"ok": False, "message": f"代理连接失败: {e}"}

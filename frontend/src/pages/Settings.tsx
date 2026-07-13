@@ -10,6 +10,7 @@ export function Settings() {
   const [s, setS] = useState<S | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('crawl')
+  const [proxyTesting, setProxyTesting] = useState(false)
   const toastOk = useStore((st) => st.toastOk)
   const toastErr = useStore((st) => st.toastErr)
 
@@ -21,6 +22,17 @@ export function Settings() {
   const upd = (patch: Partial<S>) => setS({ ...s, ...patch })
   const save = async () => {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const testProxy = async () => {
+    setProxyTesting(true)
+    try {
+      await save()
+      const proxyVal = (s as unknown as Record<string, string>).http_proxy || ''
+      const r = await api.settings.testProxy(proxyVal)
+      if (r.ok) toastOk(r.message)
+      else toastErr(r.message)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setProxyTesting(false) }
   }
   const backup = async () => {
     try {
@@ -64,6 +76,18 @@ export function Settings() {
               <div className="field"><label htmlFor="site-url">网站地址 <span className="req">*</span></label>
                 <input id="site-url" className="input" value={s.javdb_url} onChange={(e) => upd({ javdb_url: e.target.value })} />
                 <div className="hint">如部署镜像站可填写自定义地址</div>
+              </div>
+              <div className="field">
+                <label htmlFor="http-proxy">代理地址</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <input id="http-proxy" className="input" placeholder="http://192.168.31.220:20171"
+                    value={(s as unknown as Record<string, string>).http_proxy || ''}
+                    onChange={(e) => upd({ http_proxy: e.target.value } as unknown as Partial<S>)} />
+                  <button className="btn btn--ghost btn--sm" onClick={testProxy} disabled={proxyTesting} style={{ whiteSpace: 'nowrap' }}>
+                    {proxyTesting ? '测试中…' : '测试连接'}
+                  </button>
+                </div>
+                <div className="hint">用于访问 JavDB（格式：http://host:port 或 http://user:pass@host:port）。留空则不走代理。保存后爬取自动生效。</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="field"><label htmlFor="crawl-delay-min">爬取延迟下限 (秒)</label><input id="crawl-delay-min" className="input" type="number" value={s.crawl_delay_min} onChange={(e) => upd({ crawl_delay_min: +e.target.value })} /></div>

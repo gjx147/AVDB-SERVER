@@ -56,16 +56,41 @@ def _crawl_status_file() -> Path:
     return Path(settings.DATA_DIR) / "crawl_status.json"
 
 
+def _get_proxy_from_db() -> str:
+    """从 DB settings 表读取运行时配置的代理地址。"""
+    try:
+        from database import SessionLocal
+        from models import Setting
+        db = SessionLocal()
+        try:
+            row = db.get(Setting, "http_proxy")
+            return row.value.strip() if row and row.value else ""
+        finally:
+            db.close()
+    except Exception:
+        return ""
+
+
 def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     """启动 scraper 子进程。
 
     架构修复：
     - stdout+stderr 重定向到日志文件（调试用，不 PIPE 避免死锁）
+    - 从 DB settings 读 http_proxy，注入子进程 env（覆盖启动时环境变量）
     - start_new_session=True（Unix 进程组，支持整组 kill 杀 Chromium 子树）
     - Windows 用 CREATE_NEW_PROCESS_GROUP
     """
     settings = get_settings()
     env = dict(os.environ)
+
+    # 从 DB 读运行时代理配置，覆盖 env（让 scraper 子进程的 Playwright 生效）
+    proxy = _get_proxy_from_db()
+    if proxy:
+        env["HTTP_PROXY"] = proxy
+        env["HTTPS_PROXY"] = proxy
+        env["http_proxy"] = proxy
+        env["https_proxy"] = proxy
+
     cmd = [_python_exe(), str(_scraper_path())] + cmd_args
 
     # stdout+stderr 写入日志文件（覆盖模式，每次爬取只保留最新一次的日志）

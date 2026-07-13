@@ -198,6 +198,9 @@ export interface Settings {
   notify_telegram_chat_id?: string
   notify_webhook_url?: string
   notify_events?: string
+
+  // 代理配置
+  http_proxy?: string
 }
 
 export type SettingsUpdate = Partial<Settings>
