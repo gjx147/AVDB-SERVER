@@ -276,6 +276,29 @@ class MagnetScraper:
                     "--disable-features=IsolateOrigins,site-per-process",
                 ]
             }
+
+            # 配置代理（必须在 launch 时设置，Chromium 只在启动时读代理）
+            proxy_config = None
+            proxy_url = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy") or os.environ.get("https_proxy")
+            if proxy_url:
+                logger.info(f"检测到代理配置: {proxy_url}")
+                # 解析代理URL，提取 server/username/password
+                if proxy_url.startswith("http://") or proxy_url.startswith("https://"):
+                    from urllib.parse import urlparse
+                    parsed = urlparse(proxy_url)
+                    proxy_server = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
+                    proxy_config = {"server": proxy_server}
+                    if parsed.username:
+                        proxy_config["username"] = parsed.username
+                    if parsed.password:
+                        proxy_config["password"] = parsed.password
+                else:
+                    # 无 scheme 的裸地址 host:port
+                    proxy_config = {"server": f"http://{proxy_url}"}
+                logger.info(f"代理 server: {proxy_config['server']}")
+                # 双保险：launch 级 proxy + Chromium 原生 --proxy-server 参数
+                launch_options["proxy"] = proxy_config
+                launch_options["args"].append(f"--proxy-server={proxy_config['server']}")
             
             # Docker环境特殊配置
             if is_docker:
@@ -305,28 +328,6 @@ class MagnetScraper:
             ]
             selected_ua = random.choice(user_agents)
             logger.debug(f"设置User-Agent: {selected_ua}")
-            
-            # 配置代理（必须在 launch 时设置，context 级代理不生效）
-            proxy_config = None
-            proxy_url = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy") or os.environ.get("https_proxy")
-            if proxy_url:
-                logger.info(f"检测到代理配置: {proxy_url}")
-                # 解析代理URL
-                if proxy_url.startswith("http://") or proxy_url.startswith("https://"):
-                    from urllib.parse import urlparse
-                    parsed = urlparse(proxy_url)
-                    proxy_config = {
-                        "server": f"{parsed.scheme}://{parsed.netloc}",
-                    }
-                    if parsed.username:
-                        proxy_config["username"] = parsed.username
-                    if parsed.password:
-                        proxy_config["password"] = parsed.password
-                else:
-                    proxy_config = {"server": proxy_url}
-                logger.info(f"已为浏览器设置代理: {proxy_url}")
-                # 代理设置在 launch 级别（Chromium 只在启动时读代理）
-                launch_options["proxy"] = proxy_config
 
             context_options = {
                 "user_agent": selected_ua,

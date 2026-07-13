@@ -74,7 +74,7 @@ class RankingScraper:
             logger.info(f"爬取排行榜第 {page_num}/{max_pages} 页: {url}")
 
             try:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                self.page.goto(url, wait_until="domcontentloaded", timeout=90000)
                 self.scraper._handle_security_check()
                 time.sleep(random.uniform(2, 4))
 
@@ -350,7 +350,7 @@ class RankingScraper:
             logger.info(f"爬取演员排行第 {page_num} 页: {url}")
 
             try:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                self.page.goto(url, wait_until="domcontentloaded", timeout=90000)
                 self.scraper._handle_security_check()
                 time.sleep(random.uniform(2, 4))
 
