@@ -161,9 +161,9 @@ class MagnetScraper:
         success, best_magnet, magnets_json, video_code, title, poster_url, thumbnails_json, synopsis, actors, error_message = self.process_detail_page(url)
 
         if self.store is not None:
-            # 更新数据库中匹配该 URL 的任务
-            with self.store.conn:
-                self.store.conn.execute(
+            # 更新数据库中匹配该 URL 的任务（使用 store 的 _conn 上下文管理器）
+            with self.store._conn() as conn:
+                conn.execute(
                     """UPDATE tasks SET status = ?, best_magnet = ?, magnets_json = ?,
                        video_code = COALESCE(?, video_code), title = COALESCE(?, title),
                        poster_url = COALESCE(?, poster_url), thumbnail_urls = COALESCE(?, thumbnail_urls),
@@ -179,7 +179,7 @@ class MagnetScraper:
                         url,
                     ),
                 )
-                self.store.conn.commit()
+                conn.commit()
 
         if success:
             logger.info(f"单任务提取成功: {video_code or url}")
@@ -1431,15 +1431,12 @@ class MagnetScraper:
                             try:
                                 actor_names = [a.strip() for a in actors.split(",") if a.strip()]
                                 for aname in actor_names[:10]:  # 最多关联前10个演员
-                                    # 查找或创建演员记录
-                                    row = self.store.upsert_actor(
-                                        detail_url=f"/actors/search?q={aname}",
-                                        name=aname,
-                                    )
-                                    if row:
+                                    # 查找或创建演员记录（upsert_actor 返回 actor_id: int）
+                                    actor_id = self.store.upsert_actor(aname)
+                                    if actor_id:
                                         task_row = self.store.get_task_by_url(url)
                                         if task_row:
-                                            self.store.link_actor_movie(row["id"], task_row["id"])
+                                            self.store.link_actor_movie(actor_id, task_row["id"])
                             except Exception:
                                 pass
                         logger.info("已保存到数据库")

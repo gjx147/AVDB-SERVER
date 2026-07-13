@@ -104,6 +104,24 @@ CREATE TABLE IF NOT EXISTS actor_movies (
     FOREIGN KEY (actor_id) REFERENCES actors(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS rankings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rank_type TEXT NOT NULL,
+    rank_date TEXT NOT NULL,
+    rank_position INTEGER NOT NULL,
+    video_code TEXT,
+    title TEXT,
+    cover_url TEXT,
+    score REAL,
+    views INTEGER,
+    detail_url TEXT,
+    task_id INTEGER,
+    is_in_library INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rankings_type_date ON rankings(rank_type, rank_date);
+CREATE INDEX IF NOT EXISTS idx_rankings_video_code ON rankings(video_code);
 """
 
 
@@ -301,3 +319,63 @@ class SqliteTaskStore:
                 conn.execute(
                     "INSERT INTO actor_movies (actor_id, task_id) VALUES (?,?)", (actor_id, task_id))
                 conn.commit()
+
+    # ---------- 排行榜 ----------
+    def save_rankings(self, entries: List[dict], rank_type: str,
+                      rank_date: str = None) -> int:
+        """批量保存排行榜条目（按 video_code+rank_type+rank_date 去重）。
+
+        尝试匹配已有 task（按 video_code），命中则回填 task_id + is_in_library。
+        返回实际插入条数。
+        """
+        if not entries:
+            return 0
+        from datetime import date
+        rd = rank_date or date.today().isoformat()
+        inserted = 0
+        with self._conn() as conn:
+            for e in entries:
+                vc = (e.get("video_code") or "").strip()
+                if not vc:
+                    continue
+                # 去重：同 type+date+video_code 已存在则跳过
+                exists = conn.execute(
+                    "SELECT 1 FROM rankings WHERE rank_type=? AND rank_date=? AND video_code=? LIMIT 1",
+                    (rank_type, rd, vc)
+                ).fetchone()
+                if exists:
+                    continue
+                # 尝试匹配已有 task
+                task_row = conn.execute(
+                    "SELECT id FROM tasks WHERE video_code=? LIMIT 1", (vc,)
+                ).fetchone()
+                task_id = task_row[0] if task_row else None
+                in_lib = 1 if task_id else 0
+                conn.execute(
+                    """INSERT INTO rankings
+                       (rank_type, rank_date, rank_position, video_code, title,
+                        cover_url, score, views, detail_url, task_id, is_in_library)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (rank_type, rd, e.get("rank_position", 0), vc,
+                     e.get("title"), e.get("cover_url"), e.get("score"),
+                     e.get("views"), e.get("detail_url"), task_id, in_lib))
+                inserted += 1
+            conn.commit()
+        return inserted
+
+    def update_ranking_task_ids(self, matches: List[tuple]) -> int:
+        """根据 detail_url 批量回填 rankings.task_id。
+
+        matches: [(detail_url, task_id), ...]
+        """
+        if not matches:
+            return 0
+        updated = 0
+        with self._conn() as conn:
+            for detail_url, task_id in matches:
+                cur = conn.execute(
+                    "UPDATE rankings SET task_id=?, is_in_library=1 WHERE detail_url=?",
+                    (task_id, detail_url))
+                updated += cur.rowcount
+            conn.commit()
+        return updated

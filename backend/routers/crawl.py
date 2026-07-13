@@ -268,7 +268,7 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
     rank_type = body.get("rank_type", "hot")
     max_pages = str(body.get("max_pages", 5))
-    cmd = ["ranking", "--type", rank_type, "-p", max_pages]
+    cmd = ["ranking", "--rank-type", rank_type, "--max-pages", max_pages]
 
     proc = _start_scraper(cmd)
     _running_proc = proc
@@ -287,10 +287,7 @@ def crawl_actor(body: dict, _user: CurrentUser):
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     actor_url = body.get("actor_url", "")
-    list_source_id = body.get("list_source_id")
-    cmd = ["crawl-actor", "--url", actor_url]
-    if list_source_id:
-        cmd += ["--list-source-id", str(list_source_id)]
+    cmd = ["crawl-actor", "--actor-url", actor_url]
 
     proc = _start_scraper(cmd)
     _running_proc = proc
