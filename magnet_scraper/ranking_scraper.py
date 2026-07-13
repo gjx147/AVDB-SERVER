@@ -76,7 +76,8 @@ class RankingScraper:
             try:
                 self.page.goto(url, wait_until="domcontentloaded", timeout=90000)
                 self.scraper._handle_security_check()
-                time.sleep(random.uniform(2, 4))
+                # 等待页面 JS 渲染完成（排行榜条目是动态加载的）
+                time.sleep(random.uniform(3, 5))
 
                 # 提取排行榜条目
                 entries = self._extract_ranking_items(page_num)
@@ -112,21 +113,43 @@ class RankingScraper:
         """从当前页面提取排行榜条目。"""
         entries = []
 
-        # JavDB 排行榜的条目选择器（多种 fallback）
+        # JavDB 排行榜条目选择器（按优先级排序）
+        # 页面结构: <div class="movie-list"> <div class="item"> <a href="/v/xxx">...
         selectors = [
             ".movie-list .item",
+            ".movie-list > .item",
             ".grid-item",
             ".movie-item",
             ".box-item",
+            ".movie-list .box",
+            ".grid-space .item",
             "a[href^='/v/']",
         ]
 
+        # 先等 /v/ 链接出现（最多等 10 秒），确认 JS 已渲染
+        try:
+            self.page.wait_for_selector("a[href*='/v/']", timeout=10000)
+            logger.debug("页面已渲染，检测到 /v/ 链接")
+        except Exception:
+            logger.warning("等待 /v/ 链接超时，页面可能未渲染")
+            # 尝试打印页面 HTML 前 1000 字符用于调试
+            try:
+                html_snippet = self.page.content()[:1000]
+                logger.debug(f"页面 HTML 前1000字符: {html_snippet}")
+            except Exception:
+                pass
+
         items = []
+        used_selector = None
         for sel in selectors:
-            items = self.page.locator(sel).all()
-            if items:
-                logger.debug(f"选择器 {sel} 匹配到 {len(items)} 个元素")
-                break
+            try:
+                items = self.page.locator(sel).all()
+                if items:
+                    used_selector = sel
+                    logger.info(f"选择器 '{sel}' 匹配到 {len(items)} 个元素")
+                    break
+            except Exception:
+                continue
 
         if not items:
             logger.warning("未找到任何排行榜条目元素")
@@ -150,6 +173,7 @@ class RankingScraper:
                 seen.add(vc)
                 deduped.append(e)
 
+        logger.info(f"提取到 {len(deduped)} 个有效条目（从 {len(entries)} 个中去重）")
         return deduped
 
     def _parse_ranking_item(self, item) -> dict | None:
@@ -158,9 +182,22 @@ class RankingScraper:
 
         # 提取链接和番号
         try:
-            link = item if item.evaluate("el => el.tagName") == "A" else item.locator("a[href^='/v/']").first
-            if not link or link.count() == 0:
-                link = item.locator("a").first
+            # 如果 item 本身就是 <a> 标签
+            tag_name = ""
+            try:
+                tag_name = item.evaluate("el => el.tagName")
+            except Exception:
+                pass
+
+            link = None
+            if tag_name == "A":
+                link = item
+            else:
+                # 在 item 内查找详情页链接
+                link = item.locator("a[href*='/v/']").first
+                if not link or link.count() == 0:
+                    link = item.locator("a").first
+
             if link and link.count() > 0:
                 href = link.get_attribute("href") or ""
                 if href:
