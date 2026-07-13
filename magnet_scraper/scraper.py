@@ -1580,7 +1580,7 @@ def main():
 
     # 排行榜爬取子命令
     ranking_parser = subparsers.add_parser("ranking", help="爬取排行榜")
-    ranking_parser.add_argument("--rank-type", type=str, default="hot", help="排行类型: hot/weekly/monthly/new/rating/daily")
+    ranking_parser.add_argument("--rank-type", type=str, default="hot", help="排行类型: hot/weekly/monthly/daily")
     ranking_parser.add_argument("--max-pages", type=int, default=5, help="最大翻页数")
     ranking_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
     ranking_parser.add_argument("--add-tasks", action="store_true", help="同时将排行影片加入任务队列")

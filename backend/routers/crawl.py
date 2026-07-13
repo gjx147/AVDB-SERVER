@@ -267,6 +267,9 @@ def crawl_ranking(body: dict, _user: CurrentUser):
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     rank_type = body.get("rank_type", "hot")
+    valid_types = {"hot", "weekly", "monthly", "daily"}
+    if rank_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"无效 rank_type，可选: {valid_types}")
     max_pages = str(body.get("max_pages", 5))
     cmd = ["ranking", "--rank-type", rank_type, "--max-pages", max_pages]
 
@@ -300,12 +303,20 @@ def crawl_actor(body: dict, _user: CurrentUser):
 
 @router.post("/actor-search")
 def actor_search(body: dict, _user: CurrentUser):
-    """搜索演员（兼容前端 POST /api/crawl/actor-search）。"""
+    """搜索演员（通过 scraper 子进程的 Playwright 执行）。
+
+    后端 browser_pool 与 scraper 子进程共用浏览器有冲突风险，
+    因此演员搜索需通过 crawl-actor 子命令完成。
+    这里返回提示信息，前端可引导用户直接输入演员 URL。
+    """
     name = body.get("actor_name", "") or body.get("q", "")
     if not name:
         raise HTTPException(status_code=400, detail="需要演员名")
-    # 直接返回空（实际搜索需要 Playwright，占位）
-    return {"ok": True, "results": [], "message": f"搜索 {name}（需要浏览器池支持）"}
+    return {
+        "ok": True,
+        "results": [],
+        "message": f"请在演员库页面直接输入演员详情页 URL，或通过 crawl-actor --actor-name '{name}' 子进程搜索",
+    }
 
 
 @router.get("/logs")
