@@ -60,8 +60,7 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     """启动 scraper 子进程。
 
     架构修复：
-    - stdout 用 DEVNULL（不读 pipe，避免死锁；进度走 crawl_status.json）
-    - stderr 重定向到日志文件（调试用，崩溃原因可见）
+    - stdout+stderr 重定向到日志文件（调试用，不 PIPE 避免死锁）
     - start_new_session=True（Unix 进程组，支持整组 kill 杀 Chromium 子树）
     - Windows 用 CREATE_NEW_PROCESS_GROUP
     """
@@ -69,15 +68,15 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     env = dict(os.environ)
     cmd = [_python_exe(), str(_scraper_path())] + cmd_args
 
-    # stderr 写入日志文件（覆盖模式，每次爬取只保留最新一次的日志）
+    # stdout+stderr 写入日志文件（覆盖模式，每次爬取只保留最新一次的日志）
     log_path = Path(settings.DATA_DIR) / "scraper_stderr.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = open(log_path, "w", encoding="utf-8")
 
     popen_kwargs: dict = {
         "env": env,
-        "stdout": subprocess.DEVNULL,  # 关键：不 PIPE，避免死锁
-        "stderr": log_file,            # stderr 写文件，崩溃原因可见
+        "stdout": log_file,  # stdout 写文件（scraper 日志全部可见）
+        "stderr": subprocess.STDOUT,  # stderr 合并到 stdout
     }
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
