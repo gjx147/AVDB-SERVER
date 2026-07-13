@@ -118,7 +118,7 @@ export interface ActorMovie {
 }
 
 // ── Rankings ──
-export type RankType = 'hot' | 'weekly' | 'monthly' | 'daily'
+export type RankType = 'daily' | 'weekly' | 'monthly' | 'actor'
 
 export interface Ranking {
   id: number

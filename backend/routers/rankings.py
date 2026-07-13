@@ -16,7 +16,7 @@ from schemas import BatchAddTasksRequest, RankingOut
 
 router = APIRouter(prefix="/api/rankings", tags=["rankings"])
 
-VALID_TYPES = {"hot", "weekly", "monthly", "daily"}
+VALID_TYPES = {"daily", "weekly", "monthly", "actor"}
 
 
 # ── 静态路由必须在动态路由之前 ──

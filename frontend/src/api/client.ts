@@ -158,7 +158,7 @@ export const api = {
 
   // ════════ Rankings ════════
   rankings: {
-    list: (rank_type: RankType = 'hot', rank_date?: string, skip = 0, limit = 100) =>
+    list: (rank_type: RankType = 'daily', rank_date?: string, skip = 0, limit = 100) =>
       http.get<Ranking[]>('/api/rankings', { params: { rank_type, rank_date, skip, limit } }).then((r) => r.data),
     latest: () =>
       http.get<Record<string, string>>('/api/rankings/latest').then((r) => r.data),
@@ -286,7 +286,7 @@ export const api = {
 
   // ════════ Rankings（Phase 2）════════
   rankingsNew: {
-    list: (type: 'hot' | 'weekly' | 'monthly' | 'daily', date?: string) =>
+    list: (type: 'daily' | 'weekly' | 'monthly' | 'actor', date?: string) =>
       http.get<Ranking[]>(`/api/rankings/${type}`, { params: { date } }).then((r) => r.data),
     dates: () => http.get<Record<string, string[]>>('/api/rankings/types/dates').then((r) => r.data),
     batchAdd: (rankingIds: number[]) =>

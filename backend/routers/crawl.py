@@ -272,7 +272,7 @@ def crawl_ranking(body: dict, _user: CurrentUser):
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     rank_type = body.get("rank_type", "hot")
-    valid_types = {"hot", "weekly", "monthly", "daily"}
+    valid_types = {"daily", "weekly", "monthly", "actor"}
     if rank_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"无效 rank_type，可选: {valid_types}")
     max_pages = str(body.get("max_pages", 5))

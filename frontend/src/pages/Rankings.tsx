@@ -9,10 +9,10 @@ import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
 const TABS: { key: RankType; label: string }[] = [
-  { key: 'hot', label: '热门' },
+  { key: 'daily', label: '日榜' },
   { key: 'weekly', label: '周榜' },
   { key: 'monthly', label: '月榜' },
-  { key: 'daily', label: '日榜' },
+  { key: 'actor', label: '演员月榜' },
 ]
 
 /** 扩展 Task，携带排行榜特有展示字段 */
@@ -64,7 +64,7 @@ const toTask = (r: Ranking): RankingTask => ({
 
 export function Rankings() {
   const nav = useNavigate()
-  const [tab, setTab] = useState<RankType>('hot')
+  const [tab, setTab] = useState<RankType>('daily')
   const [list, setList] = useState<Ranking[] | null>(null)
   const [latest, setLatest] = useState<Record<string, string[]>>({})
   const [view, setView] = useState<'grid' | 'row'>('grid')
@@ -116,7 +116,7 @@ export function Rankings() {
       setList([])
     }
   }, [toastErr])
-  useEffect(() => { load('hot') }, [load])
+  useEffect(() => { load('daily') }, [load])
 
   const crawl = async () => {
     try { await api.rankings.crawl(tab); toastOk(`已启动 ${tab} 排行榜爬取`) } catch (e) { toastErr(String((e as Error).message)) }

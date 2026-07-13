@@ -21,16 +21,15 @@ import config
 logger = logging.getLogger(__name__)
 
 # JavDB 排行榜 URL 映射（rank_type → 路径参数）
-# 用户提供的正确地址：
+# 正确地址（用户确认）：
 #   日榜: /rankings/movies?p=daily&t=censored
 #   周榜: /rankings/movies?p=weekly&t=censored
 #   月榜: /rankings/movies?p=monthly&t=censored
-#   演员月榜: /rankings/actors?t=censored
+#   演员月榜: /rankings/actors?t=censored (由 crawl_actor_ranking 处理)
 RANKING_URLS = {
-    "hot": "/rankings/movies?p=daily&t=censored",
+    "daily": "/rankings/movies?p=daily&t=censored",
     "weekly": "/rankings/movies?p=weekly&t=censored",
     "monthly": "/rankings/movies?p=monthly&t=censored",
-    "daily": "/rankings/movies?p=daily&t=censored",
 }
 
 
