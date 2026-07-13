@@ -18,10 +18,15 @@ from urllib.request import Request, urlopen
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
-from playwright_stealth import Stealth
+
+# playwright_stealth 1.0.6 API 兼容（无 Stealth 类，用 stealth_sync）
+try:
+    from playwright_stealth import stealth_sync as _stealth_sync
+except ImportError:
+    _stealth_sync = None
 
 import config
-from store import SqliteTaskStore, TaskStore, get_db_path
+from store import SqliteTaskStore, get_db_path
 
 # 配置日志
 def _setup_logging():
@@ -94,7 +99,7 @@ class MagnetScraper:
         self,
         max_pages: int = None,
         visible: bool = False,
-        store: Optional[TaskStore] = None,
+        store: Optional[SqliteTaskStore] = None,
         list_source_id: Optional[int] = None,
         list_path: Optional[str] = None,
         list_params: Optional[str] = None,
@@ -331,14 +336,16 @@ class MagnetScraper:
                 context_options["proxy"] = proxy_config
             
             self.context = self.browser.new_context(**context_options)
-            
-            # 应用 playwright-stealth 到 context（这样所有从该 context 创建的页面都会自动继承 stealth 保护）
-            Stealth().apply_stealth_sync(self.context)
-            logger.info("已应用 playwright-stealth 反检测到 context")
-            
-            # 创建页面（会自动继承 context 的 stealth 保护）
+
+            # 创建页面
             self.page = self.context.new_page()
-            logger.debug("页面已创建，自动继承 stealth 保护")
+
+            # 应用 playwright-stealth 到 page（1.0.6 API: stealth_sync(page)）
+            if _stealth_sync:
+                _stealth_sync(self.page)
+                logger.info("已应用 playwright-stealth 反检测到 page")
+            else:
+                logger.warning("playwright-stealth 未安装，跳过反检测")
             
             # 验证浏览器是否正常工作
             try:
