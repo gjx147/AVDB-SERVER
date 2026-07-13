@@ -34,9 +34,9 @@ services:
       # ── 爬虫 ──
       JAVDB_URL: "https://javdb.com"
 
-      # ── 代理（如需翻墙访问 JavDB）──
-      # HTTP_PROXY: "http://192.168.31.220:20171"
-      # HTTPS_PROXY: "http://192.168.31.220:20171"
+      # ── 代理（V2Ray HTTP 代理，访问 JavDB 必须配置）──
+      HTTP_PROXY: "http://192.168.31.220:20171"
+      HTTPS_PROXY: "http://192.168.31.220:20171"
 
       # ── 定时任务 ──
       # 留 false 则不自动爬取，手动在前端触发
