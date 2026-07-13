@@ -32,7 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 装 Python 依赖（backend/requirements.txt 已含 magnet_scraper 所需的 playwright）
+# 装全部 Python 依赖
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 ENV PIP_NO_CACHE_DIR=1
 COPY backend/requirements.txt ./
