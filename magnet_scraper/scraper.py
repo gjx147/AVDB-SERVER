@@ -1719,12 +1719,9 @@ def main():
                             max_pages=getattr(args, "max_pages", 5),
                         )
                         if entries:
+                            # save_and_add_tasks 内部会逐条爬详情页再入库
                             saved = r.save_and_add_tasks(entries, rank_type)
-                            logger.info(f"排行榜保存完成: {saved}")
-                            # 爬取详情页获取完整元数据
-                            logger.info("开始爬取排行榜详情页...")
-                            detail_result = r.crawl_ranking_details(entries)
-                            logger.info(f"排行榜详情爬取完成: {detail_result}")
+                            logger.info(f"排行榜爬取入库完成: {saved}")
                 elif args.command == "crawl-actor":
                     from actor_scraper import ActorScraper
                     a = ActorScraper(scraper)

@@ -258,45 +258,27 @@ class RankingScraper:
         return entry
 
     def save_and_add_tasks(self, entries: list, rank_type: str) -> dict:
-        """保存排行榜条目到数据库，并为每条创建 pending task。
+        """先爬详情页，再入库。
 
-        返回 {rankings_saved, tasks_added}
+        对每个排行榜条目:
+        1. 爬详情页获取完整元数据（标题/磁力/演员/标签等）
+        2. 爬成功的: mark_visited 入 tasks 表 + save_rankings 入 rankings 表
+        3. 爬失败的: 仅 save_rankings 入 rankings 表（status=pending）
+
+        返回 {rankings_saved, tasks_extracted, tasks_failed}
         """
         if not entries:
-            return {"rankings_saved": 0, "tasks_added": 0}
-
-        # 保存到 rankings 表
-        saved = self.store.save_rankings(entries, rank_type)
-        logger.info(f"排行榜保存: {saved} 条入库")
-
-        # 为每条创建 pending task（列表源 RANKING）
-        src = self.store.ensure_list_source("RANKING", list_path="/rankings", max_pages=100)
-        tasks_added = 0
-        for e in entries:
-            detail_url = e.get("detail_url")
-            if detail_url and not self.store.task_exists_with_url(detail_url):
-                self.store.add_pending_urls(src["id"], [detail_url])
-                tasks_added += 1
-
-        logger.info(f"排行榜入库: rankings={saved}, tasks_added={tasks_added}")
-        return {"rankings_saved": saved, "tasks_added": tasks_added}
-
-    def crawl_ranking_details(self, entries: list) -> dict:
-        """对排行榜条目爬取详情页，提取完整元数据和磁力。
-
-        回填 rankings.task_id。
-        返回 {success, failed}
-        """
-        if not entries:
-            return {"success": 0, "failed": 0}
+            return {"rankings_saved": 0, "tasks_extracted": 0, "tasks_failed": 0}
 
         self._ensure_browser()
         total = len(entries)
-        success = 0
-        failed = 0
-        matches = []  # (detail_url, task_id) 用于回填
+        success_entries = []  # 爬详情成功的条目（带完整数据）
+        matches = []  # (detail_url, task_id) 用于回填 rankings.task_id
 
-        logger.info(f"开始爬取排行榜详情页: {total} 条")
+        # 创建 RANKING 列表源（供 task 使用）
+        src = self.store.ensure_list_source("RANKING", list_path="/rankings", max_pages=100)
+
+        logger.info(f"开始逐条爬取排行榜详情页: {total} 条")
 
         for i, e in enumerate(entries):
             detail_url = e.get("detail_url")
@@ -306,6 +288,7 @@ class RankingScraper:
 
             self.scraper._write_crawl_status(
                 phase="ranking_detail", crawl_type="ranking_detail",
+                rank_type=rank_type,
                 current_index=i + 1, total=total, current_video_code=vc,
             )
 
@@ -328,6 +311,10 @@ class RankingScraper:
                 err_msg = result[9]
 
                 if ok and best_magnet:
+                    # 爬成功：先创建 task（add_pending）再 mark_visited 写完整数据
+                    if not self.store.task_exists_with_url(detail_url):
+                        self.store.add_pending_urls(src["id"], [detail_url])
+
                     extra = getattr(self.scraper, "_last_extra_meta", {}) or {}
                     self.store.mark_visited(
                         detail_url,
@@ -350,25 +337,39 @@ class RankingScraper:
                     task_row = self.store.get_task_by_url(detail_url)
                     if task_row:
                         matches.append((detail_url, task_row["id"]))
-                    success += 1
+                        e["task_id"] = task_row["id"]
+                    success_entries.append(e)
                     logger.info(f"✓ {vc}: 详情提取成功")
                 else:
-                    self.store.mark_failed(detail_url, err_msg or "详情页提取失败")
-                    failed += 1
+                    # 爬失败：创建 pending task，等后续重试
+                    if not self.store.task_exists_with_url(detail_url):
+                        self.store.add_pending_urls(src["id"], [detail_url])
                     logger.warning(f"✗ {vc}: {err_msg}")
 
             except Exception as ex:
-                failed += 1
                 logger.error(f"✗ {vc}: 详情页异常 - {ex}")
+                # 异常也创建 pending task
                 try:
-                    self.store.mark_failed(detail_url, str(ex)[:500])
+                    if not self.store.task_exists_with_url(detail_url):
+                        self.store.add_pending_urls(src["id"], [detail_url])
                 except Exception:
                     pass
+
+        # 全部详情爬完后，一次性入 rankings 表
+        saved = self.store.save_rankings(entries, rank_type)
+        logger.info(f"排行榜 rankings 入库: {saved} 条")
 
         # 回填 rankings.task_id
         if matches:
             updated = self.store.update_ranking_task_ids(matches)
             logger.info(f"回填 rankings.task_id: {updated} 条")
+
+        result_summary = {
+            "rankings_saved": saved,
+            "tasks_extracted": len(success_entries),
+            "tasks_failed": total - len(success_entries),
+        }
+        logger.info(f"排行榜完整入库完成: {result_summary}")
 
         logger.info(f"排行榜详情爬取完成: 成功 {success}, 失败 {failed}")
         return {"success": success, "failed": failed}
