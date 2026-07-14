@@ -354,8 +354,8 @@ class SqliteTaskStore:
                 conn.execute(
                     """INSERT INTO rankings
                        (rank_type, rank_date, rank_position, video_code, title,
-                        cover_url, score, views, detail_url, task_id, is_in_library)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        cover_url, score, views, detail_url, task_id, is_in_library, created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
                     (rank_type, rd, e.get("rank_position", 0), vc,
                      e.get("title"), e.get("cover_url"), e.get("score"),
                      e.get("views"), e.get("detail_url"), task_id, in_lib))
