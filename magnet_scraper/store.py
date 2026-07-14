@@ -163,7 +163,7 @@ class SqliteTaskStore:
             if row:
                 return dict(row)
             conn.execute(
-                "INSERT INTO list_sources (list_code, list_path, list_params, max_pages) VALUES (?,?,?,?)",
+                "INSERT INTO list_sources (list_code, list_path, list_params, max_pages, last_scanned_page) VALUES (?,?,?,?,0)",
                 (code, path, list_params, max_pages))
             conn.commit()
             return dict(conn.execute("SELECT * FROM list_sources WHERE list_code=?", (code,)).fetchone())
