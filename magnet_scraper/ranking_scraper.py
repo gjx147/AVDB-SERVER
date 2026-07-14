@@ -202,21 +202,23 @@ class RankingScraper:
                 href = link.get_attribute("href") or ""
                 if href:
                     entry["detail_url"] = urljoin(self.BASE_URL, href)
-                    # 番号从 URL 提取: /v/ABC-123
+                    # 番号从 URL 提取: /v/wK4XRB → wK4XRB（保留原始大小写）
                     parts = href.rstrip("/").split("/")
                     if len(parts) > 0:
-                        entry["video_code"] = parts[-1].upper()
+                        entry["video_code"] = parts[-1]
         except Exception:
             return None
 
         if not entry.get("video_code"):
             return None
 
-        # 提取标题
+        # 提取标题：JavDB 排行榜的 .video-title 只含番号，不要用 inner_text
+        # 抓整个 item 会把评分/日期/下载数混进来。标题留空，等详情页爬取补全。
+        # 仅提取 video-title 里的番号显示文本
         try:
-            title_el = item.locator(".title, .video-title, [title]").first
+            title_el = item.locator(".video-title").first
             if title_el.count() > 0:
-                entry["title"] = (title_el.inner_text() or title_el.get_attribute("title") or "").strip()
+                entry["title"] = (title_el.inner_text() or "").strip()
         except Exception:
             pass
 
