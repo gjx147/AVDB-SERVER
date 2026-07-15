@@ -792,10 +792,11 @@ class MagnetScraper:
 
             # 磁力去重
             if self.store and hasattr(self.store, 'is_magnet_duplicate'):
+                from store import _extract_magnet_hash
                 seen_hashes = set()
                 deduped = []
                 for m in magnets_info:
-                    h = self.store._extract_magnet_hash(m["magnet"])
+                    h = _extract_magnet_hash(m["magnet"])
                     if h and h in seen_hashes:
                         logger.debug(f"去重: 跳过重复磁力 {h[:16]}...")
                         continue
