@@ -163,7 +163,7 @@ class SqliteTaskStore:
             if row:
                 return dict(row)
             conn.execute(
-                "INSERT INTO list_sources (list_code, list_path, list_params, max_pages, last_scanned_page) VALUES (?,?,?,?,0)",
+                "INSERT INTO list_sources (list_code, list_path, list_params, max_pages, last_scanned_page, created_at, last_scanned_at) VALUES (?,?,?,?,0,datetime('now'),datetime('now'))",
                 (code, path, list_params, max_pages))
             conn.commit()
             return dict(conn.execute("SELECT * FROM list_sources WHERE list_code=?", (code,)).fetchone())
@@ -206,7 +206,7 @@ class SqliteTaskStore:
             for u in urls:
                 try:
                     conn.execute(
-                        "INSERT INTO tasks (list_source_id, url, status) VALUES (?,?, 'pending')",
+                        "INSERT INTO tasks (list_source_id, url, status, created_at, updated_at) VALUES (?,?, 'pending',datetime('now'),datetime('now'))",
                         (list_source_id, u.strip()))
                     added += 1
                 except sqlite3.IntegrityError:
@@ -302,11 +302,11 @@ class SqliteTaskStore:
                                  (*fields.values(), actor_id))
                     conn.commit()
                 return actor_id
-            cols = ["name"] + list(fields.keys())
-            vals = [name] + list(fields.values())
-            placeholders = ",".join("?" * len(cols))
+            cols = ["name"] + list(fields.keys()) + ["created_at", "updated_at"]
+            vals = [name] + list(fields.values()) + ["datetime('now')", "datetime('now')"]
+            placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
             cur = conn.execute(
-                f"INSERT INTO actors ({','.join(cols)}) VALUES ({placeholders})", vals)
+                f"INSERT INTO actors ({','.join(cols)}) VALUES ({placeholders})", [name] + list(fields.values()))
             conn.commit()
             return cur.lastrowid
 
@@ -317,7 +317,7 @@ class SqliteTaskStore:
                 "SELECT 1 FROM actor_movies WHERE actor_id=? AND task_id=?", (actor_id, task_id)).fetchone()
             if not exists:
                 conn.execute(
-                    "INSERT INTO actor_movies (actor_id, task_id) VALUES (?,?)", (actor_id, task_id))
+                    "INSERT INTO actor_movies (actor_id, task_id, created_at) VALUES (?,?,datetime('now'))", (actor_id, task_id))
                 conn.commit()
 
     # ---------- 排行榜 ----------
