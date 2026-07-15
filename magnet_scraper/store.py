@@ -206,7 +206,7 @@ class SqliteTaskStore:
             for u in urls:
                 try:
                     conn.execute(
-                        "INSERT INTO tasks (list_source_id, url, status, created_at, updated_at) VALUES (?,?, 'pending',datetime('now'),datetime('now'))",
+                        "INSERT INTO tasks (list_source_id, url, status, retry_count, is_favorite, created_at, updated_at) VALUES (?,?, 'pending',0,0,datetime('now'),datetime('now'))",
                         (list_source_id, u.strip()))
                     added += 1
                 except sqlite3.IntegrityError:
@@ -302,11 +302,11 @@ class SqliteTaskStore:
                                  (*fields.values(), actor_id))
                     conn.commit()
                 return actor_id
-            cols = ["name"] + list(fields.keys()) + ["created_at", "updated_at"]
-            vals = [name] + list(fields.values()) + ["datetime('now')", "datetime('now')"]
+            cols = ["name", "is_followed", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
+            vals = [name, 0, 0] + list(fields.values())
             placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
             cur = conn.execute(
-                f"INSERT INTO actors ({','.join(cols)}) VALUES ({placeholders})", [name] + list(fields.values()))
+                f"INSERT INTO actors ({','.join(cols)}) VALUES ({placeholders})", vals)
             conn.commit()
             return cur.lastrowid
 
