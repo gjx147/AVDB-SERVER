@@ -811,12 +811,26 @@ class MagnetScraper:
                     logger.info(f"去重后剩余 {len(magnets_info)} 个磁力链接")
 
             logger.debug("按优先级排序磁力链接...")
+            # 从 DB 读 preferred_suffixes（覆盖 config 硬编码值）
+            suffixes = config.PREFERRED_SUFFIXES
+            if self.store:
+                try:
+                    with self.store._conn() as conn:
+                        row = conn.execute(
+                            "SELECT value FROM settings WHERE key='preferred_suffixes' LIMIT 1"
+                        ).fetchone()
+                        if row and row[0]:
+                            db_suffixes = [s.strip() for s in row[0].split(",") if s.strip()]
+                            if db_suffixes:
+                                suffixes = db_suffixes
+                except Exception:
+                    pass
             def get_priority(m):
                 n = (m["name"] or "").upper()
-                for i, suffix in enumerate(config.PREFERRED_SUFFIXES):
+                for i, suffix in enumerate(suffixes):
                     if suffix.upper() in n:
                         return i
-                return len(config.PREFERRED_SUFFIXES)
+                return len(suffixes)
             magnets_info.sort(key=get_priority)
 
             best_magnet = magnets_info[0]["magnet"]

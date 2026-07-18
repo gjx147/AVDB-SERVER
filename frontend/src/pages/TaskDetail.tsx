@@ -55,9 +55,17 @@ export function TaskDetail() {
   }
   useEffect(load, [id])
 
-  // 磁力优先级：兼容字段(magnet/link) + 去重 + best_magnet 优先 + 按后缀优先级排序，取前 3
-  // 后缀优先级与后端 preferred_suffixes (-UC,-C,-U) 一致：命中最靠前缀的优先
-  const PREFERRED_SUFFIXES = ['-uc', '-c', '-u']
+  // 磁力优先级后缀：从 settings 读取，fallback 到默认 -UC,-C,-U
+  const [preferredSuffixes, setPreferredSuffixes] = useState<string[]>(['-uc', '-c', '-u'])
+  useEffect(() => {
+    api.settings.get().then((s) => {
+      if (s.preferred_suffixes) {
+        const arr = s.preferred_suffixes.split(',').map((x: string) => x.trim().toLowerCase()).filter(Boolean)
+        if (arr.length > 0) setPreferredSuffixes(arr)
+      }
+    }).catch(() => {})
+  }, [])
+  const PREFERRED_SUFFIXES = preferredSuffixes
   const magnetPriority = (link: string): number => {
     const low = link.toLowerCase()
     for (let i = 0; i < PREFERRED_SUFFIXES.length; i++) {

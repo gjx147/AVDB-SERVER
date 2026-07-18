@@ -10,22 +10,26 @@ export function ListSources() {
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [code, setCode] = useState('')
+  const [maxPages, setMaxPages] = useState<number>(0)  // 0 = 用列表源自己的 max_pages
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const load = () => { api.listSources.list().then((d) => { setSources(d); setError(null) }).catch((e) => { setError(String((e as Error).message)); setSources([]) }) }
+  const load = () => {
+    api.listSources.list().then((d) => { setSources(d); setError(null) }).catch((e) => { setError(String((e as Error).message)); setSources([]) })
+    api.settings.get().then((s) => { setMaxPages(s.max_pages_default || 0) }).catch(() => {})
+  }
   useEffect(load, [])
 
   const create = async () => {
     if (!code.trim()) return
     try {
-      await api.listSources.create({ list_code: code.trim().toUpperCase() })
+      await api.listSources.create({ list_code: code.trim().toUpperCase(), max_pages: maxPages || undefined })
       toastOk('已创建列表源')
       setCode(''); setAdding(false); load()
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const scan = async (s: ListSourceWithStats) => {
-    try { await api.crawl.scan({ list_source_id: s.id }); toastOk(`已开始扫描 ${s.list_code}`) } catch (e) { toastErr(String((e as Error).message)) }
+    try { await api.crawl.scan({ list_source_id: s.id, pages: maxPages || undefined }); toastOk(`已开始扫描 ${s.list_code}`) } catch (e) { toastErr(String((e as Error).message)) }
   }
   const extract = async (s: ListSourceWithStats) => {
     try { await api.crawl.extract({ list_source_id: s.id }); toastOk(`已开始提取 ${s.list_code}`) } catch (e) { toastErr(String((e as Error).message)) }

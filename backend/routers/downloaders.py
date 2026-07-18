@@ -25,8 +25,25 @@ router = APIRouter(prefix="/api/downloaders", tags=["downloaders"])
 
 
 def _get_setting(db, key: str) -> str:
+    """读 settings 表，支持 key 别名（前端写 qbittorrent_* 后端读 qb_*）。"""
+    # key 别名映射：后端短名 → 前端长名
+    aliases = {
+        "qb_url": "qbittorrent_url",
+        "qb_username": "qbittorrent_username",
+        "qb_password": "qbittorrent_password",
+        "aria2_url": "aria2_rpc_url",
+        "aria2_secret": "aria2_token",
+    }
     row = db.get(Setting, key)
-    return row.value if row and row.value else ""
+    if row and row.value:
+        return row.value
+    # 尝试别名
+    alias = aliases.get(key)
+    if alias:
+        row = db.get(Setting, alias)
+        if row and row.value:
+            return row.value
+    return ""
 
 
 def _extract_hash(magnet: str) -> str | None:
@@ -54,7 +71,8 @@ def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
     )
     try:
         qbc.auth_log_in()
-        result = qbc.torrents_add(urls=magnet)
+        save_path = config.get("qbittorrent_save_path") or None
+        result = qbc.torrents_add(urls=magnet, save_path=save_path)
         return {"ok": result == "Ok.", "message": result}
     except Exception as e:
         return {"ok": False, "message": str(e)}
@@ -100,17 +118,21 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     """推送磁力到下载器并记录到 downloads 表。"""
     # 读配置
     config = {}
-    for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
+    for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+              "aria2_url", "aria2_secret",
               "transmission_url", "transmission_username", "transmission_password"]:
         config[k] = _get_setting(db, k)
 
+    # 下载器：空时读 DB 的 default_downloader
+    downloader = req.downloader or _get_setting(db, "default_downloader") or "qbittorrent"
+
     # 推送
-    if req.downloader == "qbittorrent":
+    if downloader == "qbittorrent":
         result = await _push_qbittorrent(req.magnet, config)
-    elif req.downloader == "aria2":
+    elif downloader == "aria2":
         result = await _push_aria2(req.magnet, config)
     else:
-        return {"ok": False, "message": f"暂不支持的下载器: {req.downloader}"}
+        return {"ok": False, "message": f"暂不支持的下载器: {downloader}"}
 
     # 记录到 downloads 表
     task = db.get(Task, req.task_id) if req.task_id else None

@@ -174,7 +174,7 @@ export const api = {
 
   // ════════ Crawl ════════
   crawl: {
-    scan: (body: { list_code?: string; list_source_id?: number; update?: boolean }, background = true) =>
+    scan: (body: { list_code?: string; list_source_id?: number; update?: boolean; pages?: number }, background = true) =>
       http.post<ApiOk>('/api/crawl/scan', body, { params: { background } }).then((r) => r.data),
     extract: (body: { list_code?: string; list_source_id?: number; limit?: number }, background = true) =>
       http.post<ApiOk>('/api/crawl/extract', body, { params: { background } }).then((r) => r.data),

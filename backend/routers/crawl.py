@@ -58,12 +58,17 @@ def _crawl_status_file() -> Path:
 
 def _get_proxy_from_db() -> str:
     """从 DB settings 表读取运行时配置的代理地址。"""
+    return _get_setting_from_db("http_proxy")
+
+
+def _get_setting_from_db(key: str) -> str:
+    """从 DB settings 表读取运行时配置。"""
     try:
         from database import SessionLocal
         from models import Setting
         db = SessionLocal()
         try:
-            row = db.get(Setting, "http_proxy")
+            row = db.get(Setting, key)
             return row.value.strip() if row and row.value else ""
         finally:
             db.close()
@@ -90,6 +95,11 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
         env["HTTPS_PROXY"] = proxy
         env["http_proxy"] = proxy
         env["https_proxy"] = proxy
+
+    # 从 DB 读 javdb_url，覆盖 env（让 scraper 访问自定义镜像站）
+    javdb_url = _get_setting_from_db("javdb_url")
+    if javdb_url:
+        env["JAVDB_URL"] = javdb_url
 
     cmd = [_python_exe(), str(_scraper_path())] + cmd_args
 
