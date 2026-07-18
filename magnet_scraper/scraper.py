@@ -918,12 +918,12 @@ class MagnetScraper:
         return None
 
     def _extract_thumbnails(self) -> list:
-        """提取预览缩略图 URL 列表。
+        """提取预览缩略图 URL 列表（纯竖版预览图，不含封面）。
 
         JavDB 详情页结构：
-        - #gallery-1 ~ #gallery-N: 各 gallery 图片（竖版预览图）
-        - .preview-images / .sample-box: 样品图区域
-        - cover 图（c0.jdbstatic.com/covers/）也作为第一张
+        - /covers/ 路径: 横版封面大图（由 _extract_poster 处理，不属于缩略图）
+        - /samples/ 路径: 竖版预览图（真正的缩略图画廊）
+        - #gallery-1 ~ #gallery-N: gallery 锚点，其中 gallery-3 是封面
         """
         thumbnails = []
         seen = set()
@@ -931,15 +931,23 @@ class MagnetScraper:
         def _add_img(img):
             try:
                 src = img.get_attribute("src") or img.get_attribute("data-src") or img.get_attribute("data-original")
-                if src and src.startswith("http") and src not in seen:
-                    seen.add(src)
-                    thumbnails.append(src)
+                if not src or not src.startswith("http"):
+                    return
+                if src in seen:
+                    return
+                # 排除封面图（/covers/ 路径），只保留 /samples/ 预览图
+                if "/covers/" in src:
+                    return
+                seen.add(src)
+                thumbnails.append(src)
             except Exception:
                 pass
 
-        # 方法1: gallery 图片（JavDB 特有结构）
+        # 方法1: gallery 图片（排除 #gallery-3 封面）
         try:
             for i in range(1, 30):
+                if i == 3:
+                    continue  # gallery-3 是封面，不属于缩略图
                 g = self.page.locator(f"#gallery-{i} img").first
                 if g.count() > 0:
                     _add_img(g)
@@ -955,15 +963,16 @@ class MagnetScraper:
                 _add_img(img)
         except Exception:
             pass
+
+        # 方法3: fallback — 按 /samples/ URL 模式匹配
         if not thumbnails:
             try:
-                imgs = self.page.locator("img[src*='pics.dmm'], img[src*='jdbstatic'], img[src*='sample'], img[src*='thumb']").all()
+                imgs = self.page.locator("img[src*='/samples/']").all()
                 for img in imgs:
-                    src = img.get_attribute("src") or img.get_attribute("data-src")
-                    if src and src.startswith("http") and src not in thumbnails:
-                        thumbnails.append(src)
+                    _add_img(img)
             except Exception:
                 pass
+
         return thumbnails
 
     def _extract_synopsis(self) -> Optional[str]:

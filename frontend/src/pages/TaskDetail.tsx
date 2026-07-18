@@ -186,7 +186,7 @@ export function TaskDetail() {
     try { return JSON.parse(task.thumbnail_urls || '[]') } catch { return [] }
   })()
   const remoteCover = task.poster_url || remoteImgs[0] || ''
-  const remoteBackdrop = remoteImgs[0] || ''
+  const remoteBackdrop = task.poster_url || remoteImgs[0] || ''
 
   return (
     <div className="page">

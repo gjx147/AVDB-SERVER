@@ -321,15 +321,11 @@ class RankingScraper:
 
                     extra = getattr(self.scraper, "_last_extra_meta", {}) or {}
                     final_vc = video_code if (video_code and '-' in video_code) else (vc or video_code)
+                    # poster_url 来自 _extract_poster (#gallery-3)，直接使用
                     final_poster = poster_url
-                    if not final_poster and thumbnails_json:
-                        try:
-                            import json as _json
-                            thumbs = _json.loads(thumbnails_json)
-                            if thumbs:
-                                final_poster = thumbs[0]
-                        except Exception:
-                            pass
+                    # 如果 poster_url 没提取到，从 ranking entry 的 cover_url fallback
+                    if not final_poster:
+                        final_poster = e.get("cover_url")
                     self.store.mark_visited(
                         detail_url,
                         best_magnet=best_magnet, magnets_json=magnets_json,
