@@ -18,10 +18,38 @@ LIST_PARAMS = "f=download"
 
 # 爬取参数
 MAX_PAGES = int(os.environ.get("SCRAPER_MAX_PAGES", "100"))
-REQUEST_DELAY_MIN = 2
-REQUEST_DELAY_MAX = 5
+REQUEST_DELAY_MIN = int(os.environ.get("SCRAPER_REQUEST_DELAY_MIN", "2"))
+REQUEST_DELAY_MAX = int(os.environ.get("SCRAPER_REQUEST_DELAY_MAX", "5"))
 DETAIL_DELAY_MIN = int(os.environ.get("SCRAPER_DETAIL_DELAY_MIN", "20"))
 DETAIL_DELAY_MAX = int(os.environ.get("SCRAPER_DETAIL_DELAY_MAX", "40"))
+
+
+def get_settings_override():
+    """从 DB settings 表读取运行时覆盖值（crawl_delay_min/max）。
+
+    scraper 启动时调一次，覆盖 config 里的 env 默认值。
+    """
+    global REQUEST_DELAY_MIN, REQUEST_DELAY_MAX
+    try:
+        import sqlite3
+        from pathlib import Path
+        db_path = DATA_DIR / "javdb.db"
+        if not db_path.exists():
+            return
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        conn.row_factory = sqlite3.Row
+        try:
+            for key, attr in [("crawl_delay_min", "REQUEST_DELAY_MIN"),
+                              ("crawl_delay_max", "REQUEST_DELAY_MAX")]:
+                row = conn.execute("SELECT value FROM settings WHERE key=? LIMIT 1", (key,)).fetchone()
+                if row and row[0]:
+                    val = int(row[0])
+                    if val > 0:
+                        globals()[attr] = val
+        finally:
+            conn.close()
+    except Exception:
+        pass
 MAX_RETRIES = 3
 PAGE_TIMEOUT = 30000
 

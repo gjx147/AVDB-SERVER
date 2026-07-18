@@ -112,6 +112,30 @@ async def _push_aria2(magnet: str, config: dict) -> dict:
         return {"ok": False, "message": str(e)}
 
 
+async def _push_clouddrive(magnet: str, config: dict) -> dict:
+    """推送到 CloudDrive2（HTTP API 离线下载）。"""
+    import httpx
+    url = config.get("clouddrive_url", "")
+    if not url:
+        return {"ok": False, "message": "CloudDrive2 未配置"}
+    save_path = config.get("clouddrive_save_path", "/")
+    # CloudDrive2 API: POST /api/v1/offline/tasks
+    api_url = url.rstrip("/") + "/api/v1/offline/tasks"
+    headers = {}
+    token = config.get("clouddrive_token", "")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    payload = {"magnet": magnet, "save_path": save_path}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(api_url, json=payload, headers=headers)
+            if r.status_code in (200, 201):
+                return {"ok": True, "message": "已推送到 CloudDrive2"}
+            return {"ok": False, "message": f"CloudDrive2 返回 {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 @router.post("/push")
 @router.post("/download")  # 兼容前端旧路径
 async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
@@ -120,6 +144,7 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
               "aria2_url", "aria2_secret",
+              "clouddrive_url", "clouddrive_token", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:
         config[k] = _get_setting(db, k)
 
@@ -131,6 +156,8 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
         result = await _push_qbittorrent(req.magnet, config)
     elif downloader == "aria2":
         result = await _push_aria2(req.magnet, config)
+    elif downloader == "clouddrive":
+        result = await _push_clouddrive(req.magnet, config)
     else:
         return {"ok": False, "message": f"暂不支持的下载器: {downloader}"}
 
@@ -173,12 +200,17 @@ async def test_connection(downloader: str, db: DbSession, _user: CurrentUser):
     """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。"""
     import asyncio
     config = {}
-    for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret"]:
+    for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
+              "clouddrive_url", "clouddrive_token"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
         return await asyncio.to_thread(_test_qbittorrent_sync, config)
     elif downloader == "aria2":
         if not config["aria2_url"]:
+            return {"ok": False, "message": "未配置"}
+        return {"ok": True, "message": "配置已读取（连接测试需实际推送）"}
+    elif downloader == "clouddrive":
+        if not config["clouddrive_url"]:
             return {"ok": False, "message": "未配置"}
         return {"ok": True, "message": "配置已读取（连接测试需实际推送）"}
     return {"ok": False, "message": f"未知下载器: {downloader}"}

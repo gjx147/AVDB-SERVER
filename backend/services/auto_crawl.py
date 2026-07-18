@@ -45,9 +45,32 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
     """非阻塞执行 scraper 子进程。返回是否成功(exit 0)。
 
     架构修复：start_new_session 创建进程组，超时时整组 kill（Chromium 子树不残留）。
+    从 DB settings 注入 proxy + javdb_url 到子进程 env。
     """
     cmd = [_python_exe(), str(_scraper_path())] + args
     env = dict(os.environ)
+
+    # 从 DB settings 读 proxy + javdb_url（与 crawl.py _start_scraper 一致）
+    try:
+        db = SessionLocal()
+        try:
+            from models import Setting
+            for key in ("http_proxy",):
+                row = db.get(Setting, key)
+                if row and row.value:
+                    val = row.value.strip()
+                    env["HTTP_PROXY"] = val
+                    env["HTTPS_PROXY"] = val
+                    env["http_proxy"] = val
+                    env["https_proxy"] = val
+            row = db.get(Setting, "javdb_url")
+            if row and row.value:
+                env["JAVDB_URL"] = row.value.strip()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
     logger.info("启动 scraper: %s", " ".join(args))
 
     # 创建子进程：进程组隔离（支持整树杀）

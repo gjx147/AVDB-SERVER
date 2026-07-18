@@ -1671,6 +1671,12 @@ class MagnetScraper:
 
 
 def main():
+    # 从 DB settings 读运行时覆盖值（crawl_delay 等）
+    try:
+        config.get_settings_override()
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="磁力链接爬虫 (JavDB)")
     parser.add_argument("--base-url", type=str, default=None, help="JavDB 网站地址，覆盖 config.py 中的 BASE_URL")
     subparsers = parser.add_subparsers(dest="command", help="子命令")
