@@ -73,6 +73,7 @@ export function Rankings() {
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [maxPages, setMaxPages] = useState<number>(5)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -83,6 +84,8 @@ export function Rankings() {
   // P3：检查队列状态
   useEffect(() => {
     api.images.queueStatus().then((s) => { if (s.running) { setQueueRunning(true); setQueueInfo(s) } }).catch(() => {})
+    // 读取设置中的默认最大页数
+    api.settings.get().then((s) => { setMaxPages(s.max_pages_default || 5) }).catch(() => {})
   }, [])
 
   useEffect(() => { api.rankingsNew.dates().then(setLatest).catch(() => {}) }, [])
@@ -119,7 +122,7 @@ export function Rankings() {
   useEffect(() => { load('daily') }, [load])
 
   const crawl = async () => {
-    try { await api.rankings.crawl(tab); toastOk(`已启动 ${tab} 排行榜爬取`) } catch (e) { toastErr(String((e as Error).message)) }
+    try { await api.rankings.crawl(tab, maxPages); toastOk(`已启动 ${tab} 排行榜爬取（${maxPages}页）`) } catch (e) { toastErr(String((e as Error).message)) }
   }
 
   const openRank = (r: Ranking) => {
