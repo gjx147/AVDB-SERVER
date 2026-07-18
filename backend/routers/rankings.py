@@ -54,12 +54,22 @@ def latest_rankings(db: DbSession, _user: CurrentUser, rank_type: str = Query("d
 @router.post("/{ranking_id}/add-task")
 def add_single_task(ranking_id: int, db: DbSession, _user: CurrentUser):
     """单条排行榜入库为 task。"""
+    from config import get_settings
     r = db.get(Ranking, ranking_id)
     if not r:
         raise HTTPException(status_code=404, detail="排行条目不存在")
     if not r.video_code:
         return {"ok": False, "message": "无番号"}
-    existing = db.execute(select(Task).where(Task.video_code == r.video_code)).scalar_one_or_none()
+
+    # 规范化完整 URL（与 scraper 一致）
+    base_url = get_settings().JAVDB_URL or "https://javdb.com"
+    full_url = f"{base_url.rstrip('/')}/v/{r.video_code}"
+
+    # 按 URL 去重（不用 video_code，因为可能是 JavDB ID 不是番号）
+    existing = db.execute(select(Task).where(Task.url == full_url)).scalar_one_or_none()
+    if not existing:
+        # 也尝试相对路径匹配
+        existing = db.execute(select(Task).where(Task.url == f"/v/{r.video_code}")).scalar_one_or_none()
     if existing:
         r.task_id = existing.id
         r.is_in_library = True
@@ -69,7 +79,7 @@ def add_single_task(ranking_id: int, db: DbSession, _user: CurrentUser):
     if not src:
         src = ListSource(list_code="RANKING", list_path="/rankings")
         db.add(src); db.flush()
-    t = Task(list_source_id=src.id, url=f"/v/{r.video_code}", video_code=r.video_code)
+    t = Task(list_source_id=src.id, url=full_url, video_code=r.video_code)
     db.add(t); db.flush()
     r.task_id = t.id
     r.is_in_library = True
@@ -143,12 +153,15 @@ def list_by_type(
 
 @router.post("/batch-add-tasks")
 def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser):
-    """批量把排行榜条目入库为 pending task（幂等：已有番号跳过并标记 in_library）。"""
+    """批量把排行榜条目入库为 pending task（幂等：按 URL 去重）。"""
+    from config import get_settings
     if not req.ranking_ids:
         return {"ok": True, "added": 0, "skipped": 0}
     rankings = db.execute(
         select(Ranking).where(Ranking.id.in_(req.ranking_ids))
     ).scalars().all()
+
+    base_url = get_settings().JAVDB_URL or "https://javdb.com"
 
     src = db.execute(select(ListSource).where(ListSource.list_code == "RANKING")).scalar_one_or_none()
     if not src:
@@ -162,16 +175,17 @@ def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser
         if not r.video_code:
             skipped += 1
             continue
+        full_url = f"{base_url.rstrip('/')}/v/{r.video_code}"
+        # 按 URL 去重（完整 URL 或相对路径都查）
         existing = db.execute(
-            select(Task).where(Task.video_code == r.video_code)
+            select(Task).where(Task.url.in_([full_url, f"/v/{r.video_code}"]))
         ).scalar_one_or_none()
         if existing:
             r.task_id = existing.id
             r.is_in_library = True
             skipped += 1
             continue
-        url = f"/v/{r.video_code}"
-        t = Task(list_source_id=src.id, url=url, video_code=r.video_code)
+        t = Task(list_source_id=src.id, url=full_url, video_code=r.video_code)
         db.add(t)
         db.flush()
         r.task_id = t.id
