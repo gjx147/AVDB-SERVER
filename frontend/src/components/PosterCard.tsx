@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
@@ -29,21 +30,47 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick }: Pr
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
 
+  // 远程封面 URL：从 thumbnail_urls[0] 或 poster_url 提取
+  const remoteCover = (() => {
+    if (task.poster_url) return task.poster_url
+    if (task.thumbnail_urls) {
+      try {
+        const arr = JSON.parse(task.thumbnail_urls)
+        if (Array.isArray(arr) && arr.length > 0) return arr[0]
+      } catch { /* ignore */ }
+    }
+    return null
+  })()
+
+  // 图片源：先试本地缓存，失败后 fallback 到远程
+  const [imgSrc, setImgSrc] = useState(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`)
+  const [triedRemote, setTriedRemote] = useState(false)
+
   const open = () => { if (onClick) { onClick() } else { nav(`/task/${task.id}`) } }
   const toggle = (e: React.MouseEvent) => { e.stopPropagation(); onToggle?.() }
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } }
+
+  const handleImgError = (e: React.MouseEvent<HTMLImageElement>) => {
+    // 本地缓存失败 → 尝试远程封面
+    if (!triedRemote && remoteCover) {
+      setTriedRemote(true)
+      setImgSrc(remoteCover)
+    } else {
+      e.currentTarget.style.display = 'none'
+    }
+  }
 
   return (
     <div className="poster" onClick={open} onKeyDown={handleKeyDown} tabIndex={0} role="button"
       aria-label={`查看 ${task.video_code || '未命名'} 的详情`} style={{ cursor: 'pointer' }}>
       <div className="poster-frame" style={selected ? { boxShadow: '0 0 0 3px var(--gold), 0 8px 24px rgba(232,93,138,.25)' } : undefined}>
-        {/* 本地缓存高清封面，无缓存时显示占位 */}
+        {/* 优先本地缓存高清封面，无缓存时 fallback 到远程封面 */}
         <img
-          src={`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`}
+          src={imgSrc}
           alt={task.video_code || ''}
           loading="lazy"
           onLoad={(e) => { e.currentTarget.classList.add('loaded') }}
-          onError={(e) => { e.currentTarget.style.display = 'none' }}
+          onError={handleImgError}
         />
         <div className="poster-grad-top">
           <span className="poster-code">{task.video_code || '—'}</span>

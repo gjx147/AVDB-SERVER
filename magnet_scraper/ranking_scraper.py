@@ -316,10 +316,22 @@ class RankingScraper:
                         self.store.add_pending_urls(src["id"], [detail_url])
 
                     extra = getattr(self.scraper, "_last_extra_meta", {}) or {}
+                    # 番号：优先用详情页提取的，如果被截断则用原始 ranking 条目的
+                    final_vc = video_code if (video_code and '-' in video_code) else (vc or video_code)
+                    # poster_url：如果没提取到，用 thumbnail_urls 第一张（封面图）
+                    final_poster = poster_url
+                    if not final_poster and thumbnails_json:
+                        try:
+                            import json as _json
+                            thumbs = _json.loads(thumbnails_json)
+                            if thumbs:
+                                final_poster = thumbs[0]
+                        except Exception:
+                            pass
                     self.store.mark_visited(
                         detail_url,
                         best_magnet=best_magnet, magnets_json=magnets_json,
-                        video_code=video_code, title=title, poster_url=poster_url,
+                        video_code=final_vc, title=title, poster_url=final_poster,
                         thumbnail_urls=thumbnails_json, synopsis=synopsis,
                         actors=actors,
                         description=extra.get("description"),
