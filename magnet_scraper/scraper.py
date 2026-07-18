@@ -1059,21 +1059,51 @@ class MagnetScraper:
         return None
 
     def _extract_video_code_from_page(self) -> Optional[str]:
-        """从详情页提取番号"""
+        """从详情页提取番号。
+
+        JavDB 详情页番号位置（按可靠性排序）：
+        1. .panel-block:first .value — 元数据面板第一行（番号）
+        2. 磁力链 name — [javdb.com]MVSD-696
+        3. 页面标题 — MVSD-696 xxxxx | JavDB
+        注意：URL 的 /v/xxx 是 JavDB 内部 ID，不是番号！
+        """
+        import re
+
+        # 方法1: 元数据面板（JavDB 用 Bulma，番号在 .panel-block 第一行的 .value）
+        for sel in [".panel-block .value", ".movie-panel-info .value",
+                    ".first-block .value", ".video-meta-panel .value",
+                    "[itemprop='name']", ".video-code"]:
+            try:
+                el = self.page.locator(sel).first
+                if el.count() > 0:
+                    text = (el.inner_text() or "").strip()
+                    if text and re.match(r'^[A-Za-z]{2,6}[-_]?\d{2,5}', text):
+                        return text
+            except Exception:
+                pass
+
+        # 方法2: 从磁力链 name 提取（[javdb.com]MVSD-696 → MVSD-696）
         try:
-            el = self.page.locator(".video-meta-panel .value a, [itemprop='name'], .video-code").first
-            if el.count() > 0:
-                return (el.inner_text() or "").strip()
+            magnets = self.page.locator("a[href^='magnet:'] .name").all()
+            for m in magnets[:3]:
+                name = (m.inner_text() or "").strip()
+                # 匹配番号格式：字母-数字（如 MVSD-696, EBWH-341）
+                match = re.search(r'([A-Za-z]{2,6}[-_]\d{2,5})', name)
+                if match:
+                    return match.group(1)
         except Exception:
             pass
+
+        # 方法3: 从页面标题提取（MVSD-696 xxxxx | JavDB）
         try:
-            url = self.page.url
-            parts = url.rstrip("/").split("/")
-            code = parts[-1] if parts else None
-            if code and len(code) > 2:
-                return code.upper()
+            title = self.page.title() or ""
+            match = re.search(r'([A-Za-z]{2,6}[-_]\d{2,5})', title)
+            if match:
+                return match.group(1)
         except Exception:
             pass
+
+        return None
         return None
 
     def _extract_description(self) -> Optional[str]:
