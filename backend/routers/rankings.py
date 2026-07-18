@@ -37,7 +37,7 @@ def list_dates(db: DbSession, _user: CurrentUser, rank_type: str | None = Query(
 # ── 兼容 AVDB 原始格式：GET /api/rankings?rank_type=X&skip=Y&limit=Z ──
 
 @router.get("/latest")
-def latest_rankings(db: DbSession, _user: CurrentUser, rank_type: str = Query("hot")):
+def latest_rankings(db: DbSession, _user: CurrentUser, rank_type: str = Query("daily")):
     """获取最新一天的排行榜（兼容前端 /api/rankings/latest）。"""
     latest_date = db.execute(
         select(func.max(Ranking.rank_date)).where(Ranking.rank_type == rank_type)

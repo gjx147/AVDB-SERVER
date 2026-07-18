@@ -27,42 +27,53 @@ type RankingTask = Task & {
 /** Ranking → RankingTask 适配（PosterCard 需要 Task 类型）。
  * 如果有 taskOverride（从 DB 读的 task 详情），用它的 poster/thumbnail/title。
  */
-const toTask = (r: Ranking, taskOverride?: Partial<Task>): RankingTask => ({
-  id: r.task_id || 0,
-  list_source_id: 0,
-  url: '',
-  status: (r.is_in_library ? 'visited' : 'pending') as Task['status'],
-  retry_count: 0,
-  best_magnet: null,
-  magnets_json: null,
-  video_code: taskOverride?.video_code || r.video_code,
-  title: taskOverride?.title || r.title,
-  poster_url: taskOverride?.poster_url || r.cover_url || null,
-  thumbnail_urls: taskOverride?.thumbnail_urls || null,
-  synopsis: null,
-  description: null,
-  actors: taskOverride?.actors || null,
-  tags: taskOverride?.tags || null,
-  release_date: taskOverride?.release_date || null,
-  duration: null,
-  director: null,
-  maker: null,
-  label: null,
-  series: null,
-  rating: taskOverride?.rating || r.score || null,
-  file_size: null,
-  is_favorite: 0 as 0 | 1,
-  favorite_at: null,
-  note: null,
-  error_message: null,
-  created_at: null,
-  updated_at: null,
-  _ranking_id: r.id,
-  _task_id: r.task_id,
-  _rank_position: r.rank_position,
-  _views: r.views,
-  _is_in_library: r.is_in_library,
-})
+const toTask = (r: Ranking, taskOverride?: Partial<Task>): RankingTask => {
+  // 从 cover_url 推导出竖版预览图 URL
+  // covers/eb/EbO6md.jpg → samples/eb/EbO6md_s_0.jpg
+  let fallbackThumbs: string | null = null
+  if (r.cover_url) {
+    const m = r.cover_url.match(/\/covers\/(.+\/.+)\.jpg/)
+    if (m) {
+      fallbackThumbs = JSON.stringify([`https://c0.jdbstatic.com/samples/${m[1]}_s_0.jpg`])
+    }
+  }
+  return {
+    id: r.task_id || 0,
+    list_source_id: 0,
+    url: '',
+    status: (r.is_in_library ? 'visited' : 'pending') as Task['status'],
+    retry_count: 0,
+    best_magnet: null,
+    magnets_json: null,
+    video_code: taskOverride?.video_code || r.video_code,
+    title: taskOverride?.title || r.title,
+    poster_url: taskOverride?.poster_url || r.cover_url || null,
+    thumbnail_urls: taskOverride?.thumbnail_urls || fallbackThumbs,
+    synopsis: null,
+    description: null,
+    actors: taskOverride?.actors || null,
+    tags: taskOverride?.tags || null,
+    release_date: taskOverride?.release_date || null,
+    duration: null,
+    director: null,
+    maker: null,
+    label: null,
+    series: null,
+    rating: taskOverride?.rating || r.score || null,
+    file_size: null,
+    is_favorite: 0 as 0 | 1,
+    favorite_at: null,
+    note: null,
+    error_message: null,
+    created_at: null,
+    updated_at: null,
+    _ranking_id: r.id,
+    _task_id: r.task_id,
+    _rank_position: r.rank_position,
+    _views: r.views,
+    _is_in_library: r.is_in_library,
+  }
+}
 
 export function Rankings() {
   const nav = useNavigate()
