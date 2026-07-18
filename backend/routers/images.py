@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from config import get_settings
+from deps import DbSession
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -47,16 +48,30 @@ def get_backdrop(task_id: int):
 
 
 @router.get("/thumbnails/{task_id}")
-def list_thumbnails(task_id: int):
-    """列出该任务的所有缩略图。"""
+def list_thumbnails(task_id: int, db: DbSession):
+    """列出该任务的所有缩略图。
+
+    优先返回本地缓存的高清图；无缓存时 fallback 到 task.thumbnail_urls 远程 URL。
+    """
     d = _task_dir(task_id)
-    if not d.exists():
-        return {"thumbnails": [], "count": 0}
-    thumbs = sorted(d.glob("thumb_*.jpg"))
-    return {
-        "thumbnails": [f"/api/images/thumb/{task_id}/{i}" for i in range(len(thumbs))],
-        "count": len(thumbs),
-    }
+    thumbs = sorted(d.glob("thumb_*.jpg")) if d.exists() else []
+    if thumbs:
+        return {
+            "thumbnails": [f"/api/images/thumb/{task_id}/{i}" for i in range(len(thumbs))],
+            "count": len(thumbs),
+        }
+    # 无本地缓存 → 从 DB 读远程缩略图 URL
+    from models import Task
+    task = db.get(Task, task_id)
+    if task and task.thumbnail_urls:
+        import json
+        try:
+            urls = json.loads(task.thumbnail_urls)
+            if isinstance(urls, list) and urls:
+                return {"thumbnails": urls, "count": len(urls)}
+        except Exception:
+            pass
+    return {"thumbnails": [], "count": 0}
 
 
 @router.get("/thumb/{task_id}/{index}")

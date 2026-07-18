@@ -39,7 +39,14 @@ export function TaskDetail() {
     // P1-8: 切换任务时清理 pending 定时器
     timersRef.current.forEach(clearTimeout)
     timersRef.current = []
-    api.tasks.get(+id).then((t) => { setTask(t); loadThumbs(+id) }).catch(() => setTask(null))
+    api.tasks.get(+id).then(async (t) => {
+      // 单独加载磁力列表（TaskOut 不含 magnets 字段）
+      try {
+        const m = await api.tasks.magnets(+id)
+        t.magnets = m
+      } catch { /* ignore */ }
+      setTask(t); loadThumbs(+id)
+    }).catch(() => setTask(null))
   }
   const loadThumbs = (tid: number) => {
     api.images.thumbnails(tid).then((r: ThumbnailsResponse) => { setThumbs(r.thumbnails); setActiveThumb(0) }).catch(() => setThumbs([]))
@@ -174,11 +181,19 @@ export function TaskDetail() {
 
   // 自动缓存逻辑已移到条件 return 之前（React Hooks 规则）
 
+  // 远程图片 URL（本地无缓存时 fallback）
+  const remoteImgs = (() => {
+    try { return JSON.parse(task.thumbnail_urls || '[]') } catch { return [] }
+  })()
+  const remoteCover = task.poster_url || remoteImgs[0] || ''
+  const remoteBackdrop = remoteImgs[0] || ''
+
   return (
     <div className="page">
       {/* emby 风格背景：gallery-1（index 0）全屏模糊 */}
       <div className="detail-bg">
-        <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt="" onError={(e) => { e.currentTarget.style.opacity = '0' }} />
+        <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt=""
+          onError={(e) => { if (remoteBackdrop) e.currentTarget.src = remoteBackdrop; else e.currentTarget.style.opacity = '0' }} />
       </div>
 
       <button className="btn btn--ghost btn--sm" style={{ marginBottom: 20, position: 'relative', zIndex: 1 }}
@@ -190,7 +205,7 @@ export function TaskDetail() {
           <img
             src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
             alt={`${task.video_code || '作品'} 海报`}
-            onError={(e) => { e.currentTarget.style.opacity = '0' }}
+            onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
             onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
           />
           {downloading && <div className="detail-cover-empty" style={{ position: 'absolute', inset: 0 }}>缓存中…</div>}
