@@ -867,7 +867,25 @@ class MagnetScraper:
         return None
 
     def _extract_poster(self) -> Optional[str]:
-        """提取海报大图 URL"""
+        """提取海报大图 URL。
+
+        JavDB 详情页 gallery 结构：
+        - #gallery-1: 缩略图（竖图）
+        - #gallery-2: 缩略图（竖图）
+        - #gallery-3: 正式封面（横图）← 这才是海报
+        - .boxcover img: 页面顶部的封面图
+        """
+        # 方法1: JavDB gallery-3 是正式封面（横版大图）
+        try:
+            g3 = self.page.locator("#gallery-3 img").first
+            if g3.count() > 0:
+                src = g3.get_attribute("src") or g3.get_attribute("data-src") or g3.get_attribute("data-original")
+                if src and src.startswith("http"):
+                    return src
+        except Exception:
+            pass
+
+        # 方法2: .boxcover / .cover-container（页面顶部封面区域）
         try:
             img = self.page.locator(".boxcover img, .cover-container img, .video-cover img, img.boxcover").first
             if img.count() > 0:
@@ -876,25 +894,65 @@ class MagnetScraper:
                     return src
         except Exception:
             pass
+
+        # 方法3: 从 cover URL 模式匹配
         try:
-            imgs = self.page.locator("img[src*='pics.dmm', img[src*='jdbstatic'], img[src*='cover']").all()
+            imgs = self.page.locator("img[src*='jdbstatic']").all()
             for img in imgs:
                 src = img.get_attribute("src") or img.get_attribute("data-src")
                 if src and "cover" in src.lower() and src.startswith("http"):
                     return src
         except Exception:
             pass
+
+        # 方法4: fallback 到 gallery-1
+        try:
+            g1 = self.page.locator("#gallery-1 img").first
+            if g1.count() > 0:
+                src = g1.get_attribute("src") or g1.get_attribute("data-src")
+                if src and src.startswith("http"):
+                    return src
+        except Exception:
+            pass
+
         return None
 
     def _extract_thumbnails(self) -> list:
-        """提取预览缩略图 URL 列表"""
+        """提取预览缩略图 URL 列表。
+
+        JavDB 详情页结构：
+        - #gallery-1 ~ #gallery-N: 各 gallery 图片（竖版预览图）
+        - .preview-images / .sample-box: 样品图区域
+        - cover 图（c0.jdbstatic.com/covers/）也作为第一张
+        """
         thumbnails = []
-        try:
-            imgs = self.page.locator(".preview-images img, .sample-box img, .video-review img, img.preview").all()
-            for img in imgs:
+        seen = set()
+
+        def _add_img(img):
+            try:
                 src = img.get_attribute("src") or img.get_attribute("data-src") or img.get_attribute("data-original")
-                if src and src.startswith("http"):
+                if src and src.startswith("http") and src not in seen:
+                    seen.add(src)
                     thumbnails.append(src)
+            except Exception:
+                pass
+
+        # 方法1: gallery 图片（JavDB 特有结构）
+        try:
+            for i in range(1, 30):
+                g = self.page.locator(f"#gallery-{i} img").first
+                if g.count() > 0:
+                    _add_img(g)
+                else:
+                    break
+        except Exception:
+            pass
+
+        # 方法2: 预览图区域
+        try:
+            imgs = self.page.locator(".preview-images img, .sample-box img, .video-review img, img.preview, .tile-item img").all()
+            for img in imgs:
+                _add_img(img)
         except Exception:
             pass
         if not thumbnails:
