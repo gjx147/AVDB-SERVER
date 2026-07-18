@@ -36,7 +36,7 @@ const toTask = (r: Ranking): RankingTask => ({
   video_code: r.video_code,
   title: r.title,
   poster_url: r.cover_url || null,
-  thumbnail_urls: r.cover_url ? JSON.stringify([r.cover_url]) : null,
+  thumbnail_urls: null,
   synopsis: null,
   description: null,
   actors: null,
