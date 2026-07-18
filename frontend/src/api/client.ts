@@ -76,7 +76,7 @@ export const api = {
       http.post<ApiOk>(`/api/tasks/${id}/extract`).then((r) => r.data),
 
     magnets: (id: number) =>
-      http.get<Magnet[]>(`/api/tasks/${id}/magnets`).then((r) => r.data),
+      http.get<{ magnets: Magnet[]; video_code: string }>(`/api/tasks/${id}/magnets`).then((r) => r.data),
 
     favorite: (id: number) =>
       http.post<ApiOk>(`/api/tasks/${id}/favorite`).then((r) => r.data),

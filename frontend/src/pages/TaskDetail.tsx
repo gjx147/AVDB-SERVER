@@ -42,8 +42,8 @@ export function TaskDetail() {
     api.tasks.get(+id).then(async (t) => {
       // 单独加载磁力列表（TaskOut 不含 magnets 字段）
       try {
-        const m = await api.tasks.magnets(+id)
-        t.magnets = m
+        const resp = await api.tasks.magnets(+id)
+        t.magnets = (resp && Array.isArray(resp.magnets)) ? resp.magnets : []
       } catch { /* ignore */ }
       setTask(t); loadThumbs(+id)
     }).catch(() => setTask(null))
