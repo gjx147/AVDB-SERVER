@@ -24,8 +24,10 @@ type RankingTask = Task & {
   _is_in_library: boolean
 }
 
-/** Ranking → RankingTask 适配（PosterCard 需要 Task 类型） */
-const toTask = (r: Ranking): RankingTask => ({
+/** Ranking → RankingTask 适配（PosterCard 需要 Task 类型）。
+ * 如果有 taskOverride（从 DB 读的 task 详情），用它的 poster/thumbnail/title。
+ */
+const toTask = (r: Ranking, taskOverride?: Partial<Task>): RankingTask => ({
   id: r.task_id || 0,
   list_source_id: 0,
   url: '',
@@ -33,21 +35,21 @@ const toTask = (r: Ranking): RankingTask => ({
   retry_count: 0,
   best_magnet: null,
   magnets_json: null,
-  video_code: r.video_code,
-  title: r.title,
-  poster_url: r.cover_url || null,
-  thumbnail_urls: null,
+  video_code: taskOverride?.video_code || r.video_code,
+  title: taskOverride?.title || r.title,
+  poster_url: taskOverride?.poster_url || r.cover_url || null,
+  thumbnail_urls: taskOverride?.thumbnail_urls || null,
   synopsis: null,
   description: null,
-  actors: null,
-  tags: null,
-  release_date: null,
+  actors: taskOverride?.actors || null,
+  tags: taskOverride?.tags || null,
+  release_date: taskOverride?.release_date || null,
   duration: null,
   director: null,
   maker: null,
   label: null,
   series: null,
-  rating: r.score || null,
+  rating: taskOverride?.rating || r.score || null,
   file_size: null,
   is_favorite: 0 as 0 | 1,
   favorite_at: null,
@@ -74,12 +76,39 @@ export function Rankings() {
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [maxPages, setMaxPages] = useState<number>(5)
+  const [taskDetails, setTaskDetails] = useState<Record<number, Partial<Task>>>({})
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const reqSeqRef = useRef(0)  // P1#6: 标签切换竞态防护
   useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current) } }, [])
+
+  // 批量获取 task 详情（poster/thumbnail/title/video_code），注入 PosterCard
+  const _fetchTaskDetails = async (taskIds: number[], reqId: number) => {
+    if (!taskIds.length) return
+    const details: Record<number, Partial<Task>> = {}
+    // 并发获取（最多 10 个一批）
+    const batch = taskIds.slice(0, 50)
+    await Promise.all(batch.map(async (tid) => {
+      try {
+        const t = await api.tasks.get(tid)
+        details[tid] = {
+          video_code: t.video_code,
+          title: t.title,
+          poster_url: t.poster_url,
+          thumbnail_urls: t.thumbnail_urls,
+          actors: t.actors,
+          tags: t.tags,
+          release_date: t.release_date,
+          rating: t.rating,
+        }
+      } catch { /* ignore */ }
+    }))
+    if (reqId === reqSeqRef.current) {
+      setTaskDetails((prev) => ({ ...prev, ...details }))
+    }
+  }
 
   // P3：检查队列状态
   useEffect(() => {
@@ -101,18 +130,28 @@ export function Rankings() {
       const data = await api.rankings.list(t)
       if (reqId !== reqSeqRef.current) return  // 已切到其他标签，丢弃旧响应
       setList(data)
+      setTaskDetails({})  // 清空旧数据
       // 批量入库：一次请求创建所有缺失 task（替换 N+1）
       const missing = data.filter(r => !r.task_id).map(r => r.id)
       if (missing.length > 0) {
-        api.rankings.batchAddTasks(missing).then((res) => {
+        api.rankings.batchAddTasks(missing).then(async (res) => {
           if (res.ok) {
-            setList((prev) => {
-              if (!prev) return null
+            const updatedList = (() => {
+              if (!data) return null
               const map = new Map(res.results.map(r => [r.ranking_id, r.task_id]))
-              return prev.map(r => map.has(r.id) ? { ...r, task_id: map.get(r.id)!, is_in_library: true } : r)
-            })
+              return data.map(r => map.has(r.id) ? { ...r, task_id: map.get(r.id)!, is_in_library: true } : r)
+            })()
+            if (updatedList && reqId === reqSeqRef.current) setList(updatedList)
+            // 入库后获取 task 详情（poster/thumbnail/title）
+            const newTaskIds = res.results.filter(r => r.task_id).map(r => r.task_id!)
+            await _fetchTaskDetails(newTaskIds, reqId)
           }
         }).catch(() => {})
+      }
+      // 同时获取已入库的 task 详情
+      const existingTaskIds = data.filter(r => r.task_id).map(r => r.task_id!)
+      if (existingTaskIds.length > 0) {
+        await _fetchTaskDetails(existingTaskIds, reqId)
       }
     } catch (e) {
       setError(String((e as Error).message))
@@ -134,7 +173,7 @@ export function Rankings() {
   }
 
   // ── 前端过滤 ──
-  const tasks: RankingTask[] = (list || []).map(toTask)
+  const tasks: RankingTask[] = (list || []).map(r => toTask(r, r.task_id ? taskDetails[r.task_id] : undefined))
   const filtered = tasks.filter((t) => {
     const q = searchQ.trim().toLowerCase()
     if (q && !(t.video_code || '').toLowerCase().includes(q)) return false

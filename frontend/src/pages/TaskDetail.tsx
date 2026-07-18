@@ -102,47 +102,10 @@ export function TaskDetail() {
     api.v2.similar(+id).then((r) => setSimilar(r.tasks)).catch(() => setSimilar([]))
   }, [id])
 
-  // 自动缓存：进入详情页后若无本地缓存，自动下载（静默）
-  // P0-4: downloading/autoTried 不进依赖，用 ref 跟踪避免自我取消导致永久卡死
+  // 自动缓存已禁用：用户手动点「重新下载高清图片」才下载
   useEffect(() => {
     return () => { timersRef.current.forEach(clearTimeout); timersRef.current = [] }
   }, [])
-
-  useEffect(() => {
-    if (!id) return
-    // P1-6: 请求序号防竞态，切换任务时旧请求不覆盖新数据
-    const reqId = ++reqSeqRef.current
-    if (task && !hasLocal && !downloadingRef.current && !autoTriedRef.current) {
-      autoTriedRef.current = true
-      downloadingRef.current = true
-      setDownloading(true)
-      api.images.downloadHires(+id)
-        .then(async () => {
-          if (reqId !== reqSeqRef.current) return
-          for (let i = 0; i < 60; i++) {
-            if (reqId !== reqSeqRef.current) return
-            await new Promise(r => { const t = setTimeout(r, 2000); timersRef.current.push(t) })
-            if (reqId !== reqSeqRef.current) return
-            try {
-              const r = await api.images.hasLocalThumbs(+id)
-              if (r.has_local) {
-                setImgVersion((v) => v + 1)
-                loadThumbs(+id)
-                return
-              }
-            } catch {}
-          }
-          if (reqId === reqSeqRef.current) { loadThumbs(+id); setImgVersion(v => v + 1) }
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (reqId === reqSeqRef.current) {
-            downloadingRef.current = false
-            setDownloading(false)
-          }
-        })
-    }
-  }, [id, task, hasLocal])
 
   if (task === undefined) return <div className="page"><Loading /></div>
   if (task === null) return <div className="page"><Empty title="任务不存在" /></div>
