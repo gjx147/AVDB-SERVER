@@ -87,39 +87,12 @@ export function Rankings() {
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [maxPages, setMaxPages] = useState<number>(5)
-  const [taskDetails, setTaskDetails] = useState<Record<number, Partial<Task>>>({})
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const reqSeqRef = useRef(0)  // P1#6: 标签切换竞态防护
   useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current) } }, [])
-
-  // 批量获取 task 详情（poster/thumbnail/title/video_code），注入 PosterCard
-  const _fetchTaskDetails = async (taskIds: number[], reqId: number) => {
-    if (!taskIds.length) return
-    const details: Record<number, Partial<Task>> = {}
-    // 并发获取（最多 10 个一批）
-    const batch = taskIds.slice(0, 50)
-    await Promise.all(batch.map(async (tid) => {
-      try {
-        const t = await api.tasks.get(tid)
-        details[tid] = {
-          video_code: t.video_code,
-          title: t.title,
-          poster_url: t.poster_url,
-          thumbnail_urls: t.thumbnail_urls,
-          actors: t.actors,
-          tags: t.tags,
-          release_date: t.release_date,
-          rating: t.rating,
-        }
-      } catch { /* ignore */ }
-    }))
-    if (reqId === reqSeqRef.current) {
-      setTaskDetails((prev) => ({ ...prev, ...details }))
-    }
-  }
 
   // P3：检查队列状态
   useEffect(() => {
@@ -138,28 +111,10 @@ export function Rankings() {
     setFilterStatus('all')
     setError(null)
     try {
-      // 1. 获取排行榜条目（概览：排名/评分/浏览数/task_id）
+      // 只读取排行榜数据（由 scraper ranking 命令完整爬取后写入）
       const data = await api.rankings.list(t)
       if (reqId !== reqSeqRef.current) return
       setList(data)
-      setTaskDetails({})
-
-      // 2. 批量入库缺失的 task
-      const missing = data.filter(r => !r.task_id).map(r => r.id)
-      if (missing.length > 0) {
-        const res = await api.rankings.batchAddTasks(missing)
-        if (res.ok && reqId === reqSeqRef.current) {
-          const map = new Map(res.results.map(r => [r.ranking_id, r.task_id]))
-          const updated = data.map(r => map.has(r.id) ? { ...r, task_id: map.get(r.id)!, is_in_library: true } : r)
-          setList(updated)
-        }
-      }
-
-      // 3. 一次性获取所有已入库 task 的完整详情（和影视库相同的数据源）
-      const allTaskIds = (list || data).filter(r => r.task_id).map(r => r.task_id!).filter(Boolean)
-      if (allTaskIds.length > 0) {
-        await _fetchTaskDetails(allTaskIds, reqId)
-      }
     } catch (e) {
       setError(String((e as Error).message))
       setList([])
@@ -172,15 +127,15 @@ export function Rankings() {
   }
 
   const openRank = (r: Ranking) => {
-    if (r.task_id) { nav(`/task/${r.task_id}`); return }
-    api.rankings.addTask(r.id).then((res) => {
-      toastOk(res.message || '已加入任务队列')
-      if (res.task_id) nav(`/task/${res.task_id}`)
-    }).catch((e) => toastErr(String((e as Error).message)))
+    if (r.task_id) {
+      nav(`/task/${r.task_id}`)
+    } else {
+      toastErr('该排行榜条目尚未爬取详情，请先刷新排行')
+    }
   }
 
   // ── 前端过滤 ──
-  const tasks: RankingTask[] = (list || []).map(r => toTask(r, r.task_id ? taskDetails[r.task_id] : undefined))
+  const tasks: RankingTask[] = (list || []).map(r => toTask(r))
   const filtered = tasks.filter((t) => {
     const q = searchQ.trim().toLowerCase()
     if (q && !(t.video_code || '').toLowerCase().includes(q)) return false

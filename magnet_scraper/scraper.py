@@ -1837,9 +1837,15 @@ def main():
                             max_pages=getattr(args, "max_pages", 5),
                         )
                         if entries:
-                            # save_and_add_tasks 内部会逐条爬详情页再入库
+                            # 1. 入库 rankings 表 + 创建 pending task（不爬详情）
                             saved = r.save_and_add_tasks(entries, rank_type)
-                            logger.info(f"排行榜爬取入库完成: {saved}")
+                            logger.info(f"排行榜入库完成: {saved}")
+                            # 2. 自动触发 extract（复用影视库的完整提取逻辑）
+                            #    处理所有 pending task（含排行榜创建的）:
+                            #    process_detail_page → mark_visited + 演员关联 + mark_failed
+                            logger.info("开始提取排行榜详情页（复用 extract 逻辑）...")
+                            scraper.extract_magnets()
+                            logger.info("排行榜详情提取完成")
                 elif args.command == "crawl-actor":
                     from actor_scraper import ActorScraper
                     a = ActorScraper(scraper)

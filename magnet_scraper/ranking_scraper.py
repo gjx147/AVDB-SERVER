@@ -258,124 +258,49 @@ class RankingScraper:
         return entry
 
     def save_and_add_tasks(self, entries: list, rank_type: str) -> dict:
-        """先入 rankings 表，再逐条爬详情页。
+        """只入库 rankings + 创建 pending task，不爬详情页。
+
+        详情页提取由 scraper.py main() 的 extract_magnets 统一处理，
+        复用影视库的完整逻辑（process_detail_page → mark_visited + 演员关联 + mark_failed）。
 
         流程：
-        1. 先 save_rankings 入 rankings 表（保证排行榜页面有数据）
-        2. 逐条爬详情页获取完整元数据
-        3. 爬成功的: mark_visited 入 tasks 表 + 回填 rankings.task_id
-        4. 爬失败的: 创建 pending task，等后续重试
+        1. save_rankings 入 rankings 表（概览数据）
+        2. 为每条创建 pending task（按 URL 去重）
+        3. 回填 rankings.task_id
 
-        返回 {rankings_saved, tasks_extracted, tasks_failed}
+        返回 {rankings_saved, tasks_added}
         """
         if not entries:
-            return {"rankings_saved": 0, "tasks_extracted": 0, "tasks_failed": 0}
+            return {"rankings_saved": 0, "tasks_added": 0}
 
-        # 第一步：先入 rankings 表（概览数据：番号/封面/评分/浏览数）
+        # 1. 入 rankings 表
         saved = self.store.save_rankings(entries, rank_type)
         logger.info(f"排行榜 rankings 入库: {saved} 条")
 
-        # 创建 RANKING 列表源（供 task 使用）
+        # 2. 创建 RANKING 列表源
         src = self.store.ensure_list_source("RANKING", list_path="/rankings", max_pages=100)
 
-        self._ensure_browser()
-        total = len(entries)
-        success_entries = []
-        matches = []  # (detail_url, task_id) 用于回填 rankings.task_id
-
-        logger.info(f"开始逐条爬取排行榜详情页: {total} 条")
-
-        for i, e in enumerate(entries):
+        # 3. 为每条创建 pending task（详情由 extract_magnets 处理）
+        matches = []
+        for e in entries:
             detail_url = e.get("detail_url")
-            vc = e.get("video_code", "")
             if not detail_url:
                 continue
+            # 按 URL 去重创建 pending task
+            if not self.store.task_exists_with_url(detail_url):
+                self.store.add_pending_urls(src["id"], [detail_url])
+            # 回填 task_id
+            task_row = self.store.get_task_by_url(detail_url)
+            if task_row:
+                matches.append((detail_url, task_row["id"]))
 
-            self.scraper._write_crawl_status(
-                phase="ranking_detail", crawl_type="ranking_detail",
-                rank_type=rank_type,
-                current_index=i + 1, total=total, current_video_code=vc,
-            )
-
-            logger.info(f"排行榜详情 [{i+1}/{total}]: {vc}")
-
-            try:
-                delay = random.uniform(config.DETAIL_DELAY_MIN, config.DETAIL_DELAY_MAX)
-                time.sleep(delay)
-
-                result = self.scraper.process_detail_page(detail_url)
-                ok = result[0]
-                best_magnet = result[1]
-                magnets_json = result[2]
-                video_code = result[3]
-                title = result[4]
-                poster_url = result[5]
-                thumbnails_json = result[6]
-                synopsis = result[7]
-                actors = result[8]
-                err_msg = result[9]
-
-                if ok and best_magnet:
-                    if not self.store.task_exists_with_url(detail_url):
-                        self.store.add_pending_urls(src["id"], [detail_url])
-
-                    extra = getattr(self.scraper, "_last_extra_meta", {}) or {}
-                    final_vc = video_code if (video_code and '-' in video_code) else (vc or video_code)
-                    # poster_url 来自 _extract_poster (#gallery-3)，直接使用
-                    final_poster = poster_url
-                    # 如果 poster_url 没提取到，从 ranking entry 的 cover_url fallback
-                    if not final_poster:
-                        final_poster = e.get("cover_url")
-                    self.store.mark_visited(
-                        detail_url,
-                        best_magnet=best_magnet, magnets_json=magnets_json,
-                        video_code=final_vc, title=title, poster_url=final_poster,
-                        thumbnail_urls=thumbnails_json, synopsis=synopsis,
-                        actors=actors,
-                        description=extra.get("description"),
-                        tags=extra.get("tags"),
-                        release_date=extra.get("release_date"),
-                        duration=extra.get("duration"),
-                        director=extra.get("director"),
-                        maker=extra.get("maker"),
-                        label=extra.get("label"),
-                        series=extra.get("series"),
-                        rating=extra.get("rating"),
-                        file_size=extra.get("file_size"),
-                    )
-                    task_row = self.store.get_task_by_url(detail_url)
-                    if task_row:
-                        matches.append((detail_url, task_row["id"]))
-                        e["task_id"] = task_row["id"]
-                    success_entries.append(e)
-                    logger.info(f"✓ {vc}: 详情提取成功")
-                else:
-                    if not self.store.task_exists_with_url(detail_url):
-                        self.store.add_pending_urls(src["id"], [detail_url])
-                    logger.warning(f"✗ {vc}: {err_msg}")
-
-            except Exception as ex:
-                logger.error(f"✗ {vc}: 详情页异常 - {ex}")
-                try:
-                    if not self.store.task_exists_with_url(detail_url):
-                        self.store.add_pending_urls(src["id"], [detail_url])
-                except Exception:
-                    pass
-
-        # 回填 rankings.task_id
+        # 4. 回填 rankings.task_id
         if matches:
             updated = self.store.update_ranking_task_ids(matches)
             logger.info(f"回填 rankings.task_id: {updated} 条")
 
-        result_summary = {
-            "rankings_saved": saved,
-            "tasks_extracted": len(success_entries),
-            "tasks_failed": total - len(success_entries),
-        }
-        logger.info(f"排行榜完整入库完成: {result_summary}")
-
-        logger.info(f"排行榜详情爬取完成: 成功 {success}, 失败 {failed}")
-        return {"success": success, "failed": failed}
+        logger.info(f"排行榜入库完成: rankings={saved}, tasks={len(matches)}")
+        return {"rankings_saved": saved, "tasks_added": len(matches)}
 
     def crawl_actor_ranking(self, max_pages: int = 3) -> list:
         """爬取演员排行榜。"""
