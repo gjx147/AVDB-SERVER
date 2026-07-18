@@ -127,31 +127,27 @@ export function Rankings() {
     setFilterStatus('all')
     setError(null)
     try {
+      // 1. 获取排行榜条目（概览：排名/评分/浏览数/task_id）
       const data = await api.rankings.list(t)
-      if (reqId !== reqSeqRef.current) return  // 已切到其他标签，丢弃旧响应
+      if (reqId !== reqSeqRef.current) return
       setList(data)
-      setTaskDetails({})  // 清空旧数据
-      // 批量入库：一次请求创建所有缺失 task（替换 N+1）
+      setTaskDetails({})
+
+      // 2. 批量入库缺失的 task
       const missing = data.filter(r => !r.task_id).map(r => r.id)
       if (missing.length > 0) {
-        api.rankings.batchAddTasks(missing).then(async (res) => {
-          if (res.ok) {
-            const updatedList = (() => {
-              if (!data) return null
-              const map = new Map(res.results.map(r => [r.ranking_id, r.task_id]))
-              return data.map(r => map.has(r.id) ? { ...r, task_id: map.get(r.id)!, is_in_library: true } : r)
-            })()
-            if (updatedList && reqId === reqSeqRef.current) setList(updatedList)
-            // 入库后获取 task 详情（poster/thumbnail/title）
-            const newTaskIds = res.results.filter(r => r.task_id).map(r => r.task_id!)
-            await _fetchTaskDetails(newTaskIds, reqId)
-          }
-        }).catch(() => {})
+        const res = await api.rankings.batchAddTasks(missing)
+        if (res.ok && reqId === reqSeqRef.current) {
+          const map = new Map(res.results.map(r => [r.ranking_id, r.task_id]))
+          const updated = data.map(r => map.has(r.id) ? { ...r, task_id: map.get(r.id)!, is_in_library: true } : r)
+          setList(updated)
+        }
       }
-      // 同时获取已入库的 task 详情
-      const existingTaskIds = data.filter(r => r.task_id).map(r => r.task_id!)
-      if (existingTaskIds.length > 0) {
-        await _fetchTaskDetails(existingTaskIds, reqId)
+
+      // 3. 一次性获取所有已入库 task 的完整详情（和影视库相同的数据源）
+      const allTaskIds = (list || data).filter(r => r.task_id).map(r => r.task_id!).filter(Boolean)
+      if (allTaskIds.length > 0) {
+        await _fetchTaskDetails(allTaskIds, reqId)
       }
     } catch (e) {
       setError(String((e as Error).message))
