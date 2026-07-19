@@ -6,13 +6,19 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from config import get_settings
 from deps import DbSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -129,9 +135,93 @@ def hires_has_local_thumbs(task_id: int):
 
 
 @router.post("/hires/download-hires/{task_id}")
-def hires_download(task_id: int):
-    """触发高清图下载（Phase 1 占位）。实际抓取由 scraper 负责。"""
-    return {"ok": True, "message": "高清图下载由 scraper 在抓取阶段完成，无需手动触发"}
+def hires_download(task_id: int, db: DbSession):
+    """下载高清预览图/封面/背景到本地缓存。
+
+    数据源：task.thumbnail_urls（高清预览图，scraper 从 .tile-item href 提取）
+           + task.poster_url（横版封面 covers/）
+    下载到 {IMAGES_DIR}/{task_id}/：
+      - thumb_{N}.jpg   预览图（thumbnail_urls）
+      - poster.jpg      封面（poster_url）
+      - backdrop.jpg    背景图（同 poster_url）
+    走 HTTP_PROXY/HTTPS_PROXY 环境变量（与 scraper 一致）。
+    """
+    from models import Task
+
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 解析预览图 URL 列表
+    thumb_urls: list[str] = []
+    if task.thumbnail_urls:
+        try:
+            arr = json.loads(task.thumbnail_urls)
+            if isinstance(arr, list):
+                thumb_urls = [u for u in arr if isinstance(u, str) and u.startswith("http")]
+        except Exception:
+            pass
+    poster_url = task.poster_url
+
+    total_found = len(thumb_urls) + (1 if poster_url else 0)
+    if total_found == 0:
+        raise HTTPException(status_code=400, detail="任务无图片 URL（需先爬取详情页）")
+
+    # 准备目录
+    d = _task_dir(task_id)
+    d.mkdir(parents=True, exist_ok=True)
+
+    # httpx 客户端（带 Referer 头 + 代理环境变量）
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://javdb.com/",
+    }
+    timeout = httpx.Timeout(30.0, connect=15.0)
+
+    def _download(url: str, dest: Path) -> bool:
+        try:
+            with httpx.Client(proxy=proxy, timeout=timeout, follow_redirects=True, verify=False) as c:
+                r = c.get(url, headers=headers)
+                if r.status_code != 200 or len(r.content) < 500:
+                    logger.warning(f"下载失败 {url}: status={r.status_code} bytes={len(r.content)}")
+                    return False
+                dest.write_bytes(r.content)
+                return True
+        except Exception as e:
+            logger.warning(f"下载异常 {url}: {e}")
+            return False
+
+    # 下载预览图
+    thumb_count = 0
+    for i, url in enumerate(thumb_urls):
+        dest = d / f"thumb_{i}.jpg"
+        if dest.exists() and dest.stat().st_size > 500:
+            thumb_count += 1  # 已缓存，跳过
+            continue
+        if _download(url, dest):
+            thumb_count += 1
+
+    # 下载封面 + 背景（都用 poster_url）
+    cover_ok = False
+    if poster_url:
+        poster_dest = d / "poster.jpg"
+        if not (poster_dest.exists() and poster_dest.stat().st_size > 500):
+            cover_ok = _download(poster_url, poster_dest)
+        else:
+            cover_ok = True
+        # 背景图复用封面
+        backdrop_dest = d / "backdrop.jpg"
+        if not backdrop_dest.exists() and poster_url:
+            _download(poster_url, backdrop_dest)
+
+    msg = f"已下载 {thumb_count} 张高清预览图" + ("，封面已缓存" if cover_ok else "")
+    logger.info(f"task {task_id}: {msg} (found={total_found})")
+    return {
+        "ok": True,
+        "message": msg,
+        "downloaded": {"cover": cover_ok, "thumbnails": thumb_count, "total_found": total_found},
+    }
 
 
 @router.get("/hires/poster-index/{task_id}")
@@ -142,8 +232,13 @@ def hires_poster_index(task_id: int):
 
 @router.post("/hires/set-poster/{task_id}/{index}")
 def hires_set_poster(task_id: int, index: int):
-    """设置海报索引（Phase 1 占位）。"""
-    return {"ok": True, "message": "海报索引设置暂未实现"}
+    """把指定索引的本地预览图设为海报（复制 thumb_{index}.jpg → poster.jpg）。"""
+    d = _task_dir(task_id)
+    src = d / f"thumb_{index}.jpg"
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"预览图 thumb_{index}.jpg 不存在")
+    (d / "poster.jpg").write_bytes(src.read_bytes())
+    return {"ok": True, "message": f"已将预览图 {index} 设为海报"}
 
 
 @router.post("/hires/queue/start")
