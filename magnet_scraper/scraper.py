@@ -274,8 +274,11 @@ class MagnetScraper:
                 "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-features=IsolateOrigins,site-per-process",
-                ]
+                ],
             }
+            # Docker 环境没有 headless_shell，用完整 chromium（通过 channel 指定）
+            if is_docker:
+                launch_options["channel"] = "chromium"
 
             # 配置代理（必须在 launch 时设置，Chromium 只在启动时读代理）
             proxy_config = None
