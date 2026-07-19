@@ -397,10 +397,20 @@ class RankingScraper:
         return deduped
 
     def save_actor_rankings(self, actors: list) -> int:
-        """保存演员排行到数据库。"""
+        """保存演员排行到数据库。
+
+        双写：
+        1. rankings 表（rank_type='actor'）—— 前端排行榜页面用（和影片排行同路径）
+        2. actors 表（upsert）—— 演员档案用（头像/关注等）
+        """
         if not actors:
             return 0
 
+        # 1. 写入 rankings 表（前端排行榜显示用，带 rank_position）
+        saved_rankings = self.store.save_actor_rankings(actors)
+        logger.info(f"演员排行写入 rankings 表: {saved_rankings}/{len(actors)} 位")
+
+        # 2. upsert 到 actors 表（演员档案用）
         saved = 0
         for i, a in enumerate(actors):
             try:
@@ -414,5 +424,5 @@ class RankingScraper:
             except Exception as e:
                 logger.debug(f"保存演员 {a.get('name')} 失败: {e}")
 
-        logger.info(f"演员排行保存: {saved}/{len(actors)} 位")
+        logger.info(f"演员排行保存到 actors 表: {saved}/{len(actors)} 位")
         return saved

@@ -363,6 +363,42 @@ class SqliteTaskStore:
             conn.commit()
         return inserted
 
+    def save_actor_rankings(self, actors: List[dict], rank_date: str = None) -> int:
+        """保存演员月榜到 rankings 表（rank_type='actor'）。
+
+        演员排行和影片排行共用 rankings 表，前端用同一套逻辑显示。
+        字段映射：
+          video_code = 演员名（作为唯一标识，复用 rankings.video_code 字段）
+          title      = 演员名
+          cover_url  = 演员头像 URL
+          detail_url = 演员页 URL
+          rank_position = 列表索引（第 N 名）
+        按 rank_type+rank_date+video_code(演员名) 去重。
+        返回实际插入条数。
+        """
+        if not actors:
+            return 0
+        from datetime import date
+        rd = rank_date or date.today().isoformat()
+        inserted = 0
+        with self._conn() as conn:
+            # 先清除当天的旧演员排行（重爬时刷新，避免累积）
+            conn.execute(
+                "DELETE FROM rankings WHERE rank_type='actor' AND rank_date=?", (rd,))
+            for i, a in enumerate(actors, start=1):
+                name = (a.get("name") or "").strip()
+                if not name:
+                    continue
+                conn.execute(
+                    """INSERT INTO rankings
+                       (rank_type, rank_date, rank_position, video_code, title,
+                        cover_url, score, views, detail_url, task_id, is_in_library, created_at)
+                       VALUES ('actor', ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, 0, datetime('now'))""",
+                    (rd, i, name, name, a.get("avatar_url"), a.get("actor_url")))
+                inserted += 1
+            conn.commit()
+        return inserted
+
     def update_ranking_task_ids(self, matches: List[tuple]) -> int:
         """根据 detail_url 批量回填 rankings.task_id。
 
