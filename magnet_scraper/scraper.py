@@ -1840,7 +1840,12 @@ def main():
                             # 1. 入库 rankings 表 + 创建 pending task（不爬详情）
                             saved = r.save_and_add_tasks(entries, rank_type)
                             logger.info(f"排行榜入库完成: {saved}")
-                            # 2. 自动触发 extract（复用影视库的完整提取逻辑）
+                            # 2. 设 scraper 的 list_source_id 为 RANKING，
+                            #    这样 extract_magnets 能查到排行榜创建的 pending task
+                            ranking_src = scraper.store.ensure_list_source(
+                                "RANKING", list_path="/rankings", max_pages=100)
+                            scraper.list_source_id = ranking_src["id"]
+                            # 3. 自动触发 extract（复用影视库的完整提取逻辑）
                             #    处理所有 pending task（含排行榜创建的）:
                             #    process_detail_page → mark_visited + 演员关联 + mark_failed
                             logger.info("开始提取排行榜详情页（复用 extract 逻辑）...")
