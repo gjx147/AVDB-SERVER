@@ -21,19 +21,14 @@ export function TaskDetail() {
 
   const [hasLocal, setHasLocal] = useState(false)
   const [imgVersion, setImgVersion] = useState(0)
-  const [autoTried, setAutoTried] = useState(false)
   const [dlDownloader, setDlDownloader] = useState('')  // '' = 使用默认
   const reqSeqRef = useRef(0)  // P1-6: 请求序号防竞态
   const timersRef = useRef<number[]>([])  // P0-4: 用 ref 跟踪 timers
-  const autoTriedRef = useRef(false)  // P0-4: ref 避免自我取消
   const downloadingRef = useRef(false)  // P0-4: ref 避免自我取消
 
   const load = () => {
     if (!id) return
-    // P0-4: 用 ref 跟踪，切换任务时重置，避免 autoTried 闭包陷阱
-    autoTriedRef.current = false
     downloadingRef.current = false
-    setAutoTried(false)
     setHasLocal(false)
     setDownloading(false)
     // P1-8: 切换任务时清理 pending 定时器
@@ -198,12 +193,7 @@ export function TaskDetail() {
           </div>
           {downloading && !hasLocal && (
             <div style={{ fontSize: 12, color: 'var(--gold)', marginBottom: 20, padding: '8px 12px', background: 'var(--gold-wash)', borderRadius: 'var(--r-sm)' }}>
-              正在自动缓存高清图片，请稍候…
-            </div>
-          )}
-          {!hasLocal && !downloading && autoTried && (
-            <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 20, padding: '8px 12px', background: 'rgba(192,68,58,.08)', borderRadius: 'var(--r-sm)' }}>
-              自动缓存失败，点击「重新下载高清图片」手动重试。
+              正在下载高清图片，请稍候…
             </div>
           )}
 
@@ -228,42 +218,44 @@ export function TaskDetail() {
       <div className="detail-body" style={{ position: 'relative', zIndex: 1 }}>
         <div>
 
-          {/* 预览图画廊 —— gallery-3 及以后（跳过 index 0 背景、index 1 海报） */}
-          {hasLocal && thumbs.length > 2 && (
+          {/* 预览图画廊 —— 显示所有缩略图（本地优先，远程 fallback） */}
+          {thumbs.length > 0 && (
             <div style={{ marginBottom: 28 }}>
-              <div className="dm-label" style={{ marginBottom: 12 }}>预览图（{thumbs.length - 2}）</div>
+              <div className="dm-label" style={{ marginBottom: 12 }}>预览图（{thumbs.length}）</div>
               {/* 大图查看：自适应高度，原图原比例 */}
               <div style={{
                 position: 'relative', borderRadius: 'var(--r-lg)', overflow: 'hidden',
                 marginBottom: 10, background: 'var(--bg-surface)',
               }}>
                 <img
-                  src={`${thumbFileUrl(task.id, activeThumb + 2)}?v=${imgVersion}`}
+                  src={hasLocal ? `${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}` : thumbs[activeThumb]}
                   alt={`${task.video_code || '作品'} 预览图 ${activeThumb + 1}`}
                   style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'cover', imageRendering: 'auto' }}
                   onError={(e) => { e.currentTarget.style.opacity = '0.2' }}
                 />
-                {/* 手动选择海报按钮 */}
-                <button
-                  onClick={async (ev) => {
-                    ev.stopPropagation()
-                    try { await api.images.setPoster(task.id, activeThumb + 1); toastOk('已设为海报'); setImgVersion(v => v + 1) }
-                    catch (e) { toastErr(String((e as Error).message)) }
-                  }}
-                  style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, background: 'var(--gold)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
-                >设为海报</button>
-                {thumbs.length > 2 && <>
-                  <button onClick={() => setActiveThumb((i) => (i - 1 + thumbs.length - 2) % (thumbs.length - 2))}
+                {/* 手动选择海报按钮（仅本地缓存时可用） */}
+                {hasLocal && (
+                  <button
+                    onClick={async (ev) => {
+                      ev.stopPropagation()
+                      try { await api.images.setPoster(task.id, activeThumb); toastOk('已设为海报'); setImgVersion(v => v + 1) }
+                      catch (e) { toastErr(String((e as Error).message)) }
+                    }}
+                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, background: 'var(--gold)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                  >设为海报</button>
+                )}
+                {thumbs.length > 1 && <>
+                  <button onClick={() => setActiveThumb((i) => (i - 1 + thumbs.length) % thumbs.length)}
                     style={thumbNavBtn('left')}>‹</button>
-                  <button onClick={() => setActiveThumb((i) => (i + 1) % (thumbs.length - 2))}
+                  <button onClick={() => setActiveThumb((i) => (i + 1) % thumbs.length)}
                     style={thumbNavBtn('right')}>›</button>
                 </>}
               </div>
-              {/* 缩略图条：只显示 gallery-3+（index 2 起） */}
-              {thumbs.length > 2 && (
+              {/* 缩略图条 */}
+              {thumbs.length > 1 && (
                 <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-                  {thumbs.slice(2).map((u, i) => (
-                    <img key={i} src={`${thumbFileUrl(task.id, i + 2)}?v=${imgVersion}`} alt={`${task.video_code || '作品'} 预览图 ${i + 2}`} loading="lazy" onClick={() => setActiveThumb(i)}
+                  {thumbs.map((u, i) => (
+                    <img key={i} src={hasLocal ? `${thumbFileUrl(task.id, i)}?v=${imgVersion}` : u} alt={`${task.video_code || '作品'} 预览图 ${i + 1}`} loading="lazy" onClick={() => setActiveThumb(i)}
                       style={{
                         width: 72, height: 48, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', flex: 'none',
                         border: i === activeThumb ? '2px solid var(--gold)' : '2px solid transparent', opacity: i === activeThumb ? 1 : .6,
@@ -370,18 +362,22 @@ export function TaskDetail() {
         <div style={{ position: 'relative', zIndex: 1, marginTop: 28 }}>
           <div className="dm-label" style={{ marginBottom: 12 }}>相似影片</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 14 }}>
-            {similar.map((s) => (
+            {similar.map((s) => {
+              // 相似影片封面：远程 fallback
+              const sRemote = s.thumbnail_urls ? (() => { try { return JSON.parse(s.thumbnail_urls)[0] as string } catch { return null } })() : null
+              return (
               <div key={s.id} onClick={() => nav(`/task/${s.id}`)}
                 style={{ cursor: 'pointer', transition: 'transform .2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>
-                <img src={coverFileUrl(s.id)} alt={s.video_code || ''}
+                <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''}
                   style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', borderRadius: 'var(--r-md)' }}
-                  onError={(e) => { e.currentTarget.style.opacity = '0.2' }} />
+                  onError={(e) => { if (sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>
                 {s.rating && <div style={{ fontSize: 10, color: 'var(--gold)' }}>★ {s.rating}</div>}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
