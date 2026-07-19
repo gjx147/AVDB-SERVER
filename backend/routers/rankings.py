@@ -11,12 +11,21 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from deps import CurrentUser, DbSession, Pagination
-from models import ListSource, Ranking, Task
+from models import ListSource, Ranking, Task, Setting
 from schemas import BatchAddTasksRequest, RankingOut
 
 router = APIRouter(prefix="/api/rankings", tags=["rankings"])
 
 VALID_TYPES = {"daily", "weekly", "monthly", "actor"}
+
+
+def _get_javdb_url(db) -> str:
+    """从 DB settings 读 javdb_url（与 scraper 子进程一致），fallback 到 config 默认值。"""
+    row = db.get(Setting, "javdb_url")
+    if row and row.value and row.value.strip():
+        return row.value.strip().rstrip("/")
+    from config import get_settings
+    return (get_settings().JAVDB_URL or "https://javdb.com").rstrip("/")
 
 
 # ── 静态路由必须在动态路由之前 ──
@@ -54,22 +63,18 @@ def latest_rankings(db: DbSession, _user: CurrentUser, rank_type: str = Query("d
 @router.post("/{ranking_id}/add-task")
 def add_single_task(ranking_id: int, db: DbSession, _user: CurrentUser):
     """单条排行榜入库为 task。"""
-    from config import get_settings
     r = db.get(Ranking, ranking_id)
     if not r:
         raise HTTPException(status_code=404, detail="排行条目不存在")
     if not r.video_code:
         return {"ok": False, "message": "无番号"}
 
-    # 规范化完整 URL（与 scraper 一致）
-    base_url = get_settings().JAVDB_URL or "https://javdb.com"
-    full_url = f"{base_url.rstrip('/')}/v/{r.video_code}"
+    # 从 DB 读 javdb_url（与 scraper 子进程一致），避免镜像站 URL 不一致导致重复
+    base_url = _get_javdb_url(db)
+    full_url = f"{base_url}/v/{r.video_code}"
 
-    # 按 URL 去重（不用 video_code，因为可能是 JavDB ID 不是番号）
-    existing = db.execute(select(Task).where(Task.url == full_url)).scalar_one_or_none()
-    if not existing:
-        # 也尝试相对路径匹配
-        existing = db.execute(select(Task).where(Task.url == f"/v/{r.video_code}")).scalar_one_or_none()
+    # 按 URL 去重
+    existing = db.execute(select(Task).where(Task.url.in_([full_url, f"/v/{r.video_code}"]))).scalar_one_or_none()
     if existing:
         r.task_id = existing.id
         r.is_in_library = True
@@ -80,7 +85,19 @@ def add_single_task(ranking_id: int, db: DbSession, _user: CurrentUser):
         src = ListSource(list_code="RANKING", list_path="/rankings")
         db.add(src); db.flush()
     t = Task(list_source_id=src.id, url=full_url, video_code=r.video_code)
-    db.add(t); db.flush()
+    db.add(t)
+    try:
+        db.flush()
+    except Exception:
+        db.rollback()
+        # 并发时可能已被创建，重新查找
+        existing = db.execute(select(Task).where(Task.url == full_url)).scalar_one_or_none()
+        if existing:
+            r.task_id = existing.id
+            r.is_in_library = True
+            db.commit()
+            return {"ok": True, "task_id": existing.id, "ranking_id": ranking_id}
+        raise
     r.task_id = t.id
     r.is_in_library = True
     db.commit()
@@ -154,14 +171,14 @@ def list_by_type(
 @router.post("/batch-add-tasks")
 def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser):
     """批量把排行榜条目入库为 pending task（幂等：按 URL 去重）。"""
-    from config import get_settings
     if not req.ranking_ids:
         return {"ok": True, "added": 0, "skipped": 0}
     rankings = db.execute(
         select(Ranking).where(Ranking.id.in_(req.ranking_ids))
     ).scalars().all()
 
-    base_url = get_settings().JAVDB_URL or "https://javdb.com"
+    # 从 DB 读 javdb_url（与 scraper 子进程一致）
+    base_url = _get_javdb_url(db)
 
     src = db.execute(select(ListSource).where(ListSource.list_code == "RANKING")).scalar_one_or_none()
     if not src:
@@ -175,7 +192,7 @@ def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser
         if not r.video_code:
             skipped += 1
             continue
-        full_url = f"{base_url.rstrip('/')}/v/{r.video_code}"
+        full_url = f"{base_url}/v/{r.video_code}"
         # 按 URL 去重（完整 URL 或相对路径都查）
         existing = db.execute(
             select(Task).where(Task.url.in_([full_url, f"/v/{r.video_code}"]))
@@ -187,7 +204,18 @@ def batch_add_tasks(req: BatchAddTasksRequest, db: DbSession, _user: CurrentUser
             continue
         t = Task(list_source_id=src.id, url=full_url, video_code=r.video_code)
         db.add(t)
-        db.flush()
+        try:
+            db.flush()
+        except Exception:
+            db.rollback()
+            # 并发时可能已被创建，重新查找
+            existing = db.execute(select(Task).where(Task.url == full_url)).scalar_one_or_none()
+            if existing:
+                r.task_id = existing.id
+                r.is_in_library = True
+                skipped += 1
+                continue
+            raise
         r.task_id = t.id
         r.is_in_library = True
         added += 1
