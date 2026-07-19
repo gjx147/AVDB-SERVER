@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, coverFileUrl } from '../api/client'
 import type { Task, ListSourceWithStats } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
@@ -12,9 +12,11 @@ const PAGE = 48
 
 export function Library() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialQ = searchParams.get('q') || ''
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [sources, setSources] = useState<ListSourceWithStats[]>([])
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(initialQ)
   const [status, setStatus] = useState('')
   const [sourceId, setSourceId] = useState<number | ''>('')
   const [view, setView] = useState<'grid' | 'row'>('grid')
@@ -77,7 +79,7 @@ export function Library() {
   }, [])
 
   // P1: 搜索防抖 —— q 不在依赖里，避免逐字符请求；用 ref 持有最新值
-  const qRef = useRef('')
+  const qRef = useRef(initialQ)
   useEffect(() => { qRef.current = q }, [q])
   const reqSeqRef = useRef(0)  // P1-6: 请求序号防竞态
 

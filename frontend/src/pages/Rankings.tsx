@@ -129,6 +129,16 @@ export function Rankings() {
   }
 
   const openRank = (r: Ranking) => {
+    // actor 类型：跳转影视库按演员名筛选（演员不是 task，无详情页）
+    if (tab === 'actor') {
+      const name = r.task_video_code || r.video_code || ''
+      if (name) {
+        nav(`/library?q=${encodeURIComponent(name)}`)
+      } else {
+        toastErr('无演员名')
+      }
+      return
+    }
     if (r.task_id) {
       nav(`/task/${r.task_id}`)
     } else {
