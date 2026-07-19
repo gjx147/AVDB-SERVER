@@ -95,6 +95,7 @@ class ActorOut(BaseModel):
     name_en: Optional[str] = None
     avatar_url: Optional[str] = None
     avatar_local: Optional[str] = None
+    source_url: Optional[str] = None
     gender: Optional[str] = None
     birth_date: Optional[str] = None
     height: Optional[str] = None

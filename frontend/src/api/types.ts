@@ -91,7 +91,7 @@ export interface Actor {
   name_en: string | null
   avatar_url: string | null
   avatar_local: string | null
-  detail_url: string | null
+  source_url: string | null  // JavDB 演员页 URL（用于一键补齐作品）
   gender: string | null
   birth_date: string | null
   height: string | null

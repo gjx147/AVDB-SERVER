@@ -24,6 +24,7 @@ const nav: NavSection[] = [
   { section: '采集', items: [
     { to: '/sources', label: '列表源', icon: <Icon.source /> },
     { to: '/crawl', label: '爬取控制台', icon: <Icon.console /> },
+    { to: '/subscriptions', label: '订阅', icon: <Icon.refresh /> },
   ]},
   { section: '系统', items: [
     { to: '/downloads', label: '下载历史', icon: <Icon.download /> },

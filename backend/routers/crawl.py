@@ -322,23 +322,30 @@ def crawl_ranking(body: dict, _user: CurrentUser):
     return {"ok": True, "pid": proc.pid, "mode": "ranking"}
 
 
-@router.post("/actor")
-def crawl_actor(body: dict, _user: CurrentUser):
-    """触发演员爬取（兼容前端 POST /api/crawl/actor）。"""
+def start_actor_crawl(actor_url: str) -> dict:
+    """公共函数：触发演员作品爬取子进程（供 /api/crawl/actor 和 /api/actors/{id}/crawl-works 复用）。
+
+    检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
+    """
     global _running_proc, _running_info
     if _running_proc and _running_proc.poll() is None:
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
-    actor_url = body.get("actor_url", "")
     cmd = ["crawl-actor", "--actor-url", actor_url]
-
     proc = _start_scraper(cmd)
     _running_proc = proc
     _running_info = {
         "mode": "actor", "actor_url": actor_url, "pid": proc.pid,
         "started_at": _now_iso(),
     }
-    return {"ok": True, "pid": proc.pid, "mode": "actor"}
+    return {"ok": True, "pid": proc.pid, "mode": "actor", "actor_url": actor_url}
+
+
+@router.post("/actor")
+def crawl_actor(body: dict, _user: CurrentUser):
+    """触发演员爬取（兼容前端 POST /api/crawl/actor）。"""
+    actor_url = body.get("actor_url", "")
+    return start_actor_crawl(actor_url)
 
 
 @router.post("/actor-search")

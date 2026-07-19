@@ -124,3 +124,20 @@ def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: i
         return []
     tasks = db.execute(select(Task).where(Task.id.in_(task_ids)).order_by(Task.id.desc())).scalars().all()
     return [{"id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status} for t in tasks]
+
+
+@router.post("/{actor_id}/crawl-works")
+def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
+    """一键补齐演员作品：读 actor.source_url → 触发 crawl-actor 子进程。"""
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    url = actor.source_url
+    # fallback: 旧数据 source_url 为空时从 note 解析
+    if not url and actor.note and actor.note.startswith("source_url: "):
+        url = actor.note[len("source_url: "):]
+    if not url:
+        raise HTTPException(status_code=400, detail="该演员无 JavDB URL，需先在演员库通过 URL 添加")
+    # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
+    from routers.crawl import start_actor_crawl
+    return start_actor_crawl(url)

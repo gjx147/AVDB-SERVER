@@ -133,9 +133,10 @@ class ActorScraper:
         movies = self.crawl_actor_movies(actor_url, max_pages=50)
         logger.info(f"演员 {name} 作品列表: {len(movies)} 部")
 
-        # 3. 入库演员（note 字段存原始 URL）
+        # 3. 入库演员（source_url 存 JavDB 演员页 URL，note 保留兼容）
         actor_id = self.store.upsert_actor(
             name,
+            source_url=actor_url,
             avatar_url=info.get("avatar_url"),
             gender=info.get("gender"),
             birth_date=info.get("birth_date"),

@@ -12,6 +12,7 @@ export function Actors() {
   const [adding, setAdding] = useState(false)
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set())
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -22,6 +23,19 @@ export function Actors() {
     p.then(setActors).catch((e) => { setError(String((e as Error).message)); setActors([]) })
   }, [])
   useEffect(() => { load() }, [load])
+
+  // 加载已订阅的演员 id 集合（用于按钮状态）
+  useEffect(() => {
+    api.subscriptions.list(true).then((list: unknown) => {
+      const ids = new Set<number>()
+      if (Array.isArray(list)) {
+        for (const s of list as { sub_type?: string; actor_id?: number }[]) {
+          if (s.sub_type === 'actor' && s.actor_id) ids.add(s.actor_id)
+        }
+      }
+      setSubscribedIds(ids)
+    }).catch(() => { /* 订阅列表可选，失败不阻塞 */ })
+  }, [])
 
   const submitUrl = async () => {
     if (!url.trim()) return
@@ -40,6 +54,25 @@ export function Actors() {
       }
       // 更新本地状态
       setActors((prev) => prev ? prev.map((a) => a.id === actorId ? { ...a, is_followed: isFollowed ? 0 : 1 } : a) : prev)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  // 一键补齐演员作品
+  const crawlWorks = async (a: Actor) => {
+    if (!a.source_url) {
+      toastErr('该演员无 JavDB URL，需先通过 URL 添加')
+      return
+    }
+    try {
+      await api.actors.crawlWorks(a.id)
+      toastOk(`已开始补齐 ${a.name} 的作品`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  // 一键订阅演员作品（有新作自动入库）
+  const subscribe = async (a: Actor) => {
+    try {
+      await api.subscriptions.create({ sub_type: 'actor', actor_id: a.id, name: a.name, auto_add: true })
+      setSubscribedIds((prev) => new Set(prev).add(a.id))
+      toastOk(`已订阅 ${a.name}，有新作将自动入库`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
@@ -95,6 +128,28 @@ export function Actors() {
               </div>
               <div className="actor-name">{a.name}</div>
               <div className="actor-count">{a.movie_count} 部作品{a.local_movie_count ? ` · 本地 ${a.local_movie_count}` : ''}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); crawlWorks(a) }}
+                  disabled={!a.source_url}
+                  title={a.source_url ? '爬取该演员的全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}
+                  style={{
+                    flex: 1, border: '1px solid var(--line-soft)', background: 'var(--bg-page)',
+                    color: 'var(--t-body)', borderRadius: 6, padding: '5px 8px', fontSize: 11,
+                    cursor: a.source_url ? 'pointer' : 'not-allowed', opacity: a.source_url ? 1 : 0.4,
+                    fontFamily: 'var(--ff-sans)', transition: 'all .2s',
+                  }}>补齐作品</button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); subscribe(a) }}
+                  disabled={subscribedIds.has(a.id)}
+                  title={subscribedIds.has(a.id) ? '已订阅' : '订阅该演员，有新作自动入库'}
+                  style={{
+                    flex: 1, border: 'none', borderRadius: 6, padding: '5px 8px', fontSize: 11,
+                    cursor: subscribedIds.has(a.id) ? 'default' : 'pointer', fontFamily: 'var(--ff-sans)',
+                    background: subscribedIds.has(a.id) ? 'var(--gold-wash)' : 'var(--gold)',
+                    color: subscribedIds.has(a.id) ? 'var(--gold)' : '#fff', transition: 'all .2s',
+                  }}>{subscribedIds.has(a.id) ? '✓ 已订阅' : '订阅'}</button>
+              </div>
             </div>
           ))}
         </div>
