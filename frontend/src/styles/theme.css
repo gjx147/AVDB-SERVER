@@ -309,7 +309,16 @@ img{display:block;max-width:100%}
 
 /* 紧凑头部：左封面 + 右信息，消除顶部空白 */
 .detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:start}
-.detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:2/3;background:var(--bg-surface);box-shadow:var(--shadow-card)}
+/*
+ * JavDB 横版封面 (800×538, ratio 1.487) 为三段结构：
+ *   左 0-47% : 场景拼接
+ *   中 47-53%: 影片信息竖条幅
+ *   右 53-100% (≈47%宽, 375×538, ratio ≈0.70): 主角封面 ← 详情页只显示这一段
+ * 容器 ratio 7/10≈0.70 ≈ 主角封面 ratio；object-fit:cover 会按高度缩放，
+ * 水平保留 0.70/1.487 = 47% 宽；object-position:right center 让保留段
+ * 对齐到原图最右侧，恰好完整呈现主角封面区域。
+ */
+.detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:7/10;background:var(--bg-surface);box-shadow:var(--shadow-card)}
 .detail-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;image-rendering:auto}
 .detail-cover-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:12px}
 .detail-info{min-width:0;overflow:hidden}
