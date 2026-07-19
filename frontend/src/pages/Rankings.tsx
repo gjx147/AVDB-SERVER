@@ -195,7 +195,7 @@ export function Rankings() {
               <div className="row-item" key={t._ranking_id} onClick={() => openRank(r)}>
                 <img className="row-thumb" src={coverFileUrl(t._task_id || 0)}
                   alt={`${t.video_code || '作品'} 封面`}
-                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                  onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div>
                   <div className="row-code">#{t._rank_position} {t.video_code || '—'}</div>
                   <div className="row-title">{t.title || '未命名'}</div>

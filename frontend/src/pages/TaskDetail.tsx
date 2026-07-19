@@ -363,16 +363,16 @@ export function TaskDetail() {
           <div className="dm-label" style={{ marginBottom: 12 }}>相似影片</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 14 }}>
             {similar.map((s) => {
-              // 相似影片封面：远程 fallback
-              const sRemote = s.thumbnail_urls ? (() => { try { return JSON.parse(s.thumbnail_urls)[0] as string } catch { return null } })() : null
+              // 与详情页封面统一：poster_url 优先（横版裁剪主角），兜底 thumbnail_urls[0]
+              const sRemote = s.poster_url || (s.thumbnail_urls ? (() => { try { return JSON.parse(s.thumbnail_urls)[0] as string } catch { return null } })() : null)
               return (
               <div key={s.id} onClick={() => nav(`/task/${s.id}`)}
                 style={{ cursor: 'pointer', transition: 'transform .2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>
                 <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''}
-                  style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', borderRadius: 'var(--r-md)' }}
-                  onError={(e) => { if (sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
+                  style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'right center', borderRadius: 'var(--r-md)' }}
+                  onError={(e) => { if (sRemote && e.currentTarget.src !== sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>
                 {s.rating && <div style={{ fontSize: 10, color: 'var(--gold)' }}>★ {s.rating}</div>}
               </div>

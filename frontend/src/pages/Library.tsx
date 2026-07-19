@@ -209,7 +209,7 @@ export function Library() {
           {tasks.map((t) => (
             <div className="row-item" key={t.id} onClick={() => navigate(`/task/${t.id}`)}>
               <img className="row-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`}
-                onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
               <div>
                 <div className="row-code">{t.video_code || '—'}</div>
                 <div className="row-title">{t.title || '未命名'}</div>

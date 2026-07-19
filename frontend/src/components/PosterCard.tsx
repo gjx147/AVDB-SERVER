@@ -30,17 +30,17 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick }: Pr
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
 
-  // 列表页海报用竖版预览图（samples/），因为海报卡是 2:3 竖版比例
-  // 横版封面（covers/）会被裁剪丢失内容
+  // 与详情页封面统一：优先 poster_url（横版 covers/，CSS 用 right center 裁剪主角），
+  // 兜底 thumbnail_urls[0]（竖版 samples/，无裁剪也能显示）
   const remoteCover = (() => {
+    if (task.poster_url) return task.poster_url
     if (task.thumbnail_urls) {
       try {
         const arr = JSON.parse(task.thumbnail_urls)
         if (Array.isArray(arr) && arr.length > 0) return arr[0]
       } catch { /* ignore */ }
     }
-    // fallback 到 poster_url（横版封面，会被裁剪但不至于空白）
-    return task.poster_url || null
+    return null
   })()
 
   // 图片源：先试本地缓存，失败后 fallback 到远程

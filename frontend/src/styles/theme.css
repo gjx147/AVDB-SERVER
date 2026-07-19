@@ -171,7 +171,7 @@ img{display:block;max-width:100%}
 /* 最近列表 */
 .recent-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line-hair);cursor:pointer}
 .recent-item:last-child{border-bottom:none}
-.recent-thumb{width:46px;height:64px;border-radius:6px;flex:none;background:var(--bg-page);overflow:hidden;object-fit:cover}
+.recent-thumb{width:46px;height:64px;border-radius:6px;flex:none;background:var(--bg-page);overflow:hidden;object-fit:cover;object-position:right center}
 .recent-meta{flex:1;min-width:0}
 .recent-code{font-family:var(--ff-mono);font-size:12px;color:var(--gold);font-weight:600}
 .recent-title{font-size:13px;color:var(--t-body);margin:2px 0 4px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -191,9 +191,10 @@ img{display:block;max-width:100%}
 
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(208px,1fr));gap:28px 20px}
 .poster{position:relative;cursor:pointer}
-.poster-frame{position:relative;aspect-ratio:2/3;border-radius:var(--r-md);overflow:hidden;background:linear-gradient(135deg,var(--bg-raised),var(--bg-surface));box-shadow:var(--shadow-card);transition:transform .4s cubic-bezier(.23,1,.32,1),box-shadow .4s}
+.poster-frame{position:relative;aspect-ratio:7/10;border-radius:var(--r-md);overflow:hidden;background:linear-gradient(135deg,var(--bg-raised),var(--bg-surface));box-shadow:var(--shadow-card);transition:transform .4s cubic-bezier(.23,1,.32,1),box-shadow .4s}
 .poster:hover .poster-frame{transform:translateY(-6px);box-shadow:var(--shadow-float),0 0 0 1px var(--gold-glow)}
-.poster-frame img{width:100%;height:100%;object-fit:cover;transition:transform .6s cubic-bezier(.23,1,.32,1),opacity .3s;opacity:0}
+/* object-position:right center 与详情页封面一致：裁剪横版 cover 右半边主角封面段 */
+.poster-frame img{width:100%;height:100%;object-fit:cover;object-position:right center;transition:transform .6s cubic-bezier(.23,1,.32,1),opacity .3s;opacity:0}
 .poster-frame img.loaded{opacity:1}
 .poster:hover .poster-frame img{transform:scale(1.06)}
 .poster-grad-top{position:absolute;top:0;left:0;right:0;height:64px;background:linear-gradient(180deg,rgba(14,12,11,.7),transparent);display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px}
@@ -221,7 +222,7 @@ img{display:block;max-width:100%}
 .row-item{display:grid;grid-template-columns:64px 1fr auto auto auto;gap:16px;align-items:center;padding:14px 8px;border-bottom:1px solid var(--line-hair);cursor:pointer;transition:background .2s,box-shadow .2s}
 .row-item:hover{background:rgba(60,42,20,.06);box-shadow:inset 3px 0 0 var(--gold-wash)}
 .row-item:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:4px}
-.row-thumb{width:48px;height:64px;border-radius:5px;overflow:hidden;background:var(--bg-page);object-fit:cover}
+.row-thumb{width:48px;height:64px;border-radius:5px;overflow:hidden;background:var(--bg-page);object-fit:cover;object-position:right center}
 .row-code{font-family:var(--ff-mono);font-size:13px;color:var(--gold);font-weight:600}
 .row-title{font-size:13px;color:var(--t-body);margin-top:2px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .row-tags{display:flex;gap:5px}

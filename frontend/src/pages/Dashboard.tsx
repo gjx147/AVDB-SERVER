@@ -99,7 +99,7 @@ export function Dashboard() {
                 tabIndex={0} role="button" aria-label={`查看 ${t.video_code || '作品'} 详情`}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
                 <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`}
-                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                  onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div className="recent-meta">
                   <div className="recent-code">{t.video_code || '—'}</div>
                   <div className="recent-title">{t.title || '未命名'}</div>
