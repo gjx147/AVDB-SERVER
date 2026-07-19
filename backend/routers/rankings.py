@@ -28,6 +28,40 @@ def _get_javdb_url(db) -> str:
     return (get_settings().JAVDB_URL or "https://javdb.com").rstrip("/")
 
 
+def _enrich_with_task(db, rankings: list) -> list:
+    """给 ranking 列表补充关联 task 的真实数据（番号/标题/海报/缩略图/状态）。
+
+    避免 N+1：先批量查所有 task_id，再一次性取数据。
+    返回 dict 列表（RankingOut 兼容）。
+    """
+    if not rankings:
+        return rankings
+    task_ids = [r.task_id for r in rankings if r.task_id]
+    tasks_map = {}
+    if task_ids:
+        for t in db.execute(select(Task).where(Task.id.in_(task_ids))).scalars().all():
+            tasks_map[t.id] = t
+    result = []
+    for r in rankings:
+        item = {
+            "id": r.id, "rank_type": r.rank_type, "rank_date": r.rank_date,
+            "rank_position": r.rank_position, "video_code": r.video_code,
+            "title": r.title, "cover_url": r.cover_url, "score": r.score,
+            "views": r.views or 0, "detail_url": r.detail_url,
+            "task_id": r.task_id, "is_in_library": r.is_in_library,
+            "created_at": r.created_at,
+        }
+        t = tasks_map.get(r.task_id)
+        if t:
+            item["task_video_code"] = t.video_code
+            item["task_title"] = t.title
+            item["task_poster_url"] = t.poster_url
+            item["task_thumbnail_urls"] = t.thumbnail_urls
+            item["task_status"] = t.status
+        result.append(item)
+    return result
+
+
 # ── 静态路由必须在动态路由之前 ──
 
 @router.get("/types/dates")
@@ -127,7 +161,8 @@ def list_rankings_compat(
             rank_date = latest
     if rank_date:
         stmt = stmt.where(Ranking.rank_date == rank_date)
-    return db.execute(stmt.order_by(Ranking.rank_position).offset(skip).limit(limit)).scalars().all()
+    rows = db.execute(stmt.order_by(Ranking.rank_position).offset(skip).limit(limit)).scalars().all()
+    return _enrich_with_task(db, rows)
 
 
 # ── 动态路由 /{rank_type} ──
@@ -143,7 +178,7 @@ def list_by_type(
     if rank_type not in VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"无效类型，可选: {VALID_TYPES}")
     if date:
-        return (
+        rows = (
             db.execute(
                 select(Ranking)
                 .where(Ranking.rank_type == rank_type, Ranking.rank_date == date)
@@ -152,12 +187,13 @@ def list_by_type(
             .scalars()
             .all()
         )
+        return _enrich_with_task(db, rows)
     latest_date = db.execute(
         select(func.max(Ranking.rank_date)).where(Ranking.rank_type == rank_type)
     ).scalar_one()
     if not latest_date:
         return []
-    return (
+    rows = (
         db.execute(
             select(Ranking)
             .where(Ranking.rank_type == rank_type, Ranking.rank_date == latest_date)
@@ -166,6 +202,7 @@ def list_by_type(
         .scalars()
         .all()
     )
+    return _enrich_with_task(db, rows)
 
 
 @router.post("/batch-add-tasks")

@@ -134,6 +134,12 @@ export interface Ranking {
   detail_url: string | null
   is_in_library: boolean
   created_at: string | null
+  // join tasks 表的真实数据
+  task_video_code?: string | null
+  task_title?: string | null
+  task_poster_url?: string | null
+  task_thumbnail_urls?: string | null
+  task_status?: string | null
 }
 
 // ── Dashboard ──

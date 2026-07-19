@@ -133,6 +133,12 @@ class RankingOut(BaseModel):
     task_id: Optional[int] = None
     is_in_library: bool = False
     created_at: Optional[datetime] = None
+    # join tasks 表的真实数据（extract 后填充）
+    task_video_code: Optional[str] = None
+    task_title: Optional[str] = None
+    task_poster_url: Optional[str] = None
+    task_thumbnail_urls: Optional[str] = None
+    task_status: Optional[str] = None
 
 
 class BatchAddTasksRequest(BaseModel):

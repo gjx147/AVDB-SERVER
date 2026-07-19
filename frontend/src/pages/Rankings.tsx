@@ -25,9 +25,10 @@ type RankingTask = Task & {
 }
 
 /** Ranking → RankingTask 适配（PosterCard 需要 Task 类型）。
- * 如果有 taskOverride（从 DB 读的 task 详情），用它的 poster/thumbnail/title。
+ * 优先使用后端 join 的 task_* 真实数据（番号/标题/海报/缩略图），
+ * 没有则用 ranking 概览数据 + cover_url fallback。
  */
-const toTask = (r: Ranking, taskOverride?: Partial<Task>): RankingTask => {
+const toTask = (r: Ranking): RankingTask => {
   // 从 cover_url 推导出竖版预览图 URL
   // covers/eb/EbO6md.jpg → samples/eb/EbO6md_s_0.jpg
   let fallbackThumbs: string | null = null
@@ -41,25 +42,26 @@ const toTask = (r: Ranking, taskOverride?: Partial<Task>): RankingTask => {
     id: r.task_id || 0,
     list_source_id: 0,
     url: '',
-    status: (r.is_in_library ? 'visited' : 'pending') as Task['status'],
+    status: (r.task_status || (r.is_in_library ? 'visited' : 'pending')) as Task['status'],
     retry_count: 0,
     best_magnet: null,
     magnets_json: null,
-    video_code: taskOverride?.video_code || r.video_code,
-    title: taskOverride?.title || r.title,
-    poster_url: taskOverride?.poster_url || r.cover_url || null,
-    thumbnail_urls: taskOverride?.thumbnail_urls || fallbackThumbs,
+    // 优先用 task 的真实番号/标题，没有则用 ranking 概览
+    video_code: r.task_video_code || r.video_code,
+    title: r.task_title || r.title,
+    poster_url: r.task_poster_url || r.cover_url || null,
+    thumbnail_urls: r.task_thumbnail_urls || fallbackThumbs,
     synopsis: null,
     description: null,
-    actors: taskOverride?.actors || null,
-    tags: taskOverride?.tags || null,
-    release_date: taskOverride?.release_date || null,
+    actors: null,
+    tags: null,
+    release_date: null,
     duration: null,
     director: null,
     maker: null,
     label: null,
     series: null,
-    rating: taskOverride?.rating || r.score || null,
+    rating: r.score || null,
     file_size: null,
     is_favorite: 0 as 0 | 1,
     favorite_at: null,
