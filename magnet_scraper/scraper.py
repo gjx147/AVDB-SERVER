@@ -1028,6 +1028,19 @@ class MagnetScraper:
             except Exception:
                 pass
 
+        # JavDB 规律（实测验证）：第一张预览图 _l_0 是封面小缩略图（147x200），
+        # 不是真正的高清预览图。真正的高清预览图从 _l_1 开始（800x534 级别）。
+        # 过滤掉这种小缩略图，保留真正的高清预览图。
+        if thumbnails:
+            import re
+            def _is_cover_thumb(url):
+                """识别 JavDB 封面小缩略图：samples/xx/xxx_l_0.jpg 或 _s_0.jpg"""
+                return bool(re.search(r'/samples/[^/]+_[ls]_0\.jpg', url))
+            filtered = [u for u in thumbnails if not _is_cover_thumb(u)]
+            # 只有当过滤后仍有图片时才应用过滤（避免全部被滤掉导致空列表）
+            if filtered:
+                return filtered
+
         return thumbnails
 
     def _extract_synopsis(self) -> Optional[str]:

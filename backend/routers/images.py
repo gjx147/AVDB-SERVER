@@ -70,11 +70,14 @@ def list_thumbnails(task_id: int, db: DbSession):
     from models import Task
     task = db.get(Task, task_id)
     if task and task.thumbnail_urls:
-        import json
+        import json, re
         try:
             urls = json.loads(task.thumbnail_urls)
             if isinstance(urls, list) and urls:
-                return {"thumbnails": urls, "count": len(urls)}
+                # 过滤 JavDB 封面小缩略图（_l_0 / _s_0 = 147x200，非真正预览图）
+                cover_thumb_re = re.compile(r"/samples/[^/]+_[ls]_0\.jpg")
+                filtered = [u for u in urls if not cover_thumb_re.search(u)] or urls
+                return {"thumbnails": filtered, "count": len(filtered)}
         except Exception:
             pass
     return {"thumbnails": [], "count": 0}
@@ -161,6 +164,13 @@ def hires_download(task_id: int, db: DbSession):
                 thumb_urls = [u for u in arr if isinstance(u, str) and u.startswith("http")]
         except Exception:
             pass
+    # 过滤 JavDB 封面小缩略图（_l_0 / _s_0 = 147x200，非真正预览图）
+    # 实测规律：所有任务第一张 _l_0 都是封面缩略图，高清预览图从 _l_1 开始
+    import re
+    cover_thumb_re = re.compile(r"/samples/[^/]+_[ls]_0\.jpg")
+    filtered = [u for u in thumb_urls if not cover_thumb_re.search(u)]
+    if filtered:
+        thumb_urls = filtered
     poster_url = task.poster_url
 
     total_found = len(thumb_urls) + (1 if poster_url else 0)
