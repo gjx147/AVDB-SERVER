@@ -158,6 +158,10 @@ class ActorScraper:
             if not self.store.task_exists_with_url(movie_url):
                 self.store.add_pending_urls(src["id"], [movie_url])
                 tasks_added += 1
+            # 建立 actor↔task 关联（无论新建还是已存在，确保演员详情页作品列表有数据）
+            task_row = self.store.get_task_by_url(movie_url)
+            if task_row:
+                self.store.link_actor_movie(actor_id, task_row["id"])
 
         logger.info(f"演员 {name} 入库完成: actor_id={actor_id}, movies={len(movies)}, tasks_added={tasks_added}")
 

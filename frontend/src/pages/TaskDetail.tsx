@@ -23,33 +23,31 @@ export function TaskDetail() {
   const [hasLocal, setHasLocal] = useState(false)
   const [imgVersion, setImgVersion] = useState(0)
   const [dlDownloader, setDlDownloader] = useState('')  // '' = 使用默认
-  const reqSeqRef = useRef(0)  // P1-6: 请求序号防竞态
-  const timersRef = useRef<number[]>([])  // P0-4: 用 ref 跟踪 timers
-  const downloadingRef = useRef(false)  // P0-4: ref 避免自我取消
+  const reqSeqRef = useRef(0)  // 请求序号防竞态（快速切换任务时丢弃过期响应）
 
   const load = () => {
     if (!id) return
-    downloadingRef.current = false
+    const reqId = ++reqSeqRef.current
     setHasLocal(false)
     setDownloading(false)
-    // P1-8: 切换任务时清理 pending 定时器
-    timersRef.current.forEach(clearTimeout)
-    timersRef.current = []
     api.tasks.get(+id).then(async (t) => {
+      if (reqId !== reqSeqRef.current) return  // 丢弃过期响应
       // 单独加载磁力列表（TaskOut 不含 magnets 字段）
       try {
         const resp = await api.tasks.magnets(+id)
+        if (reqId !== reqSeqRef.current) return
         t.magnets = (resp && Array.isArray(resp.magnets)) ? resp.magnets : []
       } catch { /* ignore */ }
       setTask(t); loadThumbs(+id)
       // 加载女主演关联（按 task.actors 名字查 actors 表拿头像）
-      api.tasks.cast(+id).then(setCast).catch(() => setCast([]))
-    }).catch(() => setTask(null))
+      api.tasks.cast(+id).then((c) => { if (reqId === reqSeqRef.current) setCast(c) }).catch(() => { if (reqId === reqSeqRef.current) setCast([]) })
+    }).catch(() => { if (reqId === reqSeqRef.current) setTask(null) })
   }
   const loadThumbs = (tid: number) => {
-    api.images.thumbnails(tid).then((r: ThumbnailsResponse) => { setThumbs(r.thumbnails); setActiveThumb(0) }).catch(() => setThumbs([]))
+    const reqId = reqSeqRef.current
+    api.images.thumbnails(tid).then((r: ThumbnailsResponse) => { if (reqId === reqSeqRef.current) { setThumbs(r.thumbnails); setActiveThumb(0) } }).catch(() => { if (reqId === reqSeqRef.current) setThumbs([]) })
     // 检查是否有本地高清缓存
-    api.images.hasLocalThumbs(tid).then((r) => setHasLocal(r.has_local)).catch(() => setHasLocal(false))
+    api.images.hasLocalThumbs(tid).then((r) => { if (reqId === reqSeqRef.current) setHasLocal(r.has_local) }).catch(() => { if (reqId === reqSeqRef.current) setHasLocal(false) })
   }
   useEffect(load, [id])
 
@@ -101,9 +99,6 @@ export function TaskDetail() {
   }, [id])
 
   // 自动缓存已禁用：用户手动点「重新下载高清图片」才下载
-  useEffect(() => {
-    return () => { timersRef.current.forEach(clearTimeout); timersRef.current = [] }
-  }, [])
 
   if (task === undefined) return <div className="page"><Loading /></div>
   if (task === null) return <div className="page"><Empty title="任务不存在" /></div>
@@ -131,21 +126,20 @@ export function TaskDetail() {
       load()  // 刷新下载状态
     } catch (e) { toastErr(String((e as Error).message)) }
   }
-  // 图片爬取：重新抓取页面高清预览图，下载到本地缓存（自动/手动共用）
+  // 图片爬取：重新抓取页面高清预览图，下载到本地缓存（手动触发）
   const fetchImages = async (silent = false) => {
-    downloadingRef.current = true
     setDownloading(true)
     try {
       const r = await api.images.downloadHires(task.id)
       setImgVersion((v) => v + 1)
-      setHasLocal(true)  // P1#7: 直接标记已有本地缓存，而非调 load()（load 会重置 hasLocal→触发自动缓存 effect 重复下载）
+      setHasLocal(true)
       loadThumbs(task.id)
       if (!silent) toastOk(r.message || `已下载 ${r.downloaded.thumbnails} 张高清预览图`)
       return true
     } catch (e) {
       if (!silent) toastErr(String((e as Error).message))
       return false
-    } finally { downloadingRef.current = false; setDownloading(false) }
+    } finally { setDownloading(false) }
   }
 
   // 自动缓存逻辑已移到条件 return 之前（React Hooks 规则）
@@ -161,7 +155,7 @@ export function TaskDetail() {
     <div className="page">
       {/* emby 风格背景：gallery-1（index 0）全屏模糊 */}
       <div className="detail-bg">
-        <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt=""
+        <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remoteBackdrop) e.currentTarget.src = remoteBackdrop; else e.currentTarget.style.opacity = '0' }} />
       </div>
 
@@ -174,6 +168,7 @@ export function TaskDetail() {
           <img
             src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
             alt={`${task.video_code || '作品'} 海报`}
+            referrerPolicy="no-referrer"
             onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
             onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
           />
@@ -261,6 +256,7 @@ export function TaskDetail() {
                 <img
                   src={hasLocal ? `${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}` : thumbs[activeThumb]}
                   alt={`${task.video_code || '作品'} 预览图 ${activeThumb + 1}`}
+                  referrerPolicy="no-referrer"
                   style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'cover', imageRendering: 'auto' }}
                   onError={(e) => { e.currentTarget.style.opacity = '0.2' }}
                 />
@@ -286,7 +282,7 @@ export function TaskDetail() {
               {thumbs.length > 1 && (
                 <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
                   {thumbs.map((u, i) => (
-                    <img key={i} src={hasLocal ? `${thumbFileUrl(task.id, i)}?v=${imgVersion}` : u} alt={`${task.video_code || '作品'} 预览图 ${i + 1}`} loading="lazy" onClick={() => setActiveThumb(i)}
+                    <img key={i} src={hasLocal ? `${thumbFileUrl(task.id, i)}?v=${imgVersion}` : u} alt={`${task.video_code || '作品'} 预览图 ${i + 1}`} loading="lazy" referrerPolicy="no-referrer" onClick={() => setActiveThumb(i)}
                       style={{
                         width: 72, height: 48, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', flex: 'none',
                         border: i === activeThumb ? '2px solid var(--gold)' : '2px solid transparent', opacity: i === activeThumb ? 1 : .6,
@@ -401,7 +397,7 @@ export function TaskDetail() {
                 style={{ cursor: 'pointer', transition: 'transform .2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>
-                <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''}
+                <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''} referrerPolicy="no-referrer"
                   style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'right center', borderRadius: 'var(--r-md)' }}
                   onError={(e) => { if (sRemote && e.currentTarget.src !== sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>

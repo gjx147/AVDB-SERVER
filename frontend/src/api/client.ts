@@ -69,9 +69,6 @@ export const api = {
     get: (id: number) =>
       http.get<TaskDetail>(`/api/tasks/${id}`).then((r) => r.data),
 
-    createByCode: (list_code: string, video_code: string) =>
-      http.post<Task>('/api/tasks/create-by-code', { list_code, video_code }).then((r) => r.data),
-
     extract: (id: number) =>
       http.post<ApiOk>(`/api/tasks/${id}/extract`).then((r) => r.data),
 
@@ -89,9 +86,6 @@ export const api = {
 
     note: (id: number, note: string) =>
       http.patch<ApiOk>(`/api/tasks/${id}/note`, { note }).then((r) => r.data),
-
-    setStatus: (id: number, status: string) =>
-      http.patch<ApiOk>(`/api/tasks/${id}/status`, { status }).then((r) => r.data),
 
     remove: (id: number) =>
       http.delete<ApiOk>(`/api/tasks/${id}`).then((r) => r.data),
@@ -123,8 +117,6 @@ export const api = {
       http.get<ListSourceWithStats[]>('/api/list-sources').then((r) => r.data),
     create: (body: ListSourceCreate) =>
       http.post<ListSource>('/api/list-sources', body).then((r) => r.data),
-    get: (id: number) =>
-      http.get<ListSourceWithStats>(`/api/list-sources/${id}`).then((r) => r.data),
     remove: (id: number) =>
       http.delete<ApiOk>(`/api/list-sources/${id}`).then((r) => r.data),
     magnets: (id: number) =>
@@ -157,8 +149,6 @@ export const api = {
       http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`).then((r) => r.data),
     crawlSearch: (actor_name: string) =>
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
-    refresh: (id: number) =>
-      http.post<ApiOk>(`/api/actors/${id}/refresh`).then((r) => r.data),
   },
 
   // ════════ Rankings ════════
@@ -225,8 +215,6 @@ export const api = {
       http.post<ApiOk & { actor_id: number; is_followed: number }>(`/api/actors/${actorId}/follow`).then((r) => r.data),
     unfollow: (actorId: number) =>
       http.post<ApiOk & { actor_id: number; is_followed: number }>(`/api/actors/${actorId}/unfollow`).then((r) => r.data),
-    followed: () =>
-      http.get<{ actors: Array<{ id: number; name: string; name_en: string | null; avatar_url: string | null; movie_count: number; local_movie_count: number }> }>('/api/actors/followed').then((r) => r.data),
   },
 
   // ════════ Collections 收藏分组（F13）════════
@@ -247,10 +235,6 @@ export const api = {
   },
 
   // ════════ Tasks 编辑（F20）════════
-  tasksEdit: {
-    update: (taskId: number, fields: Partial<Pick<Task, 'title' | 'actors' | 'tags' | 'release_date' | 'director' | 'maker' | 'label' | 'series' | 'duration' | 'note' | 'video_code'>>) =>
-      http.patch<{ ok: boolean; updated: string[] }>(`/api/tasks/${taskId}`, fields).then((r) => r.data),
-  },
   v2: {
     tasks: (params: {
       status?: string; list_source_id?: number; actor?: string; tag?: string; date_from?: string; date_to?: string;
@@ -265,29 +249,8 @@ export const api = {
   },
 
   // ════════ View Status（Phase 2：viewed/browsed/want 三态）════════
-  status: {
-    stats: () => http.get<{ total: number; by_status: Record<string, number>; unmarked: number }>('/api/status/stats').then((r) => r.data),
-    list: (status: 'viewed' | 'browsed' | 'want', page = 1, page_size = 20) =>
-      http.get<{ total: number; page: number; page_size: number; items: Task[] }>(`/api/status/${status}`, { params: { page, page_size } }).then((r) => r.data),
-    batch: (taskIds: number[], status: 'viewed' | 'browsed' | 'want' | '') =>
-      http.post<{ ok: boolean; updated: number }>('/api/status/batch', { task_ids: taskIds, status }).then((r) => r.data),
-  },
 
   // ════════ Actors（Phase 2）════════
-  actorsNew: {
-    list: (params: { q?: string; followed?: boolean; blacklisted?: boolean; page?: number; page_size?: number } = {}) =>
-      http.get<{ total: number; page: number; page_size: number; items: Actor[] }>('/api/actors', { params }).then((r) => r.data),
-    detail: (id: number) =>
-      http.get<Actor & { movie_ids: number[] }>(`/api/actors/${id}`).then((r) => r.data),
-    toggleFollow: (id: number) =>
-      http.post<{ ok: boolean; is_followed: boolean }>(`/api/actors/${id}/follow`).then((r) => r.data),
-    toggleBlacklist: (id: number) =>
-      http.post<{ ok: boolean; is_blacklisted: boolean }>(`/api/actors/${id}/blacklist`).then((r) => r.data),
-    delete: (id: number) =>
-      http.delete<{ ok: boolean }>(`/api/actors/${id}`).then((r) => r.data),
-    movies: (id: number) =>
-      http.get<{ id: number; video_code: string; title: string; status: string }[]>(`/api/actors/${id}/movies`).then((r) => r.data),
-  },
 
   // ════════ Rankings（Phase 2）════════
   rankingsNew: {
@@ -299,12 +262,6 @@ export const api = {
   },
 
   // ════════ Aggregate（Phase 2：多源元数据补充）════════
-  aggregate: {
-    enrich: (taskId: number, overwrite = false) =>
-      http.post<{ ok: boolean; changed: boolean; source: string; title?: string; rating?: number }>(
-        `/api/aggregate/${taskId}`, null, { params: { overwrite } },
-      ).then((r) => r.data),
-  },
 
   // ════════ Subscriptions（Phase 3：多维订阅）════════
   subscriptions: {
@@ -320,121 +277,34 @@ export const api = {
   },
 
   // ════════ Insights（Phase 3：数据洞察/月报）════════
-  insights: {
-    stats: (month?: string) =>
-      http.get<Record<string, unknown>>('/api/insights/stats', { params: { month } }).then((r) => r.data),
-    createReport: (month: string) =>
-      http.post<Record<string, unknown>>(`/api/insights/reports/${month}`).then((r) => r.data),
-    getReport: (month: string) =>
-      http.get<Record<string, unknown>>(`/api/insights/reports/${month}`).then((r) => r.data),
-  },
 
   // ════════ Notify（Phase 3：通知测试）════════
-  notifyNew: {
-    test: () => http.post<Record<string, boolean>>('/api/notify/test').then((r) => r.data),
-  },
 
   // ════════ Scheduler（Phase 3：调度状态）════════
-  schedulerStatus: {
-    jobs: () => http.get<{ jobs: Array<{ id: string; next_run: string | null; trigger: string }> }>('/api/scheduler/jobs').then((r) => r.data),
-  },
 
   // ════════ AI（Phase 4：翻译/标签/摘要/增强）════════
-  aiNew: {
-    translate: (text: string, model?: string) =>
-      http.post<{ ok: boolean; translated: string }>('/api/ai/translate', { text, model }).then((r) => r.data),
-    tags: (text: string, model?: string) =>
-      http.post<{ ok: boolean; tags: string[] }>('/api/ai/tags', { text, model }).then((r) => r.data),
-    summary: (text: string, model?: string) =>
-      http.post<{ ok: boolean; summary: string }>('/api/ai/summary', { text, model }).then((r) => r.data),
-    enrich: (taskId: number) =>
-      http.post<{ ok: boolean; translated: string; tags: string[]; changed: boolean }>(`/api/ai/enrich/${taskId}`).then((r) => r.data),
-  },
 
   // ════════ Content Filter（Phase 4：过滤规则）════════
-  filters: {
-    listRules: () => http.get<unknown[]>('/api/filters/rules').then((r) => r.data),
-    createRule: (body: Record<string, unknown>) => http.post('/api/filters/rules', body).then((r) => r.data),
-    updateRule: (id: number, body: Record<string, unknown>) => http.put(`/api/filters/rules/${id}`, body).then((r) => r.data),
-    deleteRule: (id: number) => http.delete(`/api/filters/rules/${id}`).then((r) => r.data),
-    apply: (listSourceId?: number, limit = 100) =>
-      http.post('/api/filters/apply', null, { params: { list_source_id: listSourceId, limit } }).then((r) => r.data),
-  },
 
   // ════════ Media Server（Phase 4：Emby/Jellyfin 在库）════════
-  mediaServerNew: {
-    check: (videoCode: string) => http.get<{ video_code: string; in_library: boolean }>(`/api/media-server/check/${videoCode}`).then((r) => r.data),
-    sync: (limit = 200) => http.post<{ ok: boolean; checked: number; in_library: number }>('/api/media-server/sync', null, { params: { limit } }).then((r) => r.data),
-  },
 
   // ════════ Images（Phase 4：高清图文件服务）════════
-  imagesNew: {
-    posterUrl: (taskId: number) => `/api/images/poster/${taskId}`,
-    backdropUrl: (taskId: number) => `/api/images/backdrop/${taskId}`,
-    thumbUrl: (taskId: number, index: number) => `/api/images/thumb/${taskId}/${index}`,
-    thumbnails: (taskId: number) => http.get<{ thumbnails: string[]; count: number }>(`/api/images/thumbnails/${taskId}`).then((r) => r.data),
-  },
 
   // ════════ Favorites/Collections（Phase 4：RESTful 收藏分组）════════
-  favoritesNew: {
-    list: () => http.get<{ total: number; items: Task[] }>('/api/favorites').then((r) => r.data),
-    listCollections: () => http.get<Array<{ id: number; name: string; description: string | null; task_count: number }>>('/api/collections').then((r) => r.data),
-    createCollection: (name: string, description?: string) => http.post('/api/collections', { name, description }).then((r) => r.data),
-    deleteCollection: (id: number) => http.delete(`/api/collections/${id}`).then((r) => r.data),
-    addTask: (collectionId: number, taskId: number) => http.post(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
-    removeTask: (collectionId: number, taskId: number) => http.delete(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
-  },
 
   // ════════ Downloaders（Phase 5：磁力推送）════════
-  downloadersNew: {
-    push: (magnet: string, downloader: string, taskId?: number) =>
-      http.post<{ ok: boolean; download_id: number; message?: string }>('/api/downloaders/push', { magnet, downloader, task_id: taskId }).then((r) => r.data),
-    test: (downloader: string) =>
-      http.get<{ ok: boolean; version?: string; message?: string }>('/api/downloaders/test', { params: { downloader } }).then((r) => r.data),
-  },
 
   // ════════ Downloads（Phase 5：下载历史）════════
-  downloadsNew: {
-    list: (params: { status?: string; downloader?: string; page?: number; page_size?: number } = {}) =>
-      http.get<{ total: number; page: number; page_size: number; items: unknown[] }>('/api/downloads', { params }).then((r) => r.data),
-    stats: () => http.get<{ by_status: Record<string, number>; by_downloader: Record<string, number> }>('/api/downloads/stats').then((r) => r.data),
-  },
 
   // ════════ Settings（Phase 5：配置中心）════════
-  settingsNew: {
-    get: () => http.get<Record<string, string>>('/api/settings').then((r) => r.data),
-    update: (body: Record<string, string>) => http.put<{ ok: boolean; updated: number; skipped_sentinel: number }>('/api/settings', body).then((r) => r.data),
-  },
 
   // ════════ Dashboard（Phase 5：聚合统计）════════
-  dashboardNew: {
-    stats: () => http.get<Record<string, unknown>>('/api/dashboard/stats').then((r) => r.data),
-    recent: (limit = 12) => http.get<unknown[]>('/api/dashboard/recent', { params: { limit } }).then((r) => r.data),
-  },
 
   // ════════ V2（Phase 5：多维筛选/相似/分析）════════
-  v2New: {
-    tasks: (params: { status?: string; actor?: string; tag?: string; maker?: string; min_rating?: number; sort?: string; limit?: number; offset?: number }) =>
-      http.get<{ tasks: Task[]; total: number }>('/api/v2/tasks', { params }).then((r) => r.data),
-    similar: (taskId: number) => http.get<{ tasks: Task[]; total: number }>(`/api/v2/tasks/${taskId}/similar`).then((r) => r.data),
-    analytics: () => http.get<Record<string, unknown>>('/api/v2/analytics').then((r) => r.data),
-  },
 
   // ════════ Drive115（Phase 6：115网盘）════════
-  drive115New: {
-    authInit: () => http.post('/api/drive115/auth/init').then((r) => r.data),
-    authPoll: (uid: string, sign: string) => http.get('/api/drive115/auth/poll', { params: { uid, sign } }).then((r) => r.data),
-    authExchange: (uid: string) => http.post('/api/drive115/auth/exchange', null, { params: { uid } }).then((r) => r.data),
-    offlineAdd: (magnet: string) => http.post('/api/drive115/offline/add', { magnet }).then((r) => r.data),
-    offlineTasks: () => http.get('/api/drive115/offline/tasks').then((r) => r.data),
-    quota: () => http.get('/api/drive115/quota').then((r) => r.data),
-  },
 
   // ════════ Magnet Search（Phase 6：多源搜索）════════
-  magnetSearchNew: {
-    search: (code: string, sources?: string) =>
-      http.get<{ total: number; by_source: Record<string, unknown[]>; items: unknown[] }>(`/api/magnet-search/${code}`, { params: { sources } }).then((r) => r.data),
-  },
 
   // ════════ Settings (original AVDB) ════════
   settings: {
@@ -455,9 +325,6 @@ export const api = {
   images: {
     thumbnails: (taskId: number) =>
       http.get<ThumbnailsResponse>(`/api/images/thumbnails/${taskId}`).then((r) => r.data),
-    download: (taskId: number) =>
-      http.post<DownloadImagesResult>(`/api/images/download/${taskId}`).then((r) => r.data),
-    /** 重新抓取高清预览图（从页面 tile-item href）并下载到本地 */
     downloadHires: (taskId: number) =>
       http.post<{ ok: boolean; message: string; downloaded: { cover: boolean; thumbnails: number; total_found: number } }>(
         `/api/images/hires/download-hires/${taskId}`,

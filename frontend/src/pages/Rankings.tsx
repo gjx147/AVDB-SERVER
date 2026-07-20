@@ -205,7 +205,7 @@ export function Rankings() {
             const r = list!.find((x) => x.id === t._ranking_id)!
             return (
               <div className="row-item" key={t._ranking_id} onClick={() => openRank(r)}>
-                <img className="row-thumb" src={coverFileUrl(t._task_id || 0)}
+                <img className="row-thumb" src={coverFileUrl(t._task_id || 0)} referrerPolicy="no-referrer"
                   alt={`${t.video_code || '作品'} 封面`}
                   onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div>

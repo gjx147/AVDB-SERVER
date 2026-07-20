@@ -71,6 +71,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           src={imgSrc}
           alt={task.video_code || ''}
           loading="lazy"
+          referrerPolicy="no-referrer"
           style={centerImage ? { objectPosition: 'center center' } : undefined}
           onLoad={(e) => { e.currentTarget.classList.add('loaded') }}
           onError={handleImgError}

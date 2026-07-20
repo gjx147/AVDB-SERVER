@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     view_status TEXT,
     viewed_at TEXT,
     download_status TEXT,
+    ai_title_translated TEXT,
+    ai_tags TEXT,
+    media_in_library INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (list_source_id) REFERENCES list_sources(id)
@@ -89,9 +92,16 @@ CREATE TABLE IF NOT EXISTS actors (
     avatar_url TEXT,
     avatar_local TEXT,
     gender TEXT,
+    birth_date TEXT,
+    height TEXT,
+    cup TEXT,
+    measurements TEXT,
+    debut_date TEXT,
+    movie_count INTEGER,
     is_followed INTEGER NOT NULL DEFAULT 0,
     is_blacklisted INTEGER NOT NULL DEFAULT 0,
-    movie_count INTEGER,
+    source_url TEXT,
+    note TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -98,7 +98,7 @@ export function Dashboard() {
               <div className="recent-item" key={t.id} onClick={() => nav(`/task/${t.id}`)}
                 tabIndex={0} role="button" aria-label={`查看 ${t.video_code || '作品'} 详情`}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
-                <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`}
+                <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
                   onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div className="recent-meta">
                   <div className="recent-code">{t.video_code || '—'}</div>

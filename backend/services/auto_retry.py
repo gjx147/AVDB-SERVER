@@ -62,9 +62,13 @@ async def run_retry_cycle() -> dict:
 
         # 触发 scraper extract（非阻塞，不等完成）
         try:
-            from services.auto_crawl import _run_scraper
-            import asyncio
-            asyncio.create_task(_run_scraper(["extract", "--failed-only"]))
+            from services import scraper_lock
+            if scraper_lock.is_running():
+                logger.warning("自动重试: 已有爬取在运行，跳过 extract 触发")
+            else:
+                from services.auto_crawl import _run_scraper
+                import asyncio
+                asyncio.create_task(_run_scraper(["extract", "--failed-only"]))
         except Exception as e:
             logger.warning("自动重试: 触发 extract 失败: %s", e)
 

@@ -39,9 +39,14 @@ async def run_ranking_crawl_cycle() -> dict:
 
         logger.info("排行榜自动爬取: %s", rank_types)
 
+        # 检查全局锁：手动触发的 scraper 在跑则跳过
+        from services import scraper_lock
+        if scraper_lock.is_running():
+            logger.warning("手动爬取进行中，跳过自动排行爬取")
+            return {"ok": False, "message": "手动爬取进行中"}
+
         # 逐个触发 ranking 爬取
         from services.auto_crawl import _run_scraper
-        import asyncio
         results = []
         for rt in rank_types:
             ok = await _run_scraper(["ranking", "--rank-type", rt, "--max-pages", "5"])

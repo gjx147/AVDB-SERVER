@@ -125,6 +125,11 @@ async def run_scan_cycle() -> dict:
     if _state["running"]:
         logger.warning("已有爬取在运行，跳过本次")
         return {"ok": False, "message": "已在运行"}
+    # 检查全局锁：手动触发的 scraper 在跑则跳过（避免并发互踩浏览器）
+    from services import scraper_lock
+    if scraper_lock.is_running():
+        logger.warning("手动爬取进行中，跳过自动 scan")
+        return {"ok": False, "message": "手动爬取进行中"}
     _state["running"] = True
     _state["current"] = "scan"
     results = []
@@ -154,6 +159,10 @@ async def run_extract_cycle() -> dict:
     """对所有列表源执行一轮 extract。"""
     if _state["running"]:
         return {"ok": False, "message": "已在运行"}
+    from services import scraper_lock
+    if scraper_lock.is_running():
+        logger.warning("手动爬取进行中，跳过自动 extract")
+        return {"ok": False, "message": "手动爬取进行中"}
     _state["running"] = True
     _state["current"] = "extract"
     results = []

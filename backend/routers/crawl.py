@@ -23,12 +23,9 @@ from pydantic import BaseModel
 from config import get_settings
 from deps import CurrentUser, DbSession
 from sqlalchemy import select
+from services import scraper_lock
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
-
-# 进程级状态（内存中维护当前运行的 scraper 进程）
-_running_proc: subprocess.Popen | None = None
-_running_info: dict = {}
 
 # 默认超时（30 分钟）
 _DEFAULT_TIMEOUT = 1800
@@ -147,8 +144,7 @@ def _kill_process_tree(proc: subprocess.Popen) -> None:
 @router.post("/scan")
 def start_scan(req: CrawlRequest, _user: CurrentUser):
     """启动扫描（subprocess 调 scraper.py scan）。"""
-    global _running_proc, _running_info
-    if _running_proc and _running_proc.poll() is None:
+    if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     cmd = ["scan", "--list-source-id", str(req.list_source_id)]
@@ -156,19 +152,17 @@ def start_scan(req: CrawlRequest, _user: CurrentUser):
         cmd += ["-p", str(req.pages)]
 
     proc = _start_scraper(cmd)
-    _running_proc = proc
-    _running_info = {
+    scraper_lock.set_proc(proc, {
         "list_source_id": req.list_source_id, "mode": "scan", "pid": proc.pid,
         "started_at": _now_iso(),
-    }
+    })
     return {"ok": True, "pid": proc.pid, "mode": "scan"}
 
 
 @router.post("/extract")
 def start_extract(req: CrawlRequest, _user: CurrentUser):
     """启动提取（subprocess 调 scraper.py extract）。"""
-    global _running_proc, _running_info
-    if _running_proc and _running_proc.poll() is None:
+    if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     cmd = ["extract", "--list-source-id", str(req.list_source_id)]
@@ -178,29 +172,29 @@ def start_extract(req: CrawlRequest, _user: CurrentUser):
         cmd += ["--failed-only"]
 
     proc = _start_scraper(cmd)
-    _running_proc = proc
-    _running_info = {
+    scraper_lock.set_proc(proc, {
         "list_source_id": req.list_source_id, "mode": "extract", "pid": proc.pid,
         "started_at": _now_iso(),
-    }
+    })
     return {"ok": True, "pid": proc.pid, "mode": "extract"}
 
 
 @router.get("/status")
 def crawl_status(_user: CurrentUser):
     """查询爬取状态：进程级（内存）+ 任务级（crawl_status.json）。"""
-    global _running_proc
-    proc_running = _running_proc is not None and _running_proc.poll() is None
+    proc = scraper_lock.get_proc()
+    info = scraper_lock.get_info()
+    proc_running = proc is not None and proc.poll() is None
 
     # 检查超时（清理僵尸进程）
-    if proc_running and _is_timed_out(_running_info):
-        _kill_process_tree(_running_proc)  # type: ignore
-        _running_proc = None
+    if proc_running and _is_timed_out(info):
+        _kill_process_tree(proc)  # type: ignore
+        scraper_lock.clear()
         proc_running = False
 
-    # 进程已退出但 _running_proc 未清理
-    if _running_proc is not None and _running_proc.poll() is not None:
-        _running_proc = None
+    # 进程已退出但锁未清理
+    if proc is not None and proc.poll() is not None:
+        scraper_lock.clear()
         proc_running = False
 
     # 读任务级状态文件
@@ -215,11 +209,11 @@ def crawl_status(_user: CurrentUser):
     return {
         "running": proc_running,
         "paused": False,
-        "process": _running_info if proc_running else None,
+        "process": info if proc_running else None,
         "task": task_status,
         # 兼容前端 CrawlStatus 类型
-        "list_code": _running_info.get("list_code") if proc_running else (task_status.get("list_code") if task_status else None),
-        "crawl_type": _running_info.get("mode") if proc_running else (task_status.get("crawl_type") if task_status else None),
+        "list_code": info.get("list_code") if proc_running else (task_status.get("list_code") if task_status else None),
+        "crawl_type": info.get("mode") if proc_running else (task_status.get("crawl_type") if task_status else None),
         "progress": task_status,
     }
 
@@ -246,33 +240,31 @@ def extract_failed(req: CrawlRequest, _user: CurrentUser):
 @router.post("/stop")
 def stop_crawl(_user: CurrentUser):
     """停止当前爬取进程（杀整个进程树）。"""
-    global _running_proc, _running_info
-    if _running_proc and _running_proc.poll() is None:
-        _kill_process_tree(_running_proc)
+    proc = scraper_lock.get_proc()
+    if proc and proc.poll() is None:
+        _kill_process_tree(proc)
         try:
-            _running_proc.wait(timeout=10)
+            proc.wait(timeout=10)
         except Exception:
             pass
-    _running_proc = None
-    _running_info = {}
+    scraper_lock.clear()
     return {"ok": True, "message": "已停止"}
 
 
 # scraper 回调端点（register/unregister，无需鉴权——子进程调用）
 @router.post("/register")
 def register(body: dict):
-    global _running_info
-    _running_info = {**_running_info, **body, "registered": True}
+    info = scraper_lock.get_info()
+    scraper_lock.set_proc(scraper_lock.get_proc(), {**info, **body, "registered": True})
     return {"ok": True}
 
 
 @router.post("/unregister")
 def unregister():
-    global _running_proc, _running_info
-    _running_info = {}
+    proc = scraper_lock.get_proc()
     # 进程结束，清理引用
-    if _running_proc and _running_proc.poll() is not None:
-        _running_proc = None
+    if proc and proc.poll() is not None:
+        scraper_lock.clear()
     return {"ok": True}
 
 
@@ -302,23 +294,22 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
     前端传 {rank_type, max_pages}，后端启动 scraper ranking 子命令。
     """
-    global _running_proc, _running_info
-    if _running_proc and _running_proc.poll() is None:
+    if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     rank_type = body.get("rank_type", "hot")
     valid_types = {"daily", "weekly", "monthly", "actor"}
     if rank_type not in valid_types:
+        scraper_lock.clear()  # 校验失败，释放锁
         raise HTTPException(status_code=400, detail=f"无效 rank_type，可选: {valid_types}")
     max_pages = str(body.get("max_pages", 5))
     cmd = ["ranking", "--rank-type", rank_type, "--max-pages", max_pages]
 
     proc = _start_scraper(cmd)
-    _running_proc = proc
-    _running_info = {
+    scraper_lock.set_proc(proc, {
         "mode": "ranking", "rank_type": rank_type, "pid": proc.pid,
         "started_at": _now_iso(),
-    }
+    })
     return {"ok": True, "pid": proc.pid, "mode": "ranking"}
 
 
@@ -327,17 +318,15 @@ def start_actor_crawl(actor_url: str) -> dict:
 
     检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
     """
-    global _running_proc, _running_info
-    if _running_proc and _running_proc.poll() is None:
+    if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     cmd = ["crawl-actor", "--actor-url", actor_url]
     proc = _start_scraper(cmd)
-    _running_proc = proc
-    _running_info = {
+    scraper_lock.set_proc(proc, {
         "mode": "actor", "actor_url": actor_url, "pid": proc.pid,
         "started_at": _now_iso(),
-    }
+    })
     return {"ok": True, "pid": proc.pid, "mode": "actor", "actor_url": actor_url}
 
 
