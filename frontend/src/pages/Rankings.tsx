@@ -196,7 +196,7 @@ export function Rankings() {
         <div className="gallery">
           {filtered.map((t) => {
             const r = list!.find((x) => x.id === t._ranking_id)!
-            return <PosterCard key={t._ranking_id} task={t} onClick={() => openRank(r)} />
+            return <PosterCard key={t._ranking_id} task={t} onClick={() => openRank(r)} centerImage={isActorTab} />
           })}
         </div>
       ) : (
