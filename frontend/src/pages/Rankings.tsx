@@ -28,7 +28,7 @@ type RankingTask = Task & {
  * 优先使用后端 join 的 task_* 真实数据（番号/标题/海报/缩略图），
  * 没有则用 ranking 概览数据 + cover_url fallback。
  */
-const toTask = (r: Ranking): RankingTask => {
+const toTask = (r: Ranking, isActor = false): RankingTask => {
   // 从 cover_url 推导出竖版预览图 URL
   // covers/eb/EbO6md.jpg → samples/eb/EbO6md_s_0.jpg
   let fallbackThumbs: string | null = null
@@ -42,7 +42,8 @@ const toTask = (r: Ranking): RankingTask => {
     id: r.task_id || 0,
     list_source_id: 0,
     url: '',
-    status: (r.task_status || (r.is_in_library ? 'visited' : 'pending')) as Task['status'],
+    // actor 类型：演员不是 task，无"待处理"概念，用 visited 避免显示"待处理"标签
+    status: (isActor ? 'visited' : (r.task_status || (r.is_in_library ? 'visited' : 'pending'))) as Task['status'],
     retry_count: 0,
     best_magnet: null,
     magnets_json: null,
@@ -147,7 +148,8 @@ export function Rankings() {
   }
 
   // ── 前端过滤 ──
-  const tasks: RankingTask[] = (list || []).map(r => toTask(r))
+  const isActorTab = tab === 'actor'
+  const tasks: RankingTask[] = (list || []).map(r => toTask(r, isActorTab))
   const filtered = tasks.filter((t) => {
     const q = searchQ.trim().toLowerCase()
     if (q && !(t.video_code || '').toLowerCase().includes(q)) return false
