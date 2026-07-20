@@ -16,6 +16,7 @@ export function TaskDetail() {
   const [dlOpen, setDlOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [similar, setSimilar] = useState<import('../api/types').Task[]>([])
+  const [cast, setCast] = useState<import('../api/types').CastMember[]>([])
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -41,6 +42,8 @@ export function TaskDetail() {
         t.magnets = (resp && Array.isArray(resp.magnets)) ? resp.magnets : []
       } catch { /* ignore */ }
       setTask(t); loadThumbs(+id)
+      // 加载女主演关联（按 task.actors 名字查 actors 表拿头像）
+      api.tasks.cast(+id).then(setCast).catch(() => setCast([]))
     }).catch(() => setTask(null))
   }
   const loadThumbs = (tid: number) => {
@@ -194,6 +197,34 @@ export function TaskDetail() {
           {downloading && !hasLocal && (
             <div style={{ fontSize: 12, color: 'var(--gold)', marginBottom: 20, padding: '8px 12px', background: 'var(--gold-wash)', borderRadius: 'var(--r-sm)' }}>
               正在下载高清图片，请稍候…
+            </div>
+          )}
+
+          {/* 女主演关联（头像+名字，点击跳转影视库按演员筛选） */}
+          {cast.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
+              {cast.map((c, i) => (
+                <div key={i} onClick={() => nav(`/library?q=${encodeURIComponent(c.name)}`)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 72, cursor: 'pointer' }}
+                  title={`查看 ${c.name} 的作品`}>
+                  <div style={{
+                    width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', flex: 'none',
+                    background: 'var(--bg-page)', border: '2px solid var(--line-hair)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--t-faint)', fontSize: 20, fontWeight: 600,
+                  }}>
+                    {c.avatar_url ? (
+                      <img src={c.avatar_url} alt={c.name} referrerPolicy="no-referrer"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                    ) : (c.name[0] || '?')}
+                  </div>
+                  <div style={{
+                    fontSize: 11, color: 'var(--t-mute)', marginTop: 6, textAlign: 'center',
+                    width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{c.name}</div>
+                </div>
+              ))}
             </div>
           )}
 

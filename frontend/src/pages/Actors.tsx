@@ -4,7 +4,6 @@ import type { Actor } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
-import { avatarUrl } from '../api/client'
 
 export function Actors() {
   const [actors, setActors] = useState<Actor[] | null>(null)
@@ -13,15 +12,17 @@ export function Actors() {
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set())
+  const [onlyWithAvatar, setOnlyWithAvatar] = useState(true)  // 默认只显示有头像的演员
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const load = useCallback((keyword?: string) => {
+  const load = useCallback((keyword?: string, withAvatar?: boolean) => {
     setActors(null)
     setError(null)
-    const p = keyword?.trim() ? api.actors.search(keyword.trim()) : api.actors.list(0, 120)
+    const wa = withAvatar !== undefined ? withAvatar : onlyWithAvatar
+    const p = keyword?.trim() ? api.actors.search(keyword.trim()) : api.actors.list(0, 120, wa)
     p.then(setActors).catch((e) => { setError(String((e as Error).message)); setActors([]) })
-  }, [])
+  }, [onlyWithAvatar])
   useEffect(() => { load() }, [load])
 
   // 加载已订阅的演员 id 集合（用于按钮状态）
@@ -102,6 +103,10 @@ export function Actors() {
             onChange={(e) => setKw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load(kw)} />
         </div>
         <button className="btn btn--ghost btn--sm" onClick={() => load(kw)}>搜索</button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={onlyWithAvatar} onChange={(e) => { setOnlyWithAvatar(e.target.checked); load(undefined, e.target.checked) }} />
+          只看有头像
+        </label>
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => load(kw)} /> :
@@ -114,7 +119,7 @@ export function Actors() {
               aria-label={`查看演员 ${a.name}`}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
               <div className="actor-photo">
-                {a.avatar_url ? <img src={avatarUrl(a.id)} alt={a.name} /> : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
+                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
                 {/* F9: 关注按钮 */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleFollow(a.id, a.is_followed) }}

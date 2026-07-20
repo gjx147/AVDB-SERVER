@@ -20,8 +20,9 @@ def list_actors(
     q: str | None = Query(None, description="按名字搜索"),
     followed: bool | None = Query(None, description="只看关注的"),
     blacklisted: bool | None = Query(None, description="只看拉黑的"),
+    with_avatar: bool | None = Query(None, description="只看有头像的（已爬详情）"),
 ):
-    """演员列表，支持名字搜索 + 关注/拉黑筛选 + 分页。"""
+    """演员列表，支持名字搜索 + 关注/拉黑/头像筛选 + 分页。"""
     stmt = select(Actor)
     count_stmt = select(func.count(Actor.id))
     if q:
@@ -35,6 +36,10 @@ def list_actors(
     if blacklisted is not None:
         stmt = stmt.where(Actor.is_blacklisted == blacklisted)
         count_stmt = count_stmt.where(Actor.is_blacklisted == blacklisted)
+    if with_avatar is True:
+        # 只显示有头像的演员（avatar_url 非空）
+        stmt = stmt.where(Actor.avatar_url.isnot(None), Actor.avatar_url != "")
+        count_stmt = count_stmt.where(Actor.avatar_url.isnot(None), Actor.avatar_url != "")
 
     offset, limit = pagination
     total = db.execute(count_stmt).scalar_one()

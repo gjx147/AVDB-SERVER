@@ -5,7 +5,7 @@
 import axios from 'axios'
 import type {
   Task, TaskDetail, TaskStats, ListSource, ListSourceWithStats, ListSourceCreate,
-  Actor, ActorMovie, Ranking, RankType, DashboardStats, MonthlyStat,
+  Actor, ActorMovie, CastMember, Ranking, RankType, DashboardStats, MonthlyStat,
   CrawlStatus, CrawlLogLine, Settings, SettingsUpdate, ApiOk,
   ThumbnailsResponse, DownloadImagesResult, Magnet,
   DownloadRecord, DiskInfo, NotifyTestResult,
@@ -78,6 +78,9 @@ export const api = {
     magnets: (id: number) =>
       http.get<{ magnets: Magnet[]; video_code: string }>(`/api/tasks/${id}/magnets`).then((r) => r.data),
 
+    cast: (id: number) =>
+      http.get<CastMember[]>(`/api/tasks/${id}/cast`).then((r) => r.data),
+
     favorite: (id: number) =>
       http.post<ApiOk>(`/api/tasks/${id}/favorite`).then((r) => r.data),
 
@@ -134,8 +137,8 @@ export const api = {
 
   // ════════ Actors ════════
   actors: {
-    list: (skip = 0, limit = 100) =>
-      http.get<Actor[]>('/api/actors', { params: { page: Math.floor(skip / limit) + 1, page_size: limit } }).then((r) => {
+    list: (skip = 0, limit = 100, withAvatar?: boolean) =>
+      http.get<Actor[]>('/api/actors', { params: { page: Math.floor(skip / limit) + 1, page_size: limit, with_avatar: withAvatar } }).then((r) => {
         const d = r.data as unknown
         return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
       }),

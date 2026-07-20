@@ -117,6 +117,13 @@ export interface ActorMovie {
   detail_url: string | null
 }
 
+/** 详情页女主演关联（按 task.actors 名字查 actors 表） */
+export interface CastMember {
+  id: number | null  // null = actors 表无记录（仅显示名字）
+  name: string
+  avatar_url: string | null
+}
+
 // ── Rankings ──
 export type RankType = 'daily' | 'weekly' | 'monthly' | 'actor'
 

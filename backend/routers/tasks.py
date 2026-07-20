@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from deps import CurrentUser, DbSession, Pagination
-from models import Task
+from models import Task, Actor
 from schemas import TaskListResponse, TaskOut
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -110,6 +110,34 @@ def get_task(task_id: int, db: DbSession, _user: CurrentUser):
     task = db.get(Task, task_id)
     if not task: raise HTTPException(status_code=404, detail="任务不存在")
     return task
+
+
+@router.get("/{task_id}/cast")
+def task_cast(task_id: int, db: DbSession, _user: CurrentUser):
+    """返回 task 的关联演员 [{id, name, avatar_url}]，按名字查 actors 表。
+
+    task.actors 是逗号分隔的名字字符串，这里逐个匹配 actors 表拿头像。
+    匹配策略：精确 name → LIKE 兜底。未匹配的返回 id=null（仅显示名字）。
+    """
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.actors:
+        return []
+    names = [n.strip() for n in task.actors.split(",") if n.strip()]
+    result = []
+    for name in names[:15]:  # 限制前 15 个，避免过多请求
+        actor = db.execute(select(Actor).where(Actor.name == name)).scalar_one_or_none()
+        if not actor:
+            # LIKE 兜底（处理空格/别名差异）
+            actor = db.execute(
+                select(Actor).where(Actor.name.like(f"%{name}%")).limit(1)
+            ).scalar_one_or_none()
+        if actor:
+            result.append({"id": actor.id, "name": actor.name, "avatar_url": actor.avatar_url})
+        else:
+            result.append({"id": None, "name": name, "avatar_url": None})
+    return result
 
 
 @router.post("/{task_id}/extract")

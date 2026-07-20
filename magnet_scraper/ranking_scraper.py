@@ -416,6 +416,7 @@ class RankingScraper:
             try:
                 actor_id = self.store.upsert_actor(
                     a["name"],
+                    source_url=a.get("actor_url"),
                     avatar_url=a.get("avatar_url"),
                     note=f"source_url: {a.get('actor_url', '')}",
                 )
