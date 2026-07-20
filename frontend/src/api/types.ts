@@ -111,6 +111,7 @@ export interface ActorMovie {
   video_code: string | null
   title: string | null
   poster_url: string | null
+  thumbnail_urls: string | null
   rating: string | null
   status: string | null
   is_favorite: 0 | 1

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Actor } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
@@ -6,6 +7,7 @@ import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
 export function Actors() {
+  const nav = useNavigate()
   const [actors, setActors] = useState<Actor[] | null>(null)
   const [kw, setKw] = useState('')
   const [adding, setAdding] = useState(false)
@@ -117,7 +119,9 @@ export function Actors() {
           {actors.map((a) => (
             <div className="actor" key={a.id} tabIndex={0} role="button"
               aria-label={`查看演员 ${a.name}`}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() } }}>
+              onClick={() => nav(`/actor/${a.id}`)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/actor/${a.id}`) } }}
+              style={{ cursor: 'pointer' }}>
               <div className="actor-photo">
                 {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
                 {/* F9: 关注按钮 */}

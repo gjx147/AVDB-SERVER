@@ -13,6 +13,7 @@ const Dashboard   = lazy(() => import('./pages/Dashboard').then(m => ({ default:
 const Library     = lazy(() => import('./pages/Library').then(m => ({ default: m.Library })))
 const Favorites   = lazy(() => import('./pages/Favorites').then(m => ({ default: m.Favorites })))
 const Actors      = lazy(() => import('./pages/Actors').then(m => ({ default: m.Actors })))
+const ActorDetail = lazy(() => import('./pages/ActorDetail').then(m => ({ default: m.ActorDetail })))
 const Rankings    = lazy(() => import('./pages/Rankings').then(m => ({ default: m.Rankings })))
 const ListSources = lazy(() => import('./pages/ListSources').then(m => ({ default: m.ListSources })))
 const Crawl       = lazy(() => import('./pages/Crawl').then(m => ({ default: m.Crawl })))
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/library" element={<Library />} />
             <Route path="/favorites" element={<Favorites />} />
             <Route path="/actors" element={<Actors />} />
+            <Route path="/actor/:id" element={<ActorDetail />} />
             <Route path="/rankings" element={<Rankings />} />
             <Route path="/sources" element={<ListSources />} />
             <Route path="/crawl" element={<Crawl />} />

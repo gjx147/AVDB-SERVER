@@ -128,7 +128,11 @@ def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: i
     if not task_ids:
         return []
     tasks = db.execute(select(Task).where(Task.id.in_(task_ids)).order_by(Task.id.desc())).scalars().all()
-    return [{"id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status} for t in tasks]
+    return [{
+        "id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status,
+        "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
+        "rating": t.rating, "is_favorite": int(t.is_favorite),
+    } for t in tasks]
 
 
 @router.post("/{actor_id}/crawl-works")
