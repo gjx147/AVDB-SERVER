@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, thumbFileUrl, coverFileUrl, backdropUrl } from '../api/client'
 import type { TaskDetail as Task, ThumbnailsResponse } from '../api/types'
-import { Loading, Empty } from '../components/States'
+import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { MetaItem } from '../components/MetaItem'
 import { useStore } from '../store/useStore'
@@ -11,6 +11,7 @@ export function TaskDetail() {
   const { id } = useParams()
   const nav = useNavigate()
   const [task, setTask] = useState<Task | null | undefined>(undefined)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [thumbs, setThumbs] = useState<string[]>([])
   const [activeThumb, setActiveThumb] = useState(0)
   const [dlOpen, setDlOpen] = useState(false)
@@ -30,6 +31,7 @@ export function TaskDetail() {
     const reqId = ++reqSeqRef.current
     setHasLocal(false)
     setDownloading(false)
+    setLoadError(null)
     api.tasks.get(+id).then(async (t) => {
       if (reqId !== reqSeqRef.current) return  // 丢弃过期响应
       // 单独加载磁力列表（TaskOut 不含 magnets 字段）
@@ -41,7 +43,16 @@ export function TaskDetail() {
       setTask(t); loadThumbs(+id)
       // 加载女主演关联（按 task.actors 名字查 actors 表拿头像）
       api.tasks.cast(+id).then((c) => { if (reqId === reqSeqRef.current) setCast(c) }).catch(() => { if (reqId === reqSeqRef.current) setCast([]) })
-    }).catch(() => { if (reqId === reqSeqRef.current) setTask(null) })
+    }).catch((err: unknown) => {
+      if (reqId !== reqSeqRef.current) return
+      // 区分 404（任务不存在）和其他错误（网络/500）
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
+        setTask(null)
+      } else {
+        setLoadError('加载失败，请检查网络或后端服务')
+      }
+    })
   }
   const loadThumbs = (tid: number) => {
     const reqId = reqSeqRef.current
@@ -100,6 +111,7 @@ export function TaskDetail() {
 
   // 自动缓存已禁用：用户手动点「重新下载高清图片」才下载
 
+  if (loadError) return <div className="page"><ErrorEmpty message={loadError} onRetry={load} /></div>
   if (task === undefined) return <div className="page"><Loading /></div>
   if (task === null) return <div className="page"><Empty title="任务不存在" /></div>
 

@@ -146,7 +146,7 @@ export function ActorDetail() {
             return (
               <div key={m.id} className="poster" onClick={() => nav(`/task/${m.id}`)}
                 style={{ cursor: 'pointer' }} role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') nav(`/task/${m.id}`) }}>
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${m.id}`) } }}>
                 <div className="poster-frame">
                   <img src={coverFileUrl(m.id)} alt={m.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center' }}

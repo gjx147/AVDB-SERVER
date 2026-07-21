@@ -53,7 +53,12 @@ export function Downloads() {
       ) : (
         <div className="card">
           {data.downloads.map((d) => (
-            <div className="row-item" key={d.id} onClick={() => d.task_id && nav(`/task/${d.task_id}`)}>
+            <div className="row-item" key={d.id}
+              onClick={() => d.task_id && nav(`/task/${d.task_id}`)}
+              role={d.task_id ? "button" : undefined}
+              tabIndex={d.task_id ? 0 : undefined}
+              style={{ cursor: d.task_id ? 'pointer' : 'default' }}
+              onKeyDown={(e) => { if (d.task_id && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); nav(`/task/${d.task_id}`) } }}>
               <div style={{ flex: 1 }}>
                 <div className="row-code">{d.video_code || d.magnet.slice(0, 20)}</div>
                 <div className="row-title" style={{ fontSize: 11, color: 'var(--t-mute)' }}>

@@ -60,7 +60,7 @@ export default function App() {
   return (
     <div className={`app img-mode-${imgMode}`}>
       <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        aria-label={mobileMenuOpen ? '关闭菜单' : '打开菜单'}>
+        aria-label={mobileMenuOpen ? '关闭菜单' : '打开菜单'} aria-expanded={mobileMenuOpen}>
         {mobileMenuOpen ? '✕' : '☰'}
       </button>
       {mobileMenuOpen && <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />}

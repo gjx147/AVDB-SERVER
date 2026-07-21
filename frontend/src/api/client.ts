@@ -36,7 +36,6 @@ http.interceptors.response.use(
 )
 
 // ── 图片 URL 构造（本地缓存直读）──
-export const avatarUrl = (actorId: number) => `/api/images/avatar/${actorId}`
 
 
 // ════════ Dashboard ════════

@@ -27,7 +27,7 @@ export function Settings() {
     setProxyTesting(true)
     try {
       await save()
-      const proxyVal = (s as unknown as Record<string, string>).http_proxy || ''
+      const proxyVal = s.http_proxy || ''
       const r = await api.settings.testProxy(proxyVal)
       if (r.ok) toastOk(r.message)
       else toastErr(r.message)
@@ -81,8 +81,8 @@ export function Settings() {
                 <label htmlFor="http-proxy">代理地址</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                   <input id="http-proxy" className="input" placeholder="http://192.168.31.220:20171"
-                    value={(s as unknown as Record<string, string>).http_proxy || ''}
-                    onChange={(e) => upd({ http_proxy: e.target.value } as unknown as Partial<S>)} />
+                    value={s.http_proxy || ''}
+                    onChange={(e) => upd({ http_proxy: e.target.value })} />
                   <button className="btn btn--ghost btn--sm" onClick={testProxy} disabled={proxyTesting} style={{ whiteSpace: 'nowrap' }}>
                     {proxyTesting ? '测试中…' : '测试连接'}
                   </button>
@@ -180,12 +180,11 @@ function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastE
 
   useEffect(() => {
     api.settings.get().then((s) => {
-      const raw = s as unknown as Record<string, string>
-      setBarkKey(raw.notify_bark_key || '')
-      setTgToken(raw.notify_telegram_token || '')
-      setTgChat(raw.notify_telegram_chat_id || '')
-      setWebhook(raw.notify_webhook_url || '')
-      const ev = raw.notify_events || ''
+      setBarkKey(s.notify_bark_key || '')
+      setTgToken(s.notify_telegram_token || '')
+      setTgChat(s.notify_telegram_chat_id || '')
+      setWebhook(s.notify_webhook_url || '')
+      const ev = s.notify_events || ''
       setEvents(ev ? ev.split(',').map((e: string) => e.trim()).filter(Boolean) : [])
     }).catch(() => {})
   }, [])
@@ -196,7 +195,7 @@ function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastE
         notify_bark_key: barkKey, notify_telegram_token: tgToken,
         notify_telegram_chat_id: tgChat, notify_webhook_url: webhook,
         notify_events: events.join(','),
-      } as unknown as Partial<S>)
+      })
       toastOk('通知配置已保存')
     } catch (e) { toastErr(String((e as Error).message)) }
   }
