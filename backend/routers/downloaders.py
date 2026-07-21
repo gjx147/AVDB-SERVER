@@ -113,19 +113,57 @@ async def _push_aria2(magnet: str, config: dict) -> dict:
 
 
 async def _push_clouddrive(magnet: str, config: dict) -> dict:
-    """推送到 CloudDrive2（HTTP API 离线下载）。"""
+    """推送到 CloudDrive2（Connect-RPC JSON API 离线下载）。
+
+    CD2 使用 gRPC over HTTP/2（Connect 协议），但支持 JSON 编码：
+    POST /cloud.drive.CloudDrive/CreateOfflineTask
+    Content-Type: application/json
+    Body: {"magnet_url":"...", "parent_folder_id_or_path":"/path"}
+    鉴权：Bearer token（从用户名密码登录获取，或直接配置 API token）
+    """
     import httpx
     url = config.get("clouddrive_url", "")
     if not url:
         return {"ok": False, "message": "CloudDrive2 未配置"}
     save_path = config.get("clouddrive_save_path", "/")
-    # CloudDrive2 API: POST /api/v1/offline/tasks
-    api_url = url.rstrip("/") + "/api/v1/offline/tasks"
-    headers = {}
+
+    base = url.rstrip("/")
+    headers = {"Content-Type": "application/json"}
+
+    # 鉴权：优先用配置的 token；否则用用户名密码登录获取 token
     token = config.get("clouddrive_token", "")
+    if not token:
+        username = config.get("clouddrive_username", "")
+        password = config.get("clouddrive_password", "")
+        if username and password:
+            try:
+                async with httpx.AsyncClient(timeout=15) as c:
+                    login_url = base + "/cloud.drive.CloudDrive/GetCaptcha"
+                    captcha_resp = await c.post(login_url, json={}, headers={"Content-Type": "application/json"})
+                    captcha_id = ""
+                    if captcha_resp.status_code == 200:
+                        try:
+                            captcha_id = captcha_resp.json().get("id", "") or ""
+                        except Exception:
+                            pass
+                    login_url2 = base + "/cloud.drive.CloudDrive/Login"
+                    login_payload = {
+                        "userName": username,
+                        "password": password,
+                        "captchaId": captcha_id,
+                    }
+                    login_resp = await c.post(login_url2, json=login_payload, headers={"Content-Type": "application/json"})
+                    if login_resp.status_code == 200:
+                        token = login_resp.json().get("token", "")
+            except Exception as e:
+                return {"ok": False, "message": f"CloudDrive2 登录失败: {e}"}
+
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    payload = {"magnet": magnet, "save_path": save_path}
+
+    # CreateOfflineTask（Connect-RPC JSON 端点）
+    api_url = base + "/cloud.drive.CloudDrive/CreateOfflineTask"
+    payload = {"magnet_url": magnet, "parent_folder_id_or_path": save_path}
     try:
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.post(api_url, json=payload, headers=headers)
@@ -216,5 +254,15 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     elif downloader == "clouddrive":
         if not config["clouddrive_url"]:
             return {"ok": False, "message": "未配置"}
-        return {"ok": True, "message": "配置已读取（连接测试需实际推送）"}
+        # 真实连接测试：调 GetCaptcha 验证服务可达
+        import httpx
+        base = config["clouddrive_url"].rstrip("/")
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(base + "/cloud.drive.CloudDrive/GetCaptcha", json={}, headers={"Content-Type": "application/json"})
+                if r.status_code == 200:
+                    return {"ok": True, "message": "CloudDrive2 服务可达"}
+                return {"ok": False, "message": f"CloudDrive2 返回 {r.status_code}"}
+        except Exception as e:
+            return {"ok": False, "message": f"连接失败: {e}"}
     return {"ok": False, "message": f"未知下载器: {downloader}"}
