@@ -196,9 +196,13 @@ def _test_qbittorrent_sync(config: dict) -> dict:
 
 @router.post("/test")
 @router.post("/test-connection")  # 兼容前端旧路径
-async def test_connection(downloader: str, db: DbSession, _user: CurrentUser):
-    """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。"""
+async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
+    """测试下载器连接（qB 同步调用包 to_thread，不阻塞事件循环）。
+
+    前端 POST body: {downloader, save_path?}
+    """
     import asyncio
+    downloader = body.get("downloader", "")
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token"]:
