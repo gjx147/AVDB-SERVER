@@ -88,8 +88,8 @@ export function ActorDetail() {
       {/* 头部：头像 + 信息 */}
       <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 28, marginBottom: 32, alignItems: 'start' }}>
         <div style={{
-          width: 160, height: 160, borderRadius: '50%', overflow: 'hidden', flex: 'none',
-          background: 'var(--bg-page)', border: '3px solid var(--line-hair)',
+          width: 160, height: 160, borderRadius: 'var(--r-md)', overflow: 'hidden', flex: 'none',
+          background: 'var(--bg-page)', border: '1px solid var(--line-hair)',
         }}>
           {actor.avatar_url ? (
             <img src={actor.avatar_url} alt={actor.name} referrerPolicy="no-referrer"

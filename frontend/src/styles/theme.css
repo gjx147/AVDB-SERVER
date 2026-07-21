@@ -339,9 +339,9 @@ img{display:block;max-width:100%}
 /* ── 演员 ── */
 .actor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:24px}
 .actor{cursor:pointer;text-align:center}
-.actor-photo{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;background:var(--bg-page);box-shadow:var(--shadow-card);transition:transform .4s,box-shadow .4s;margin-bottom:14px;position:relative}
-.actor:hover .actor-photo{transform:scale(1.04);box-shadow:var(--shadow-float),0 0 0 2px var(--gold-glow)}
-.actor-photo img{width:100%;height:100%;object-fit:cover}
+.actor-photo{width:100%;aspect-ratio:1;border-radius:var(--r-md);overflow:hidden;background:var(--bg-page);box-shadow:var(--shadow-card);transition:transform .4s,box-shadow .4s;margin-bottom:14px;position:relative}
+.actor:hover .actor-photo{transform:translateY(-4px);box-shadow:var(--shadow-float),0 0 0 2px var(--gold-glow)}
+.actor-photo img{width:100%;height:100%;object-fit:cover;object-position:center top}
 .actor-name{font-family:var(--ff-serif);font-size:16px;color:var(--t-display);font-weight:600}
 .actor-count{font-size:11px;color:var(--t-faint);margin-top:3px;font-family:var(--ff-mono)}
 
