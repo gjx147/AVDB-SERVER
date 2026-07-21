@@ -35,7 +35,15 @@ export function Favorites() {
   }
   const delCol = async (id: number) => {
     if (!confirm('删除分组？（不会删除影片本身）')) return
-    try { await api.collections.remove(id); if (activeCol === id) setActiveCol(null); toastOk('已删除'); load() }
+    try {
+      await api.collections.remove(id)
+      if (activeCol === id) {
+        setActiveCol(null)  // 切到全部，由 useEffect[activeCol] 负责刷新，避免 load() 用旧 activeCol 请求已删除分组
+      } else {
+        load()  // 删除的不是当前分组，直接刷新列表
+      }
+      toastOk('已删除')
+    }
     catch (e) { toastErr(String((e as Error).message)) }
   }
 

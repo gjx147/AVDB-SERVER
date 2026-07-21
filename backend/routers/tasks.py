@@ -116,23 +116,32 @@ def get_task(task_id: int, db: DbSession, _user: CurrentUser):
 def task_cast(task_id: int, db: DbSession, _user: CurrentUser):
     """返回 task 的关联演员 [{id, name, avatar_url}]，按名字查 actors 表。
 
-    task.actors 是逗号分隔的名字字符串，这里逐个匹配 actors 表拿头像。
-    匹配策略：精确 name → LIKE 兜底。未匹配的返回 id=null（仅显示名字）。
+    task.actors 是逗号分隔的名字字符串，这里批量匹配 actors 表拿头像。
+    匹配策略：精确 name 批量查 → 未命中的 LIKE 兜底。避免 N+1 查询。
     """
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     if not task.actors:
         return []
-    names = [n.strip() for n in task.actors.split(",") if n.strip()]
+    names = [n.strip() for n in task.actors.split(",") if n.strip()][:15]
+    if not names:
+        return []
+    # 批量精确查询（1 次 SQL 替代最多 15 次）
+    exact_rows = db.execute(select(Actor).where(Actor.name.in_(names))).scalars().all()
+    exact_map = {a.name: a for a in exact_rows}
+    # 对未精确命中的名字做 LIKE 兜底（每个一次，但通常很少）
+    missing = [n for n in names if n not in exact_map]
+    for name in missing:
+        actor = db.execute(
+            select(Actor).where(Actor.name.like(f"%{name}%")).limit(1)
+        ).scalar_one_or_none()
+        if actor:
+            exact_map[name] = actor
+    # 按原始顺序返回
     result = []
-    for name in names[:15]:  # 限制前 15 个，避免过多请求
-        actor = db.execute(select(Actor).where(Actor.name == name)).scalar_one_or_none()
-        if not actor:
-            # LIKE 兜底（处理空格/别名差异）
-            actor = db.execute(
-                select(Actor).where(Actor.name.like(f"%{name}%")).limit(1)
-            ).scalar_one_or_none()
+    for name in names:
+        actor = exact_map.get(name)
         if actor:
             result.append({"id": actor.id, "name": actor.name, "avatar_url": actor.avatar_url})
         else:

@@ -12,7 +12,7 @@ const PAGE = 48
 
 export function Library() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const initialQ = searchParams.get('q') || ''
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [sources, setSources] = useState<ListSourceWithStats[]>([])
@@ -172,7 +172,14 @@ export function Library() {
         <div className="search">
           <Icon.search />
           <input placeholder="输入番号或关键词搜索…" value={q}
-            onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (setPage(0), load(0))} />
+            onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setPage(0); load(0)
+                // 同步 URL ?q=，刷新页面后保持搜索词
+                const trimmed = e.currentTarget.value.trim()
+                setSearchParams(trimmed ? { q: trimmed } : {}, { replace: true })
+              }
+            }} />
         </div>
         <select className="select" value={sourceId} onChange={(e) => setSourceId(e.target.value ? +e.target.value : '')} aria-label="筛选列表源">
           <option value="">全部列表源</option>

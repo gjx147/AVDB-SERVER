@@ -197,7 +197,7 @@ export function TaskDetail() {
 
           {/* 女主演关联（头像+名字，点击跳转影视库按演员筛选） */}
           {cast.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
+            <div className="cast-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
               {cast.map((c, i) => (
                 <div key={i} onClick={() => nav(`/library?q=${encodeURIComponent(c.name)}`)}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 72, cursor: 'pointer' }}

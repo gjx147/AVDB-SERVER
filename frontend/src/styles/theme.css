@@ -379,9 +379,9 @@ img{display:block;max-width:100%}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 
 /* 图片隐私模式 */
-.img-mode-blur .poster-frame img,.img-mode-blur .actor-photo img{filter:blur(20px);transition:filter .3s}
-.img-mode-blur .poster-frame:hover img,.img-mode-blur .actor-photo:hover img{filter:blur(0)}
-.img-mode-hidden .poster-frame img,.img-mode-hidden .actor-photo img{visibility:hidden}
+.img-mode-blur .poster-frame img,.img-mode-blur .actor-photo img,.img-mode-blur .detail-cover img,.img-mode-blur .recent-thumb,.img-mode-blur .row-thumb,.img-mode-blur .detail-body img,.img-mode-blur .cast-row img{filter:blur(20px);transition:filter .3s}
+.img-mode-blur .poster-frame:hover img,.img-mode-blur .actor-photo:hover img,.img-mode-blur .detail-cover:hover img,.img-mode-blur .detail-body img:hover{filter:blur(0)}
+.img-mode-hidden .poster-frame img,.img-mode-hidden .actor-photo img,.img-mode-hidden .detail-cover img,.img-mode-hidden .recent-thumb,.img-mode-hidden .row-thumb,.img-mode-hidden .detail-body img,.img-mode-hidden .cast-row img{visibility:hidden}
 
 /* 响应式 */
 @media(max-width:1200px){.detail-body{grid-template-columns:1fr}}
