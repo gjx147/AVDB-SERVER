@@ -301,7 +301,14 @@ class SqliteTaskStore:
 
     # ---------- 演员关联 ----------
     def upsert_actor(self, name: str, **fields) -> int:
-        """新增或更新演员，返回 actor_id。"""
+        """新增或更新演员，返回 actor_id。
+
+        防御：avatar_url 含 /covers/（影片封面）时丢弃，避免误存。
+        演员头像应该是 /avatars/ 路径。
+        """
+        au = fields.get("avatar_url")
+        if au and "/covers/" in au:
+            fields["avatar_url"] = None  # 影片封面不是演员头像，丢弃
         with self._conn() as conn:
             row = conn.execute("SELECT id FROM actors WHERE name=?", (name,)).fetchone()
             if row:

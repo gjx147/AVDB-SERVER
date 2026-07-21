@@ -188,11 +188,18 @@ class ActorScraper:
             except Exception:
                 pass
 
-            # 头像
+            # 头像（JavDB 演员页头像在 .avatar img，URL 含 /avatars/ 路径）
+            # 注意：不能用 .cover img，它会误匹配到影片封面（/covers/ 路径）
             try:
-                img = self.page.locator(".avatar img, .actor-photo img, img.avatar, .cover img").first
+                img = self.page.locator(".avatar img, .actor-photo img, img.avatar, .actor-header img, header img").first
                 if img.count() > 0:
-                    info["avatar_url"] = img.get_attribute("src") or ""
+                    src = img.get_attribute("src") or ""
+                    # 校验：演员头像 URL 必须含 /avatars/，排除 /covers/（影片封面）
+                    if src and "/avatars/" in src:
+                        info["avatar_url"] = src
+                    elif src and "/covers/" not in src and "/avatars/" not in src:
+                        # 未知路径但不是 covers，谨慎接受
+                        info["avatar_url"] = src
             except Exception:
                 pass
 
