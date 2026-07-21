@@ -15,16 +15,20 @@ export function Actors() {
   const [error, setError] = useState<string | null>(null)
   const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set())
   const [onlyWithAvatar, setOnlyWithAvatar] = useState(true)  // 默认只显示有头像的演员
+  const [onlyFollowed, setOnlyFollowed] = useState(false)  // 只看关注的
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const load = useCallback((keyword?: string, withAvatar?: boolean) => {
+  const load = useCallback((keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
     setActors(null)
     setError(null)
-    const wa = withAvatar !== undefined ? withAvatar : onlyWithAvatar
-    const p = keyword?.trim() ? api.actors.search(keyword.trim()) : api.actors.list(0, 120, wa)
+    const wa = opts?.withAvatar !== undefined ? opts.withAvatar : onlyWithAvatar
+    const fd = opts?.followed !== undefined ? opts.followed : onlyFollowed
+    const p = keyword?.trim()
+      ? api.actors.search(keyword.trim())
+      : api.actors.list(0, 120, wa, fd)
     p.then(setActors).catch((e) => { setError(String((e as Error).message)); setActors([]) })
-  }, [onlyWithAvatar])
+  }, [onlyWithAvatar, onlyFollowed])
   useEffect(() => { load() }, [load])
 
   // 加载已订阅的演员 id 集合（用于按钮状态）
@@ -106,8 +110,12 @@ export function Actors() {
         </div>
         <button className="btn btn--ghost btn--sm" onClick={() => load(kw)}>搜索</button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', cursor: 'pointer', userSelect: 'none' }}>
-          <input type="checkbox" checked={onlyWithAvatar} onChange={(e) => { setOnlyWithAvatar(e.target.checked); load(undefined, e.target.checked) }} />
+          <input type="checkbox" checked={onlyWithAvatar} onChange={(e) => { setOnlyWithAvatar(e.target.checked); load(undefined, { withAvatar: e.target.checked }) }} />
           只看有头像
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={onlyFollowed} onChange={(e) => { setOnlyFollowed(e.target.checked); load(undefined, { followed: e.target.checked }) }} />
+          只看关注
         </label>
       </div>
 

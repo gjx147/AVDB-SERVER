@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { useStore } from '../store/useStore'
@@ -23,6 +24,7 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 export function Subscriptions() {
+  const nav = useNavigate()
   const [subs, setSubs] = useState<Subscription[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
@@ -71,8 +73,17 @@ export function Subscriptions() {
         <Empty icon="◌" title="暂无订阅" sub="前往演员库，点击演员卡片的「订阅」按钮即可添加。" />
       ) : (
         <div className="card">
-          {subs.map((s) => (
-            <div key={s.id} className="recent-item" style={{ alignItems: 'center' }}>
+          {subs.map((s) => {
+            const clickable = s.sub_type === 'actor' && s.actor_id
+            return (
+            <div key={s.id} className="recent-item" style={{
+              alignItems: 'center',
+              cursor: clickable ? 'pointer' : 'default',
+            }}
+              onClick={() => clickable && nav(`/actor/${s.actor_id}`)}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/actor/${s.actor_id}`) } } : undefined}>
               <div style={{
                 flex: 'none', width: 44, height: 44, borderRadius: 10,
                 background: s.enabled ? 'var(--gold-wash)' : 'var(--bg-page)',
@@ -101,16 +112,17 @@ export function Subscriptions() {
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
-                  onClick={() => toggle(s)}
+                  onClick={(e) => { e.stopPropagation(); toggle(s) }}
                   className={`btn btn--sm ${s.enabled ? 'btn--ghost' : 'btn--gold'}`}
                   style={{ fontSize: 11 }}>{s.enabled ? '停用' : '启用'}</button>
                 <button
-                  onClick={() => remove(s)}
+                  onClick={(e) => { e.stopPropagation(); remove(s) }}
                   className="btn btn--sm btn--ghost"
                   style={{ fontSize: 11, color: 'var(--red)' }}>删除</button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

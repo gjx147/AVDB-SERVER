@@ -128,8 +128,8 @@ export const api = {
 
   // ════════ Actors ════════
   actors: {
-    list: (skip = 0, limit = 100, withAvatar?: boolean) =>
-      http.get<Actor[]>('/api/actors', { params: { page: Math.floor(skip / limit) + 1, page_size: limit, with_avatar: withAvatar } }).then((r) => {
+    list: (skip = 0, limit = 100, withAvatar?: boolean, followed?: boolean) =>
+      http.get<Actor[]>('/api/actors', { params: { page: Math.floor(skip / limit) + 1, page_size: limit, with_avatar: withAvatar, followed } }).then((r) => {
         const d = r.data as unknown
         return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
       }),
