@@ -272,6 +272,38 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     return {"ok": False, "message": f"未知下载器: {downloader}"}
 
 
+@router.get("/list-cd2-folder")
+async def list_cd2_folder(path: str, db: DbSession, _user: CurrentUser):
+    """调试端点：列出 CD2 任意路径的目录内容，用于排查 cd2_organize 路径问题。
+
+    Query 参数 path：要列的 CD2 路径（如 / 或 /115open）
+    """
+    from services.cd2_client import get_token_or_login, list_folder
+    config = {}
+    for k in ["clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password"]:
+        config[k] = _get_setting(db, k)
+    token, err = await get_token_or_login(config)
+    if err:
+        return {"ok": False, "message": err}
+    files, list_err = await list_folder(config["clouddrive_url"], token, path)
+    if list_err:
+        return {"ok": False, "message": f"列目录失败: {list_err}", "path": path}
+    return {
+        "ok": True,
+        "path": path,
+        "count": len(files),
+        "items": [
+            {
+                "name": f["name"],
+                "full_path": f["full_path"],
+                "is_directory": f["is_directory"],
+                "size": f["size"],
+            }
+            for f in files[:50]
+        ],
+    }
+
+
 @router.get("/logs")
 def downloader_logs(_user: CurrentUser, limit: int = 100):
     """读取最近的下载器日志（data/downloaders.log）。"""
