@@ -210,6 +210,11 @@ export interface Settings {
   cms_url: string
   cms_token: string
   cms_delay_seconds: number
+  // CD2 自动迁移（推送成功后 MoveFile 到媒体库女优子目录 + 通知 CMS）
+  cd2_organize_enabled: boolean
+  cd2_organize_source_folder: string
+  cd2_organize_target_folder: string
+  cd2_organize_delay_seconds: number
   javdb_url: string
   // 通知配置（F3）
   notify_bark_key?: string

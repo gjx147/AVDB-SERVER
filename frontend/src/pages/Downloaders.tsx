@@ -34,7 +34,7 @@ export function Downloaders() {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cms') => {
+  const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cms' | 'cd2_organize') => {
     if (!validate()) return
     try {
       // 先保存再测试（因为测试接口从 DB 读取配置）
@@ -42,7 +42,7 @@ export function Downloaders() {
       setTesting(kind)
       const sp = kind === 'clouddrive' ? s.clouddrive_save_path : kind === 'qbittorrent' ? s.qbittorrent_save_path : ''
       await api.downloaders.testConnection(kind, sp || undefined)
-      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'qbittorrent' ? 'qBittorrent' : 'CMS'
+      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'qbittorrent' ? 'qBittorrent' : kind === 'cms' ? 'CMS' : 'CD2 迁移'
       toastOk(`${label} 连接成功`)
     } catch (e) {
       const msg = String((e as Error).message)
@@ -144,6 +144,44 @@ export function Downloaders() {
         </div>
         <button className="btn btn--ghost btn--sm" onClick={() => test('cms')} disabled={testing !== null}>
           {testing === 'cms' ? '测试中…' : '测试连接'}
+        </button>
+      </div>
+
+      {/* CD2 自动迁移（MoveFile 到媒体库女优子目录 + 通知 CMS） */}
+      <div className="card" style={{ marginTop: 22 }}>
+        <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card-title"><Icon.refresh /> CD2 自动迁移到媒体库</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={String(s.cd2_organize_enabled) === 'true' || s.cd2_organize_enabled === true}
+              onChange={(e) => upd({ cd2_organize_enabled: e.target.checked })}
+            />
+            <span>启用</span>
+          </label>
+        </div>
+        <div className="hint" style={{ marginBottom: 12 }}>
+          推送成功后，CD2 把下载文件按女优名移动到媒体库子目录，再通知 CMS 入库（strm 由 CMS 生成）
+        </div>
+        <div className="field">
+          <label htmlFor="cd2-src">源文件夹（CD2 离线下载目录）</label>
+          <input id="cd2-src" className="input" value={s.cd2_organize_source_folder || ''} onChange={(e) => upd({ cd2_organize_source_folder: e.target.value })} placeholder="/115Cloud/离线下载" />
+        </div>
+        <div className="field">
+          <label htmlFor="cd2-tgt">媒体库根目录（迁移目标，按女优建子目录）</label>
+          <input id="cd2-tgt" className="input" value={s.cd2_organize_target_folder || ''} onChange={(e) => upd({ cd2_organize_target_folder: e.target.value })} placeholder="/115Cloud/媒体库" />
+        </div>
+        <div className="field">
+          <label htmlFor="cd2-delay">延迟触发秒数（等 CD2 下载完成）</label>
+          <input
+            id="cd2-delay" type="number" min={0} className="input"
+            value={s.cd2_organize_delay_seconds ?? 120}
+            onChange={(e) => upd({ cd2_organize_delay_seconds: +e.target.value })}
+          />
+          <div className="hint">CD2 下载大文件慢，建议 120-300 秒</div>
+        </div>
+        <button className="btn btn--ghost btn--sm" onClick={() => test('cd2_organize')} disabled={testing !== null}>
+          {testing === 'cd2_organize' ? '测试中…' : '测试（列源文件夹）'}
         </button>
       </div>
 

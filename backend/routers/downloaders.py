@@ -116,183 +116,22 @@ async def _push_aria2(magnet: str, config: dict) -> dict:
         return {"ok": False, "message": str(e)}
 
 
-def _cd2_encode_string(field_num: int, value: str) -> bytes:
-    """编码 protobuf string 字段（wire_type=2, length-delimited）。
-
-    格式: tag_byte + varint_length + utf8_bytes
-    tag = (field_number << 3) | 2
-    """
-    tag = (field_num << 3) | 2
-    data = value.encode("utf-8")
-    # varint 编码长度（简单情况：< 128 单字节）
-    length_bytes = []
-    v = len(data)
-    while v > 0:
-        length_bytes.append(v & 0x7F)
-        v >>= 7
-    if not length_bytes:
-        length_bytes = [0]
-    length_bytes = bytes([(b | 0x80) for b in length_bytes[:-1]] + [length_bytes[-1]])
-    return bytes([tag]) + length_bytes + data
-
-
-def _cd2_encode_varint(field_num: int, value: int) -> bytes:
-    """编码 protobuf varint 字段（wire_type=0，用于 bool/int）。"""
-    tag = (field_num << 3) | 0
-    v = value
-    out = []
-    while v > 0:
-        out.append(v & 0x7F)
-        v >>= 7
-    if not out:
-        out = [0]
-    return bytes([tag]) + bytes([(b | 0x80) for b in out[:-1]] + [out[-1]])
-
-
-def _cd2_grpc_web_frame(payload: bytes) -> bytes:
-    """构造 gRPC-Web 帧：flag(1b, 0) + length(4b BE) + payload。"""
-    return b"\x00" + len(payload).to_bytes(4, "big") + payload
-
-
-def _cd2_parse_grpc_web_response(body: bytes) -> tuple[bytes, str]:
-    """解析 gRPC-Web 响应。返回 (data_payload, grpc_status)。
-
-    响应由多个帧组成：
-    - 数据帧: flag=0x00, 含 protobuf payload
-    - trailer 帧: flag=0x80, 含 grpc-status:N 文本
-    """
-    data = b""
-    grpc_status = ""
-    i = 0
-    while i + 5 <= len(body):
-        flag = body[i]
-        length = int.from_bytes(body[i + 1:i + 5], "big")
-        if i + 5 + length > len(body):
-            break
-        chunk = body[i + 5:i + 5 + length]
-        if flag & 0x80:
-            # trailer 帧
-            text = chunk.decode("utf-8", errors="replace")
-            for line in text.split("\r\n"):
-                if line.startswith("grpc-status:"):
-                    grpc_status = line.split(":", 1)[1].strip()
-        else:
-            data += chunk
-        i += 5 + length
-    return data, grpc_status
-
-
-async def _cd2_grpc_web_call(base: str, method: str, payload: bytes, token: str = "") -> tuple[bytes, str, int]:
-    """调用 CD2 gRPC-Web 端点。返回 (data, grpc_status, http_status)。"""
-    import httpx
-    frame = _cd2_grpc_web_frame(payload)
-    headers = {"Content-Type": "application/grpc-web+proto", "X-Grpc-Web": "1"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    url = base.rstrip("/") + "/clouddrive.CloudDriveFileSrv/" + method
-    async with httpx.AsyncClient(timeout=15, verify=False) as c:
-        r = await c.post(url, content=frame, headers=headers)
-        data, grpc_status = _cd2_parse_grpc_web_response(r.content)
-        # grpc-status 可能也在响应头
-        if not grpc_status:
-            grpc_status = r.headers.get("grpc-status", "")
-        return data, grpc_status, r.status_code
-
-
 async def _push_clouddrive(magnet: str, config: dict) -> dict:
-    """推送到 CloudDrive2（gRPC-Web 协议）。
-
-    CD2 用纯 gRPC（非 REST），web UI 通过 gRPC-Web 网关调用。
-    端点：POST /clouddrive.CloudDriveFileSrv/CreateOfflineTask
-    Content-Type: application/grpc-web+proto
-    鉴权：Bearer token（从 GetToken 获取，或直接配置 API token）
-    """
-    import logging
-    logger = logging.getLogger("avdb.downloaders.cd2")
+    """推送到 CloudDrive2（gRPC-Web 协议，复用 services.cd2_client）。"""
+    from services.cd2_client import get_token_or_login, add_offline_files
     url = config.get("clouddrive_url", "")
     if not url:
         return {"ok": False, "message": "CloudDrive2 未配置"}
     save_path = config.get("clouddrive_save_path", "/")
 
     # 鉴权：优先 token；否则用户名密码 GetToken
-    token = config.get("clouddrive_token", "")
-    if not token:
-        username = config.get("clouddrive_username", "")
-        password = config.get("clouddrive_password", "")
-        if username and password:
-            try:
-                logger.info(f"CD2 登录: 用户名={username}")
-                # GetTokenRequest: field1=userName, field2=password
-                login_payload = _cd2_encode_string(1, username) + _cd2_encode_string(2, password)
-                data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "GetToken", login_payload)
-                logger.info(f"CD2 登录响应: grpc-status={gstatus}, data_len={len(data)}")
-                if gstatus == "0" and len(data) > 2:
-                    # JWTToken: field3=token (string)
-                    token = _cd2_extract_string_field(data, 3)
-                    if not token:
-                        logger.error(f"CD2 登录成功但未提取到 token，raw data={data[:80]!r}")
-                        return {"ok": False, "message": "CloudDrive2 登录成功但未返回 token"}
-                    logger.info("CD2 登录成功，已获取 token")
-                else:
-                    return {"ok": False, "message": f"CloudDrive2 登录失败 (grpc-status={gstatus})"}
-            except Exception as e:
-                return {"ok": False, "message": f"CloudDrive2 登录异常: {e}"}
-        else:
-            logger.warning(f"CD2 无 token 且无用户名密码（username={bool(username)}, password={bool(password)}）")
+    token, err = await get_token_or_login(config)
+    if err:
+        # 登录失败但若有 token 仍可尝试（token 字段可能被 settings 脱敏为 ***，此处已读真实值）
+        return {"ok": False, "message": err}
 
-    # AddOfflineFileRequest: field1=urls(磁力), field2=toFolder(目标文件夹)
-    # 注意：CD2 的方法名是 AddOfflineFiles（不是文档旧版的 CreateOfflineTask）
-    payload = _cd2_encode_string(1, magnet) + _cd2_encode_string(2, save_path)
-    try:
-        data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "AddOfflineFiles", payload, token)
-        if gstatus == "0":
-            return {"ok": True, "message": "已推送到 CloudDrive2"}
-        # 常见错误：2=UNKNOWN, 7=PERMISSION_DENIED, 12=UNIMPLEMENTED, 16=UNAUTHENTICATED
-        err_map = {"2": "未知错误", "7": "权限不足", "12": "方法不存在", "16": "未认证（token 无效或过期）", "13": "内部错误"}
-        msg = err_map.get(gstatus, f"gRPC status={gstatus}")
-        return {"ok": False, "message": f"CloudDrive2: {msg}"}
-    except Exception as e:
-        return {"ok": False, "message": f"连接失败: {e}"}
-
-
-def _cd2_extract_string_field(data: bytes, field_num: int) -> str:
-    """从 protobuf 二进制中提取指定 string 字段（简单解析，不处理嵌套）。"""
-    i = 0
-    while i < len(data):
-        if i >= len(data):
-            break
-        tag = data[i]
-        wire_type = tag & 0x07
-        fn = tag >> 3
-        i += 1
-        if wire_type == 2:  # length-delimited (string/bytes)
-            # 读 varint 长度
-            length = 0
-            shift = 0
-            while i < len(data):
-                b = data[i]
-                i += 1
-                length |= (b & 0x7F) << shift
-                shift += 7
-                if not (b & 0x80):
-                    break
-            value = data[i:i + length]
-            i += length
-            if fn == field_num:
-                return value.decode("utf-8", errors="replace")
-        elif wire_type == 0:  # varint
-            while i < len(data):
-                b = data[i]
-                i += 1
-                if not (b & 0x80):
-                    break
-        elif wire_type == 5:  # 32-bit
-            i += 4
-        elif wire_type == 1:  # 64-bit
-            i += 8
-        else:
-            break
-    return ""
+    ok, msg = await add_offline_files(url, token, magnet, save_path)
+    return {"ok": ok, "message": msg}
 
 
 @router.post("/push")
@@ -352,6 +191,15 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
         except Exception as e:
             logger.warning(f"CMS 钩子调度失败（不影响推送）: {e}")
 
+    # 推送成功 → 触发 CD2 自动迁移（MoveFile 到媒体库女优子目录 + 通知 CMS）
+    # 异常隔离：CD2 迁移钩子失败绝不影响 push 的成功状态
+    if result["ok"]:
+        try:
+            from services.cd2_organize import schedule_organize
+            schedule_organize(req.task_id, task.video_code if task else None)
+        except Exception as e:
+            logger.warning(f"CD2 迁移钩子调度失败（不影响推送）: {e}")
+
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
@@ -382,8 +230,9 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     downloader = body.get("downloader", "")
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
-              "clouddrive_url", "clouddrive_token",
-              "cms_url", "cms_token"]:
+              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password",
+              "cms_url", "cms_token",
+              "cd2_organize_source_folder", "cd2_organize_target_folder"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
         result = await asyncio.to_thread(_test_qbittorrent_sync, config)
@@ -398,7 +247,8 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
             return {"ok": False, "message": "未配置"}
         # 真实连接测试：调 GetSystemInfo（公共方法，无需鉴权）
         try:
-            data, gstatus, httpstatus = await _cd2_grpc_web_call(config["clouddrive_url"], "GetSystemInfo", b"")
+            from services.cd2_client import grpc_web_call
+            data, gstatus, httpstatus = await grpc_web_call(config["clouddrive_url"], "GetSystemInfo", b"")
             if gstatus == "0":
                 logger.info(f"测试连接 [clouddrive]: ok=True 服务可达")
                 return {"ok": True, "message": "CloudDrive2 服务可达"}
@@ -412,6 +262,12 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         from services.cms_sync import test_connection as _cms_test
         result = await _cms_test(config["cms_url"], config["cms_token"])
         logger.info(f"测试连接 [cms]: ok={result.get('ok')} msg={result.get('message','')}")
+        return result
+    elif downloader == "cd2_organize":
+        # CD2 迁移测试：列源文件夹验证 CD2 连接 + 路径配置
+        from services.cd2_organize import test_organize
+        result = await test_organize(config)
+        logger.info(f"测试连接 [cd2_organize]: ok={result.get('ok')} msg={result.get('message','')}")
         return result
     return {"ok": False, "message": f"未知下载器: {downloader}"}
 
