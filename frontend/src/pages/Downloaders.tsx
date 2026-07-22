@@ -34,15 +34,16 @@ export function Downloaders() {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  const test = async (kind: 'clouddrive' | 'qbittorrent') => {
+  const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cms') => {
     if (!validate()) return
     try {
       // 先保存再测试（因为测试接口从 DB 读取配置）
       await api.settings.update(s)
       setTesting(kind)
-      const sp = kind === 'clouddrive' ? s.clouddrive_save_path : s.qbittorrent_save_path
+      const sp = kind === 'clouddrive' ? s.clouddrive_save_path : kind === 'qbittorrent' ? s.qbittorrent_save_path : ''
       await api.downloaders.testConnection(kind, sp || undefined)
-      toastOk(`${kind === 'clouddrive' ? 'CloudDrive2' : 'qBittorrent'} 连接成功`)
+      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'qbittorrent' ? 'qBittorrent' : 'CMS'
+      toastOk(`${label} 连接成功`)
     } catch (e) {
       const msg = String((e as Error).message)
       toastErr(msg.length > 120 ? msg.slice(0, 120) + '…' : msg)
@@ -105,6 +106,45 @@ export function Downloaders() {
           <button className={s.default_downloader === 'qbittorrent' ? 'on' : ''} onClick={() => upd({ default_downloader: 'qbittorrent' })}>qBittorrent</button>
         </div>
         <div className="hint" style={{ marginTop: 10 }}>推送到下载器时，若未单独指定则使用此默认项</div>
+      </div>
+
+      {/* CMS 后处理（推送成功后自动转移 + 生成 strm） */}
+      <div className="card" style={{ marginTop: 22 }}>
+        <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card-title"><Icon.refresh /> CMS 自动整理（生成 strm）</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={String(s.cms_enabled) === 'true' || s.cms_enabled === true}
+              onChange={(e) => upd({ cms_enabled: e.target.checked })}
+            />
+            <span>启用</span>
+          </label>
+        </div>
+        <div className="hint" style={{ marginBottom: 12 }}>
+          推送成功后延迟触发 CMS auto_organize，CMS 自动扫描云盘新文件、整理到媒体库并生成 .strm
+        </div>
+        <div className="field">
+          <label htmlFor="cms-url">CMS 服务器地址</label>
+          <input id="cms-url" className="input" value={s.cms_url || ''} onChange={(e) => upd({ cms_url: e.target.value })} placeholder="http://192.168.1.x:8080" />
+        </div>
+        <div className="field">
+          <label htmlFor="cms-token">API Token</label>
+          <input id="cms-token" className="input" value={s.cms_token || ''} onChange={(e) => upd({ cms_token: e.target.value })} placeholder="cloud_media_sync" />
+          <div className="hint">由 CMS 启动变量 CMS_API_TOKEN 指定，默认 cloud_media_sync</div>
+        </div>
+        <div className="field">
+          <label htmlFor="cms-delay">延迟触发秒数</label>
+          <input
+            id="cms-delay" type="number" min={0} className="input"
+            value={s.cms_delay_seconds ?? 60}
+            onChange={(e) => upd({ cms_delay_seconds: +e.target.value })}
+          />
+          <div className="hint">推送成功后等待 N 秒再触发整理，给下载器时间下载文件</div>
+        </div>
+        <button className="btn btn--ghost btn--sm" onClick={() => test('cms')} disabled={testing !== null}>
+          {testing === 'cms' ? '测试中…' : '测试连接'}
+        </button>
       </div>
 
       <DownloaderLog />

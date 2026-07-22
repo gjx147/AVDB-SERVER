@@ -342,6 +342,16 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     db.add(dl)
     db.commit()
     db.refresh(dl)
+
+    # 推送成功 → 触发 CMS 后处理（延迟整理 + 生成 strm）
+    # 异常隔离：CMS 钩子失败绝不影响 push 的成功状态
+    if result["ok"]:
+        try:
+            from services.cms_sync import schedule_sync
+            schedule_sync(req.magnet, task.video_code if task else None)
+        except Exception as e:
+            logger.warning(f"CMS 钩子调度失败（不影响推送）: {e}")
+
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
@@ -372,7 +382,8 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     downloader = body.get("downloader", "")
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
-              "clouddrive_url", "clouddrive_token"]:
+              "clouddrive_url", "clouddrive_token",
+              "cms_url", "cms_token"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
         result = await asyncio.to_thread(_test_qbittorrent_sync, config)
@@ -396,6 +407,12 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         except Exception as e:
             logger.error(f"测试连接 [clouddrive]: 异常 {e}")
             return {"ok": False, "message": f"连接失败: {e}"}
+    elif downloader == "cms":
+        # CMS 是后处理钩子，复用 auto_organize（幂等可安全测试）
+        from services.cms_sync import test_connection as _cms_test
+        result = await _cms_test(config["cms_url"], config["cms_token"])
+        logger.info(f"测试连接 [cms]: ok={result.get('ok')} msg={result.get('message','')}")
+        return result
     return {"ok": False, "message": f"未知下载器: {downloader}"}
 
 

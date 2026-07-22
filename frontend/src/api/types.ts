@@ -205,6 +205,11 @@ export interface Settings {
   qbittorrent_password: string
   qbittorrent_save_path: string
   default_downloader: string
+  // CMS 后处理钩子（推送成功后延迟触发整理 + 生成 strm）
+  cms_enabled: boolean
+  cms_url: string
+  cms_token: string
+  cms_delay_seconds: number
   javdb_url: string
   // 通知配置（F3）
   notify_bark_key?: string
