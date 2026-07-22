@@ -191,6 +191,88 @@ class MagnetScraper:
         else:
             logger.error(f"单任务提取失败: {error_message or url}")
 
+    def refresh_actor_gender(self, limit: Optional[int] = None) -> dict:
+        """重新爬取已访问的 task，刷新 actors（女优优先）+ tags（去 navbar 污染）+ actors.gender。
+
+        用于修复老数据：旧版 _extract_actors 把 navbar 的 Censored/Uncensored/Western 当成演员，
+        且 actors.gender 全是 null。新版用 ♀/♂ 标记正确识别女优。
+
+        返回 {"total": N, "ok": M, "failed": K}。
+        """
+        if self.store is None:
+            logger.error("refresh_actor_gender 需要数据库模式")
+            return {"total": 0, "ok": 0, "failed": 0}
+
+        tasks = self.store.get_visited_tasks(only_with_actors=True, limit=limit)
+        total = len(tasks)
+        logger.info(f"=" * 60)
+        logger.info(f"开始刷新演员性别数据，共 {total} 个已访问任务")
+        if total == 0:
+            return {"total": 0, "ok": 0, "failed": 0}
+
+        if not self.page:
+            self.init_browser()
+
+        list_code = self._list_code()
+        self._write_crawl_status(
+            phase="refresh", list_code=list_code, crawl_type="refresh-actor-gender",
+            total=total, current_index=0,
+        )
+
+        ok_count = 0
+        fail_count = 0
+        for i, t in enumerate(tasks):
+            url = t["url"]
+            video_code = t.get("video_code") or ""
+            self._write_crawl_status(
+                phase="refresh", list_code=list_code, crawl_type="refresh-actor-gender",
+                total=total, current_index=i + 1, current_video_code=video_code,
+            )
+            logger.info(f"[{i+1}/{total}] 刷新 {video_code or url}")
+            try:
+                # 访问详情页，触发新的 _extract_actors / _extract_tags
+                success, best_magnet, magnets_json, new_video_code, title, poster_url, \
+                    thumbnails_json, synopsis, actors, err = self.process_detail_page(url)
+                if not success or not actors:
+                    logger.warning(f"  跳过：未提取到演员 ({err or '无演员'})")
+                    fail_count += 1
+                    # 间隔，避免被拦截
+                    time.sleep(random.uniform(2, 4))
+                    continue
+
+                # 读取新解析的 actors_gender（_extract_actors 已写入 self._last_actors_gender）
+                actors_gender = getattr(self, "_last_actors_gender", []) or []
+                extra = getattr(self, "_last_extra_meta", {}) or {}
+
+                # 更新 task.actors（女优优先）+ task.tags（去 navbar）
+                self.store.mark_visited(
+                    url,
+                    actors=actors,
+                    tags=extra.get("tags"),
+                )
+                # 写 actors.gender + 关联
+                task_row = self.store.get_task_by_url(url)
+                task_id = task_row["id"] if task_row else None
+                for aname, gender in actors_gender[:10]:
+                    actor_id = self.store.upsert_actor(aname, gender=gender)
+                    if actor_id and task_id:
+                        self.store.link_actor_movie(actor_id, task_id)
+                logger.info(f"  ✓ 已刷新: {actors[:80]}")
+                ok_count += 1
+            except BlockedException:
+                logger.error(f"  检测到拦截，停止刷新")
+                raise
+            except Exception as e:
+                logger.error(f"  ✗ 刷新失败: {e}")
+                fail_count += 1
+            # 间隔，避免被拦截
+            time.sleep(random.uniform(2, 4))
+
+        self._clear_crawl_status()
+        logger.info(f"=" * 60)
+        logger.info(f"刷新完成: 共 {total}, 成功 {ok_count}, 失败 {fail_count}")
+        return {"total": total, "ok": ok_count, "failed": fail_count}
+
     def _write_crawl_status(self, **kwargs) -> None:
         """写入当前爬取状态（供后端/前端轮询）"""
         try:
@@ -1056,75 +1138,107 @@ class MagnetScraper:
         return None
 
     def _extract_actors(self) -> Optional[str]:
-        """提取演员列表，返回逗号分隔的演员名"""
+        """提取演员列表（女优优先），返回逗号分隔字符串。
+
+        利用 javdb 详情页 HTML 的 ♀/♂ 标记识别女优/男优：
+            <a href="/actors/<hash>">名字</a><strong class="symbol female">♀</strong>
+            <a href="/actors/<hash>">名字</a><strong class="symbol male">♂</strong>
+
+        女优排前面，男优排后面。navbar 菜单的 /actors/censored 等假阳性天然被排除
+        （限定在 movie-panel-info 容器内，且要求 href 形如 /actors/<hash> 而非 /actors/<关键词>）。
+
+        同时把 [(name, gender), ...] 存到 self._last_actors_gender 供入库时填 actors.gender。
+        """
+        pairs = self._extract_actors_with_gender()
+        if not pairs:
+            self._last_actors_gender = []
+            return None
+        self._last_actors_gender = pairs
+        return ",".join(name for name, _ in pairs[:20])
+
+    def _extract_actors_with_gender(self) -> list:
+        """返回 [(name, gender), ...]，gender ∈ {'female', 'male'}。女优优先。
+
+        解析 nav.movie-panel-info 里**含 /actors/ 链接的 panel-block** 的 innerHTML，
+        读取 <strong class="symbol female|male"> 标记识别性别。
+        """
+        # 限定到 movie-panel-info 容器（避开 navbar 假阳性）
+        nav = self.page.locator("nav.movie-panel-info")
+        if nav.count() == 0:
+            return self._extract_actors_fallback()
+
+        # 遍历所有 panel-block，找含 /actors/ 链接的那个（演员区）
+        blocks = nav.locator(".panel-block").all()
+        actor_html = ""
+        for block in blocks:
+            try:
+                if block.locator("a[href*='/actors/']").count() > 0:
+                    actor_html = block.inner_html() or ""
+                    break
+            except Exception:
+                continue
+        if not actor_html:
+            return self._extract_actors_fallback()
+
+        # 正则：<a href="/actors/<hash>">名字</a> 后紧跟 <strong class="symbol female|male">
+        pattern = re.compile(
+            r'<a\s+href="/actors/([A-Za-z0-9_-]{3,})"[^>]*>([^<]+)</a>\s*'
+            r'<strong[^>]*class="[^"]*symbol\s+(female|male)[^"]*"[^>]*>',
+            re.IGNORECASE,
+        )
+        females, males = [], []
+        seen = set()
+        for m in pattern.finditer(actor_html):
+            href_hash = m.group(1)
+            name = m.group(2).strip()
+            gender = m.group(3).lower()
+            # 排除 navbar 关键词路径（censored/uncensored/western/anime/recommend 等）
+            if href_hash.lower() in {"censored", "uncensored", "western", "anime",
+                                     "recommend", "fc2", "censored_star"}:
+                continue
+            if not name or len(name) < 2 or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            if gender == "female":
+                females.append((name, "female"))
+            else:
+                males.append((name, "male"))
+
+        # 女优优先，男优其次
+        result = females + males
+        return result[:20] if result else self._extract_actors_fallback()
+
+    def _extract_actors_fallback(self) -> list:
+        """旧逻辑兜底：当 movie-panel-info 解析失败时用全局 /actors/ 链接，女优男优无法区分（gender='unknown'）。"""
         actors = []
         seen = set()
         try:
-            # 方法1: 直接查找所有包含 /actors/ 的链接（最可靠）
-            try:
-                all_actor_links = self.page.locator("a[href*='/actors/']").all()
-                for link in all_actor_links:
-                    try:
-                        name = (link.inner_text() or "").strip()
-                        if name and len(name) > 1 and name.lower() not in seen:
-                            # 过滤无关关键词
-                            if any(kw in name.lower() for kw in ['评论', '喜欢', '收藏', '下载', '分享', 'tags', 'category', 'search']):
-                                continue
-                            seen.add(name.lower())
-                            actors.append(name)
-                    except Exception:
-                        pass
-                if len(actors) >= 3:
-                    return ",".join(actors[:20])
-            except Exception:
-                pass
-
-            # 方法2: 通过特定选择器（更精确但可能遗漏）
-            selectors = [
-                # JavDB 主要演员区域
-                ".tile-tags a[href*='/actors/']",
-                # 影片信息面板
-                ".movie-panel-info a[href*='/actors/']",
-                # 右侧信息栏
-                ".panel-section a[href*='/actors/']",
-                # 元数据类型 D 的元素
-                "[data-type='D'] a[href*='/actors/']",
-                # 视频元信息
-                ".video-meta-info a[href*='/actors/']",
-                # 演员名字
-                ".star-name a[href*='/actors/']",
-                # 详细区域
-                ".detail-section a[href*='/actors/']",
-                # 预览瓦片
-                ".preview-tiles a[href*='/actors/']",
-                # 通用面板链接
-                ".panel a[href*='/actors/']",
-                # 带有 title 属性的演员链接
-                "a[href*='/actors/'][title]",
-            ]
-            for sel in selectors:
+            all_actor_links = self.page.locator("a[href*='/actors/']").all()
+            for link in all_actor_links:
                 try:
-                    links = self.page.locator(sel).all()
-                    if links:
-                        for link in links:
-                            try:
-                                name = (link.inner_text() or "").strip()
-                                if name and len(name) > 1 and name.lower() not in seen:
-                                    if any(kw in name.lower() for kw in ['评论', '喜欢', '收藏', '下载', '分享', 'tags', 'category', 'search']):
-                                        continue
-                                    seen.add(name.lower())
-                                    actors.append(name)
-                            except Exception:
-                                pass
-                        if len(actors) >= 3:
-                            break
+                    name = (link.inner_text() or "").strip()
+                    href = link.get_attribute("href") or ""
+                    if name and len(name) > 1 and name.lower() not in seen:
+                        # 过滤 navbar 关键词路径和功能词
+                        href_lower = href.lower()
+                        if any(kw in href_lower for kw in [
+                            "/censored", "/uncensored", "/western", "/anime", "/recommend",
+                        ]):
+                            continue
+                        if any(kw in name.lower() for kw in [
+                            '评论', '喜欢', '收藏', '下载', '分享', 'tags', 'category', 'search',
+                            'censored', 'uncensored', 'western', 'anime', '有碼', '無碼', '歐美',
+                        ]):
+                            continue
+                        seen.add(name.lower())
+                        actors.append((name, "unknown"))
+                    if len(actors) >= 20:
+                        break
                 except Exception:
                     pass
-            if actors:
-                return ",".join(actors[:20])
         except Exception:
             pass
-        return None
+        return actors
 
     def _extract_video_code_from_page(self) -> Optional[str]:
         """从详情页提取番号。
@@ -1185,18 +1299,49 @@ class MagnetScraper:
         return None
 
     def _extract_tags(self) -> Optional[str]:
-        """提取标签列表，返回逗号分隔"""
+        """提取标签列表，返回逗号分隔。
+
+        从 movie-panel-info 里含 /tags 链接的 panel-block 提取（避开 navbar）。
+        javdb 的标签链接格式是 /tags?c4=17（注意是 ? 不是 /）。
+        """
+        # navbar 假阳性黑名单（影片分类导航词，不是真标签）
+        BLACKLIST = {
+            "censored", "uncensored", "western", "anime", "fc2",
+            "有碼", "無碼", "歐美", "无码", "欧美", "動畫", "动画",
+            "推荐", "recommend",
+        }
         tags = []
+        seen = set()
         try:
-            # 从标签区域提取
-            tag_els = self.page.locator(".tags a, .tag-list a, .categories a, .genre a, .tile-tags a[href*='/tags/']").all()
-            if not tag_els:
-                tag_els = self.page.locator("a[href*='/tags/']").all()
-            for el in tag_els:
+            # 优先：找 movie-panel-info 里含 /tags 链接的 panel-block
+            nav = self.page.locator("nav.movie-panel-info")
+            tag_links = []
+            if nav.count() > 0:
+                blocks = nav.locator(".panel-block").all()
+                for block in blocks:
+                    try:
+                        links = block.locator("a[href*='/tags']").all()
+                        if links:
+                            tag_links = links
+                            break
+                    except Exception:
+                        continue
+            # 兜底：全局选择器 + 黑名单过滤
+            if not tag_links:
+                tag_links = self.page.locator(
+                    "a[href*='/tags/'], a[href*='/tags?'], a[href*='/genres/']"
+                ).all()
+            for el in tag_links:
                 try:
                     t = (el.inner_text() or "").strip()
-                    if t and len(t) > 0:
-                        tags.append(t)
+                    if not t or t.lower() in seen:
+                        continue
+                    if t.lower() in BLACKLIST:
+                        continue
+                    if any(kw in t.lower() for kw in ['评论', '喜欢', '收藏', '下载', '分享', 'search', 'category']):
+                        continue
+                    seen.add(t.lower())
+                    tags.append(t)
                 except Exception:
                     pass
         except Exception:
@@ -1600,13 +1745,18 @@ class MagnetScraper:
                             rating=extra.get("rating"),
                             file_size=extra.get("file_size"),
                         )
-                        # 建立演员-作品关联
+                        # 建立演员-作品关联 + 写入 actors.gender
                         if actors and video_code:
                             try:
-                                actor_names = [a.strip() for a in actors.split(",") if a.strip()]
-                                for aname in actor_names[:10]:  # 最多关联前10个演员
-                                    # 查找或创建演员记录（upsert_actor 返回 actor_id: int）
-                                    actor_id = self.store.upsert_actor(aname)
+                                # 优先用 _last_actors_gender（含 gender，来自 ♀/♂ 标记）
+                                actors_gender = getattr(self, "_last_actors_gender", []) or []
+                                if not actors_gender:
+                                    # 兜底：只有字符串，gender 全部 unknown
+                                    actors_gender = [(a.strip(), "unknown")
+                                                     for a in actors.split(",") if a.strip()]
+                                for aname, gender in actors_gender[:10]:  # 最多前 10 个
+                                    # upsert_actor 返回 actor_id；同时写入 gender 字段
+                                    actor_id = self.store.upsert_actor(aname, gender=gender)
                                     if actor_id:
                                         task_row = self.store.get_task_by_url(url)
                                         if task_row:
@@ -1776,6 +1926,14 @@ def main():
     single_parser.add_argument("--url", type=str, required=True, help="详情页 URL")
     single_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
+    # 刷新老数据的演员性别（用新的 ♀/♂ 标记）
+    refresh_parser = subparsers.add_parser(
+        "refresh-actor-gender",
+        help="重新爬取已访问 task，刷新 actors（女优优先）+ tags + actors.gender",
+    )
+    refresh_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
+    refresh_parser.add_argument("--limit", type=int, default=None, help="最多处理条数")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -1788,7 +1946,7 @@ def main():
 
     use_db = getattr(args, "list_code", None) or getattr(args, "list_source_id", None)
     # ranking 和 crawl-actor 命令始终需要数据库存储
-    if not use_db and args.command in ("ranking", "crawl-actor", "extract-single"):
+    if not use_db and args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender"):
         use_db = True
     store = None
     list_source_id = None
@@ -1800,7 +1958,7 @@ def main():
     if use_db:
         logger.info("使用数据库模式")
         store = SqliteTaskStore(Path(config.DB_PATH))
-        if args.command in ("ranking", "crawl-actor", "extract-single"):
+        if args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender"):
             # 这些命令只需要 store，不需要 list_source
             logger.info(f"{args.command} 模式，跳过 list_source 初始化")
         elif getattr(args, "list_source_id", None):
@@ -1932,6 +2090,12 @@ def main():
                         break
                     logger.info(f"提取单个任务: {single_url}")
                     scraper._process_single_url(single_url)
+                elif args.command == "refresh-actor-gender":
+                    logger.info("执行演员性别刷新（修正老数据）...")
+                    result = scraper.refresh_actor_gender(
+                        limit=getattr(args, "limit", None),
+                    )
+                    logger.info(f"刷新结果: {result}")
                 logger.info("命令执行成功")
                 break
             except BlockedException as e:

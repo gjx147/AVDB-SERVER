@@ -193,20 +193,22 @@ def apply_to_task(db: Session, task: Task, meta: VideoMetadata, *, overwrite: bo
             if cur != val:
                 setattr(task, db_field, val)
                 changed = True
-    # 演员（合并去重）
+    # 演员（保留现有顺序，新增的追加到末尾；避免 sorted() 破坏"女优优先"顺序）
     if meta.actors:
-        existing = set(filter(None, (task.actors or "").split(",")))
-        new_actors = existing | set(meta.actors)
-        joined = ",".join(sorted(new_actors))
-        if joined != (task.actors or ""):
+        existing_list = [a.strip() for a in (task.actors or "").split(",") if a.strip()]
+        existing_set = set(existing_list)
+        new_only = [a for a in meta.actors if a and a not in existing_set]
+        if new_only:
+            joined = ",".join(existing_list + new_only)
             task.actors = joined
             changed = True
-    # 标签
+    # 标签（同上策略，保留现有顺序）
     if meta.genres:
-        existing_tags = set(filter(None, (task.tags or "").split(",")))
-        new_tags = existing_tags | set(meta.genres)
-        joined = ",".join(sorted(new_tags))
-        if joined != (task.tags or ""):
+        existing_list = [t.strip() for t in (task.tags or "").split(",") if t.strip()]
+        existing_set = set(existing_list)
+        new_only = [t for t in meta.genres if t and t not in existing_set]
+        if new_only:
+            joined = ",".join(existing_list + new_only)
             task.tags = joined
             changed = True
     if changed:

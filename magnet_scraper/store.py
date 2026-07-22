@@ -233,6 +233,27 @@ class SqliteTaskStore:
                 cur = conn.execute("SELECT url FROM tasks WHERE status='visited'")
             return {r[0] for r in cur.fetchall()}
 
+    def get_visited_tasks(self, list_source_id: int = None, limit: int = None,
+                          only_with_actors: bool = False) -> List[dict]:
+        """返回 visited 任务的 (id, url, video_code, actors) 列表，供 refresh-actor-gender 用。
+
+        only_with_actors: 只返回 actors 字段非空的任务（用于刷新老数据）。
+        """
+        sql = ("SELECT id, url, video_code, actors FROM tasks WHERE status='visited'"
+               " AND url IS NOT NULL AND url != ''")
+        params = []
+        if list_source_id is not None:
+            sql += " AND list_source_id=?"
+            params.append(list_source_id)
+        if only_with_actors:
+            sql += " AND actors IS NOT NULL AND actors != ''"
+        sql += " ORDER BY id"
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        with self._conn() as conn:
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
     def get_task_by_url(self, url: str) -> Optional[dict]:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE url=?", (url,)).fetchone()

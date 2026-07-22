@@ -237,6 +237,28 @@ def extract_failed(req: CrawlRequest, _user: CurrentUser):
     return start_extract(req, _user)
 
 
+@router.post("/refresh-actor-gender")
+def refresh_actor_gender(req: CrawlRequest, _user: CurrentUser):
+    """重新爬取已访问 task，刷新 actors（女优优先）+ tags（去 navbar 污染）+ actors.gender。
+
+    修正老数据：旧版 _extract_actors 把 navbar 的 Censored/Uncensored/Western 当演员，
+    且 actors.gender 全 null。新版用 javdb ♀/♂ 标记正确识别女优。
+    """
+    if not scraper_lock.try_acquire():
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+
+    cmd = ["refresh-actor-gender"]
+    if req.limit:
+        cmd += ["--limit", str(req.limit)]
+
+    proc = _start_scraper(cmd)
+    scraper_lock.set_proc(proc, {
+        "list_source_id": req.list_source_id, "mode": "refresh-actor-gender", "pid": proc.pid,
+        "started_at": _now_iso(),
+    })
+    return {"ok": True, "pid": proc.pid, "mode": "refresh-actor-gender"}
+
+
 @router.post("/stop")
 def stop_crawl(_user: CurrentUser):
     """停止当前爬取进程（杀整个进程树）。"""
