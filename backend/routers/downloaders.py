@@ -217,19 +217,24 @@ async def _push_clouddrive(magnet: str, config: dict) -> dict:
         password = config.get("clouddrive_password", "")
         if username and password:
             try:
+                logger.info(f"CD2 登录: 用户名={username}")
                 # GetTokenRequest: field1=userName, field2=password
                 login_payload = _cd2_encode_string(1, username) + _cd2_encode_string(2, password)
                 data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "GetToken", login_payload)
+                logger.info(f"CD2 登录响应: grpc-status={gstatus}, data_len={len(data)}")
                 if gstatus == "0" and len(data) > 2:
                     # JWTToken: field3=token (string)
-                    # 简单解析：找 field 3 (tag=0x1a)
                     token = _cd2_extract_string_field(data, 3)
                     if not token:
+                        logger.error(f"CD2 登录成功但未提取到 token，raw data={data[:80]!r}")
                         return {"ok": False, "message": "CloudDrive2 登录成功但未返回 token"}
+                    logger.info("CD2 登录成功，已获取 token")
                 else:
                     return {"ok": False, "message": f"CloudDrive2 登录失败 (grpc-status={gstatus})"}
             except Exception as e:
                 return {"ok": False, "message": f"CloudDrive2 登录异常: {e}"}
+        else:
+            logger.warning(f"CD2 无 token 且无用户名密码（username={bool(username)}, password={bool(password)}）")
 
     # CreateOfflineTaskRequest: field1=magnet_url, field2=parent_folder_id_or_path
     payload = _cd2_encode_string(1, magnet) + _cd2_encode_string(2, save_path)
@@ -293,7 +298,7 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
               "aria2_url", "aria2_secret",
-              "clouddrive_url", "clouddrive_token", "clouddrive_save_path",
+              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:
         config[k] = _get_setting(db, k)
 
