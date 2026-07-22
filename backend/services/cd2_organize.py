@@ -20,15 +20,10 @@ settings 表 key：
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
-from urllib.parse import unquote
 
 logger = logging.getLogger("avdb.downloaders.cd2")
-
-# 视频扩展名（用于过滤 CD2 下载目录里的小文件如 .jpg/.txt）
-VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".ts", ".rmvb", ".iso"}
 
 
 def _get_config() -> dict[str, str]:
@@ -69,95 +64,101 @@ def _sanitize_folder_name(name: str) -> str:
 
 
 def _get_lead_actress_name(db, task) -> str:
-    """从 task.actors 文本字段取第一个名字，查 actors 表过滤 gender=female。
+    """识别主演女优名。
 
-    找不到女优记录时回退 task.actors 第一个名字；无演员字段回退 '未分类'。
+    策略（按可靠性优先）：
+    1. 通过 actor_movies 关联表查 task 关联的演员，过滤 gender=female 取第一个
+    2. 否则解析 task.actors 文本字段，查 actors 表过滤 gender=female
+    3. 都查不到女优时回退 task.actors 文本第一个名字
+    4. 完全无演员信息回退 '未分类'
+
+    不依赖 task.actors 文本字段的顺序（第一个可能不是女优）。
     """
-    actors_str = (task.actors or "").strip()
-    if not actors_str:
-        return "未分类"
-    names = [n.strip() for n in actors_str.split(",") if n.strip()]
-    if not names:
-        return "未分类"
-    first_name = names[0]
-
-    # 查 actors 表，优先返回 gender=female 的第一个匹配
     try:
-        from models import Actor
+        from models import Actor, actor_movies
         from sqlalchemy import select
-        rows = db.execute(
-            select(Actor).where(Actor.name.in_(names)).order_by(Actor.id)
-        ).scalars().all()
-        # 先找女优
-        for r in rows:
-            if (r.gender or "").lower() == "female":
-                return _sanitize_folder_name(r.name)
-        # 没女优就用第一个匹配的演员
-        if rows:
-            return _sanitize_folder_name(rows[0].name)
-    except Exception as e:
-        logger.warning(f"[CD2迁移] 查询演员表失败，回退用 task.actors 文本: {e}")
 
-    return _sanitize_folder_name(first_name)
-
-
-def _get_downloaded_filename(task) -> str:
-    """推断 CD2 下载后的文件名。
-
-    优先级：task.magnets_json 里匹配 task.best_magnet 的 name → magnet &dn= 参数 → {video_code}.mp4
-    """
-    # 1. 从 magnets_json 找 best_magnet 对应的 name
-    best_magnet = (task.best_magnet or "").strip()
-    magnets_json = task.magnets_json or ""
-    if best_magnet and magnets_json:
+        # 1. 优先走关联表（更可靠：爬虫补齐演员作品时建立的关联）
         try:
-            magnets = json.loads(magnets_json)
-            if isinstance(magnets, list):
-                for m in magnets:
-                    if isinstance(m, dict) and m.get("magnet") == best_magnet:
-                        name = (m.get("name") or "").strip()
-                        if name:
-                            return name
-        except Exception:
-            pass
+            rows = db.execute(
+                select(Actor)
+                .join(actor_movies, actor_movies.c.actor_id == Actor.id)
+                .where(actor_movies.c.task_id == task.id)
+                .order_by(actor_movies.c.created_at)
+            ).scalars().all()
+            for r in rows:
+                if (r.gender or "").lower() == "female":
+                    return _sanitize_folder_name(r.name)
+            # 关联表有演员但都不是 female，继续走文本字段
+        except Exception as e:
+            logger.warning(f"[CD2迁移] 关联表查询失败: {e}")
 
-    # 2. 解析 magnet 的 &dn= 参数（display name）
-    if best_magnet:
-        m = re.search(r"[&?]dn=([^&]+)", best_magnet)
-        if m:
-            dn = unquote(m.group(1)).strip()
-            if dn:
-                return dn
+        # 2. 解析 task.actors 文本字段查 actors 表
+        actors_str = (task.actors or "").strip()
+        if actors_str:
+            names = [n.strip() for n in actors_str.split(",") if n.strip()]
+            if names:
+                rows = db.execute(
+                    select(Actor).where(Actor.name.in_(names)).order_by(Actor.id)
+                ).scalars().all()
+                # 优先返回 female
+                for r in rows:
+                    if (r.gender or "").lower() == "female":
+                        return _sanitize_folder_name(r.name)
+                # 文本字段查到了演员但都不是 female，回退用文本第一个名
+                return _sanitize_folder_name(names[0])
 
-    # 3. 回退番号
-    return f"{task.video_code or 'unknown'}.mp4"
+    except Exception as e:
+        logger.warning(f"[CD2迁移] 演员表查询异常: {e}")
+        # 异常时尝试用文本字段兜底
+        actors_str = (task.actors or "").strip()
+        if actors_str:
+            names = [n.strip() for n in actors_str.split(",") if n.strip()]
+            if names:
+                return _sanitize_folder_name(names[0])
+
+    return "未分类"
 
 
-def _match_video_files(files: list[dict], video_code: str | None) -> list[dict]:
-    """从 list_folder 结果里匹配属于该 video_code 的视频文件。
+def _find_video_code_subfolder(files: list[dict], video_code: str | None) -> dict | None:
+    """从源文件夹列表里找匹配 video_code 的子文件夹。
 
-    匹配规则：文件名（不区分大小写）包含 video_code，且扩展名是视频。
-    无 video_code 时返回所有视频文件（保守：只匹配明显的视频文件名）。
+    CD2 每次下载会生成 {video_code} 子文件夹。匹配规则：目录名包含 video_code（不区分大小写）。
+    无 video_code 或没匹配到返回 None。
     """
-    result = []
+    if not video_code:
+        return None
+    vc_lower = video_code.lower()
     for f in files:
-        if f.get("is_directory"):
+        if not f.get("is_directory"):
             continue
-        name = f.get("name", "")
-        ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if ext not in VIDEO_EXTS:
-            continue
-        if video_code:
-            if video_code.lower() in name.lower():
-                result.append(f)
-        else:
-            # 无番号时，避免误移所有视频（保守返回空）
-            pass
-    return result
+        name = (f.get("name") or "").lower()
+        if vc_lower in name:
+            return f
+    return None
+
+
+def _get_ext(name: str) -> str:
+    """取文件扩展名（小写，含点）。无扩展返回 ''。"""
+    if "." in name:
+        return "." + name.rsplit(".", 1)[-1].lower()
+    return ""
 
 
 async def _do_organize(task_id: int, video_code: str | None, delay: int):
-    """延迟任务主体。"""
+    """延迟任务主体。
+
+    流程：
+    1. sleep(delay) 等待 CD2 下载完成
+    2. 在源文件夹下找 {video_code} 子文件夹
+    3. 进入子文件夹：
+       - <200MB 的文件删除（清理剧照/txt 等垃圾）
+       - ≥200MB 的文件重命名为 {video_code}.{原扩展名}（多文件加序号 -2/-3...）
+    4. 在媒体库建 {女优名} 子目录（幂等）
+    5. 把子文件夹里所有剩余文件移动到 /媒体库/{女优名}/
+    6. 可选：删除空的子文件夹
+    7. 可选：通知 CMS auto_organize（若 cms_enabled）
+    """
     label = f"task_id={task_id} video_code={video_code or '无'}"
     logger.info(f"[CD2迁移] 计划在 {delay}s 后检查源文件夹 ({label})")
     try:
@@ -177,6 +178,9 @@ async def _do_organize(task_id: int, video_code: str | None, delay: int):
     if not source_folder or not target_folder:
         logger.warning(f"[CD2迁移] 跳过：source/target 文件夹未配置 ({label})")
         return
+    if not video_code:
+        logger.warning(f"[CD2迁移] 跳过：无 video_code 无法定位子文件夹 ({label})")
+        return
 
     # 查 Task 拿女优名
     from database import SessionLocal
@@ -185,33 +189,93 @@ async def _do_organize(task_id: int, video_code: str | None, delay: int):
     try:
         task = db.get(Task, task_id) if task_id else None
         actress_name = _get_lead_actress_name(db, task) if task else "未分类"
-        expected_filename = _get_downloaded_filename(task) if task else ""
-        logger.info(f"[CD2迁移] 开始 ({label}): 女优={actress_name} 预期文件={expected_filename}")
+        logger.info(f"[CD2迁移] 开始 ({label}): 女优={actress_name}")
     finally:
         db.close()
 
     # CD2 登录
-    from services.cd2_client import get_token_or_login, list_folder, create_folder, move_file
+    from services.cd2_client import (
+        get_token_or_login, list_folder, create_folder, move_file,
+        rename_file, delete_files,
+    )
     token, err = await get_token_or_login(cfg)
     if err:
         logger.error(f"[CD2迁移] CD2 登录失败 ({label}): {err}")
         return
 
-    # 列源文件夹，找匹配 video_code 的视频文件
-    files, list_err = await list_folder(cd2_url, token, source_folder)
+    # 1. 在源文件夹下找 {video_code} 子文件夹
+    entries, list_err = await list_folder(cd2_url, token, source_folder)
     if list_err:
         logger.error(f"[CD2迁移] 列源文件夹失败 ({label}): {list_err}")
         return
-    logger.info(f"[CD2迁移] 源文件夹 {source_folder} 共 {len(files)} 个条目")
+    sub = _find_video_code_subfolder(entries, video_code)
+    if not sub or not sub.get("full_path"):
+        logger.info(f"[CD2迁移] 源文件夹下未找到匹配 {video_code} 的子文件夹，可能 CD2 还在下载 ({label})")
+        return
+    sub_path = sub["full_path"]
+    logger.info(f"[CD2迁移] 找到子文件夹: {sub_path}")
 
-    matched = _match_video_files(files, video_code)
-    if not matched:
-        logger.info(f"[CD2迁移] 源文件夹未找到匹配 video_code={video_code} 的视频文件，可能 CD2 还在下载 ({label})")
+    # 2. 列子文件夹内容
+    sub_entries, sub_err = await list_folder(cd2_url, token, sub_path)
+    if sub_err:
+        logger.error(f"[CD2迁移] 列子文件夹 {sub_path} 失败 ({label}): {sub_err}")
+        return
+    logger.info(f"[CD2迁移] 子文件夹 {sub_path} 共 {len(sub_entries)} 个条目")
+
+    # 3. 分类处理：<200MB 删除，≥200MB 重命名
+    SMALL_THRESHOLD = 200 * 1024 * 1024  # 200MB
+    small_files = []  # 待删除
+    big_files = []     # 待重命名
+    for f in sub_entries:
+        if f.get("is_directory"):
+            continue  # 子文件夹里的子目录不动（保守）
+        full = f.get("full_path")
+        if not full:
+            continue
+        size = f.get("size", 0) or 0
+        if size < SMALL_THRESHOLD:
+            small_files.append(full)
+        else:
+            big_files.append((full, f.get("name", "")))
+
+    # 删除小文件
+    if small_files:
+        ok, msg = await delete_files(cd2_url, token, small_files)
+        if ok:
+            logger.info(f"[CD2迁移] 已删除 {len(small_files)} 个小文件 (<200MB)")
+        else:
+            logger.warning(f"[CD2迁移] 删除小文件失败（继续处理）: {msg}")
+    else:
+        logger.info(f"[CD2迁移] 无需删除小文件")
+
+    # 重命名大文件 → {video_code}.{ext}（多文件加序号）
+    renamed_full_paths = []
+    for idx, (full, name) in enumerate(big_files):
+        ext = _get_ext(name)
+        if idx == 0:
+            new_name = f"{video_code}{ext}"
+        else:
+            new_name = f"{video_code}-{idx + 1}{ext}"
+        # 已是目标名则跳过
+        if name == new_name:
+            renamed_full_paths.append(full)
+            continue
+        ok, msg = await rename_file(cd2_url, token, full, new_name)
+        if ok:
+            # 重命名后 full_path 的文件名部分变了，重新拼接
+            parent = full.rsplit("/", 1)[0] if "/" in full else ""
+            new_full = f"{parent}/{new_name}" if parent else new_name
+            renamed_full_paths.append(new_full)
+            logger.info(f"[CD2迁移] 重命名: {name} → {new_name}")
+        else:
+            logger.warning(f"[CD2迁移] 重命名失败 {name}→{new_name}（用原名移动）: {msg}")
+            renamed_full_paths.append(full)
+
+    if not renamed_full_paths:
+        logger.warning(f"[CD2迁移] 子文件夹内无大文件可移动 ({label})")
         return
 
-    logger.info(f"[CD2迁移] 找到 {len(matched)} 个匹配文件: {[f['name'] for f in matched]}")
-
-    # 在媒体库建女优子目录（幂等）
+    # 4. 媒体库建女优子目录（幂等）
     dest_path = f"{target_folder.rstrip('/')}/{actress_name}"
     ok, msg = await create_folder(cd2_url, token, target_folder, actress_name)
     if not ok:
@@ -219,19 +283,15 @@ async def _do_organize(task_id: int, video_code: str | None, delay: int):
         return
     logger.info(f"[CD2迁移] 目录就绪: {dest_path}")
 
-    # 移动文件
-    file_paths = [f["full_path"] for f in matched if f.get("full_path")]
-    if not file_paths:
-        logger.error(f"[CD2迁移] 匹配文件缺少 full_path 字段 ({label})")
-        return
-    ok, msg = await move_file(cd2_url, token, file_paths, dest_path)
+    # 5. 移动重命名后的大文件到女优目录
+    ok, msg = await move_file(cd2_url, token, renamed_full_paths, dest_path)
     if ok:
-        logger.info(f"[CD2迁移] 移动成功 ({label}): {len(file_paths)} 个文件 → {dest_path}")
+        logger.info(f"[CD2迁移] 移动成功 ({label}): {len(renamed_full_paths)} 个文件 → {dest_path}")
     else:
         logger.error(f"[CD2迁移] 移动失败 ({label}): {msg}")
         return
 
-    # 可选：更新 Task.media_in_library
+    # 6. 可选：更新 Task.media_in_library
     try:
         db = SessionLocal()
         try:
@@ -244,7 +304,7 @@ async def _do_organize(task_id: int, video_code: str | None, delay: int):
     except Exception as e:
         logger.warning(f"[CD2迁移] 更新 media_in_library 失败（不影响主流程）: {e}")
 
-    # 可选：通知 CMS 入库
+    # 7. 可选：通知 CMS 入库
     if _to_bool(cfg.get("cms_enabled")):
         cms_url = cfg.get("cms_url", "").strip()
         cms_token = cfg.get("cms_token", "").strip() or "cloud_media_sync"

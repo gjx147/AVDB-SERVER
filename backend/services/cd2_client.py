@@ -340,6 +340,51 @@ async def move_file(base: str, token: str, file_paths: list[str], dest_path: str
         return False, f"MoveFile 异常: {e}"
 
 
+async def rename_file(base: str, token: str, file_path: str, new_name: str) -> tuple[bool, str]:
+    """RenameFile。field1=theFilePath, field2=newName。
+
+    new_name 只是文件名（不含路径），如 "ABC-123.mp4"。
+    返回 (success, message)。
+    """
+    payload = encode_string(1, file_path) + encode_string(2, new_name)
+    try:
+        data, gstatus, _ = await grpc_web_call(base, "RenameFile", payload, token)
+        if gstatus != "0":
+            err_map = {"2": "未知错误", "7": "权限不足", "12": "方法不存在",
+                       "13": "内部错误", "16": "未认证（token 无效或过期）"}
+            return False, f"RenameFile {err_map.get(gstatus, f'grpc-status={gstatus}')}"
+        success = extract_bool_field(data, 1)
+        err = extract_string_field(data, 2)
+        if success:
+            return True, f"已重命名为 {new_name}"
+        return False, err or "RenameFile 返回失败但无错误信息"
+    except Exception as e:
+        return False, f"RenameFile 异常: {e}"
+
+
+async def delete_files(base: str, token: str, paths: list[str]) -> tuple[bool, str]:
+    """DeleteFiles（批量删除，移到回收站）。MultiFileRequest field1=repeated path。
+
+    返回 (success, message)。
+    """
+    if not paths:
+        return True, "无文件需删除"
+    payload = b"".join(encode_string(1, p) for p in paths)
+    try:
+        data, gstatus, _ = await grpc_web_call(base, "DeleteFiles", payload, token)
+        if gstatus != "0":
+            err_map = {"2": "未知错误", "7": "权限不足", "12": "方法不存在",
+                       "13": "内部错误", "16": "未认证（token 无效或过期）"}
+            return False, f"DeleteFiles {err_map.get(gstatus, f'grpc-status={gstatus}')}"
+        success = extract_bool_field(data, 1)
+        err = extract_string_field(data, 2)
+        if success:
+            return True, f"已删除 {len(paths)} 个文件"
+        return False, err or "DeleteFiles 返回失败但无错误信息"
+    except Exception as e:
+        return False, f"DeleteFiles 异常: {e}"
+
+
 async def add_offline_files(base: str, token: str, magnet: str, save_path: str) -> tuple[bool, str]:
     """AddOfflineFiles（CD2 磁力推送，从 downloaders._push_clouddrive 提取）。
 
