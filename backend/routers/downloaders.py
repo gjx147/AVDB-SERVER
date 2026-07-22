@@ -138,7 +138,7 @@ async def _push_clouddrive(magnet: str, config: dict) -> dict:
         if username and password:
             try:
                 async with httpx.AsyncClient(timeout=15) as c:
-                    login_url = base + "/cloud.drive.CloudDrive/GetCaptcha"
+                    login_url = base + "/cloud.drive.CloudDriveService/GetCaptcha"
                     captcha_resp = await c.post(login_url, json={}, headers={"Content-Type": "application/json"})
                     captcha_id = ""
                     if captcha_resp.status_code == 200:
@@ -146,7 +146,7 @@ async def _push_clouddrive(magnet: str, config: dict) -> dict:
                             captcha_id = captcha_resp.json().get("id", "") or ""
                         except Exception:
                             pass
-                    login_url2 = base + "/cloud.drive.CloudDrive/Login"
+                    login_url2 = base + "/cloud.drive.CloudDriveService/Login"
                     login_payload = {
                         "userName": username,
                         "password": password,
@@ -162,7 +162,8 @@ async def _push_clouddrive(magnet: str, config: dict) -> dict:
         headers["Authorization"] = f"Bearer {token}"
 
     # CreateOfflineTask（Connect-RPC JSON 端点）
-    api_url = base + "/cloud.drive.CloudDrive/CreateOfflineTask"
+    # proto service 名是 CloudDriveService（不是 CloudDrive）
+    api_url = base + "/cloud.drive.CloudDriveService/CreateOfflineTask"
     payload = {"magnet_url": magnet, "parent_folder_id_or_path": save_path}
     try:
         async with httpx.AsyncClient(timeout=15) as c:
@@ -259,7 +260,7 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         base = config["clouddrive_url"].rstrip("/")
         try:
             async with httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(base + "/cloud.drive.CloudDrive/GetCaptcha", json={}, headers={"Content-Type": "application/json"})
+                r = await c.post(base + "/cloud.drive.CloudDriveService/GetCaptcha", json={}, headers={"Content-Type": "application/json"})
                 if r.status_code == 200:
                     return {"ok": True, "message": "CloudDrive2 服务可达"}
                 return {"ok": False, "message": f"CloudDrive2 返回 {r.status_code}"}
