@@ -236,14 +236,15 @@ async def _push_clouddrive(magnet: str, config: dict) -> dict:
         else:
             logger.warning(f"CD2 无 token 且无用户名密码（username={bool(username)}, password={bool(password)}）")
 
-    # CreateOfflineTaskRequest: field1=magnet_url, field2=parent_folder_id_or_path
+    # AddOfflineFileRequest: field1=urls(磁力), field2=toFolder(目标文件夹)
+    # 注意：CD2 的方法名是 AddOfflineFiles（不是文档旧版的 CreateOfflineTask）
     payload = _cd2_encode_string(1, magnet) + _cd2_encode_string(2, save_path)
     try:
-        data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "CreateOfflineTask", payload, token)
+        data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "AddOfflineFiles", payload, token)
         if gstatus == "0":
             return {"ok": True, "message": "已推送到 CloudDrive2"}
-        # 常见错误：2=UNKNOWN, 7=PERMISSION_DENIED, 16=UNAUTHENTICATED
-        err_map = {"2": "未知错误", "7": "权限不足", "16": "未认证（token 无效或过期）", "13": "内部错误"}
+        # 常见错误：2=UNKNOWN, 7=PERMISSION_DENIED, 12=UNIMPLEMENTED, 16=UNAUTHENTICATED
+        err_map = {"2": "未知错误", "7": "权限不足", "12": "方法不存在", "16": "未认证（token 无效或过期）", "13": "内部错误"}
         msg = err_map.get(gstatus, f"gRPC status={gstatus}")
         return {"ok": False, "message": f"CloudDrive2: {msg}"}
     except Exception as e:
