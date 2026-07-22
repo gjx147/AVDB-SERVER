@@ -301,6 +301,7 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     downloader = req.downloader or _get_setting(db, "default_downloader") or "qbittorrent"
 
     # 推送
+    logger.info(f"推送磁力到 {downloader}: {req.magnet[:80]}... (task_id={req.task_id})")
     if downloader == "qbittorrent":
         result = await _push_qbittorrent(req.magnet, config)
     elif downloader == "aria2":
@@ -308,7 +309,14 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     elif downloader == "clouddrive":
         result = await _push_clouddrive(req.magnet, config)
     else:
+        logger.warning(f"不支持的下载器: {downloader}")
         return {"ok": False, "message": f"暂不支持的下载器: {downloader}"}
+
+    # 记录推送结果
+    if result["ok"]:
+        logger.info(f"推送成功 [{downloader}]: {result.get('message', '')}")
+    else:
+        logger.error(f"推送失败 [{downloader}]: {result.get('message', '')}")
 
     # 记录到 downloads 表
     task = db.get(Task, req.task_id) if req.task_id else None
@@ -357,7 +365,9 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
               "clouddrive_url", "clouddrive_token"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
-        return await asyncio.to_thread(_test_qbittorrent_sync, config)
+        result = await asyncio.to_thread(_test_qbittorrent_sync, config)
+        logger.info(f"测试连接 [qbittorrent]: ok={result.get('ok')} msg={result.get('message','')}")
+        return result
     elif downloader == "aria2":
         if not config["aria2_url"]:
             return {"ok": False, "message": "未配置"}
@@ -369,8 +379,27 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         try:
             data, gstatus, httpstatus = await _cd2_grpc_web_call(config["clouddrive_url"], "GetSystemInfo", b"")
             if gstatus == "0":
+                logger.info(f"测试连接 [clouddrive]: ok=True 服务可达")
                 return {"ok": True, "message": "CloudDrive2 服务可达"}
+            logger.warning(f"测试连接 [clouddrive]: ok=False gRPC status={gstatus}")
             return {"ok": False, "message": f"CloudDrive2 gRPC status={gstatus}"}
         except Exception as e:
+            logger.error(f"测试连接 [clouddrive]: 异常 {e}")
             return {"ok": False, "message": f"连接失败: {e}"}
     return {"ok": False, "message": f"未知下载器: {downloader}"}
+
+
+@router.get("/logs")
+def downloader_logs(_user: CurrentUser, limit: int = 100):
+    """读取最近的下载器日志（data/downloaders.log）。"""
+    from pathlib import Path
+    from config import get_settings
+    log_path = Path(get_settings().DATA_DIR) / "downloaders.log"
+    if not log_path.exists():
+        return {"lines": [], "total": 0}
+    try:
+        # 读最后 N 行
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return {"lines": lines[-limit:], "total": len(lines)}
+    except Exception as e:
+        return {"lines": [], "total": 0, "error": str(e)}

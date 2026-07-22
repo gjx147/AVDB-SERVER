@@ -187,6 +187,8 @@ export const api = {
       http.post<ApiOk & { task_id?: number }>('/api/downloaders/download', { magnet, downloader, save_path, task_id }).then((r) => r.data),
     testConnection: (downloader: string, save_path?: string) =>
       http.post<ApiOk>('/api/downloaders/test-connection', { downloader, save_path }).then((r) => r.data),
+    logs: (limit = 100) =>
+      http.get<{ lines: string[]; total: number }>('/api/downloaders/logs', { params: { limit } }).then((r) => r.data),
   },
 
   // ════════ Downloads（下载历史 + 状态）════════

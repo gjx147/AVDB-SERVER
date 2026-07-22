@@ -34,6 +34,15 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+# 下载器专用日志文件（data/downloaders.log），记录所有推送/测试操作
+_dl_log_path = Path(get_settings().DATA_DIR) / "downloaders.log"
+_dl_log_path.parent.mkdir(parents=True, exist_ok=True)
+_dl_file_handler = logging.FileHandler(_dl_log_path, encoding="utf-8")
+_dl_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+for _dl_logger_name in ("avdb.downloaders", "avdb.downloaders.cd2"):
+    _dl_l = logging.getLogger(_dl_logger_name)
+    _dl_l.addHandler(_dl_file_handler)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

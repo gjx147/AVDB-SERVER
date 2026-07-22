@@ -106,6 +106,36 @@ export function Downloaders() {
         </div>
         <div className="hint" style={{ marginTop: 10 }}>推送到下载器时，若未单独指定则使用此默认项</div>
       </div>
+
+      <DownloaderLog />
+    </div>
+  )
+}
+
+function DownloaderLog() {
+  const [lines, setLines] = useState<string[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () => {
+    setLines(null); setError(null)
+    api.downloaders.logs(100).then((r) => setLines(r.lines)).catch((e) => setError(String((e as Error).message)))
+  }
+  useEffect(() => { load() }, [])
+
+  return (
+    <div className="card" style={{ marginTop: 22 }}>
+      <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="card-title"><Icon.console /> 下载器日志</div>
+        <button className="btn btn--ghost btn--sm" onClick={load}>刷新</button>
+      </div>
+      {error ? <div style={{ color: 'var(--red)', fontSize: 13 }}>{error}</div> :
+       lines === null ? <div style={{ color: 'var(--t-faint)', fontSize: 13 }}>加载中…</div> :
+       lines.length === 0 ? <div style={{ color: 'var(--t-faint)', fontSize: 13 }}>暂无日志</div> :
+       <pre style={{
+         maxHeight: 360, overflow: 'auto', background: 'var(--bg-page)', borderRadius: 'var(--r-md)',
+         padding: 12, fontSize: 12, fontFamily: 'var(--ff-mono)', color: 'var(--t-body)',
+         whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0,
+       }}>{lines.join('\n')}</pre>}
     </div>
   )
 }
