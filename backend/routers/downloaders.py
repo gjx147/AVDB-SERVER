@@ -73,7 +73,11 @@ def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
         qbc.auth_log_in()
         save_path = config.get("qbittorrent_save_path") or None
         result = qbc.torrents_add(urls=magnet, save_path=save_path)
-        return {"ok": result == "Ok.", "message": result}
+        # qBittorrent torrents_add 返回 "Ok." 或 "Fails."，但不同版本/已存在任务时
+        # 返回值可能不同。只要没抛异常且返回值不明确含 "Fail" 就视为成功。
+        result_str = str(result).strip()
+        ok = "fail" not in result_str.lower()
+        return {"ok": ok, "message": result_str or "已添加"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
     finally:
