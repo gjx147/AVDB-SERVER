@@ -112,67 +112,177 @@ async def _push_aria2(magnet: str, config: dict) -> dict:
         return {"ok": False, "message": str(e)}
 
 
-async def _push_clouddrive(magnet: str, config: dict) -> dict:
-    """推送到 CloudDrive2（Connect-RPC JSON API 离线下载）。
+def _cd2_encode_string(field_num: int, value: str) -> bytes:
+    """编码 protobuf string 字段（wire_type=2, length-delimited）。
 
-    CD2 使用 gRPC over HTTP/2（Connect 协议），但支持 JSON 编码：
-    POST /cloud.drive.CloudDrive/CreateOfflineTask
-    Content-Type: application/json
-    Body: {"magnet_url":"...", "parent_folder_id_or_path":"/path"}
-    鉴权：Bearer token（从用户名密码登录获取，或直接配置 API token）
+    格式: tag_byte + varint_length + utf8_bytes
+    tag = (field_number << 3) | 2
     """
+    tag = (field_num << 3) | 2
+    data = value.encode("utf-8")
+    # varint 编码长度（简单情况：< 128 单字节）
+    length_bytes = []
+    v = len(data)
+    while v > 0:
+        length_bytes.append(v & 0x7F)
+        v >>= 7
+    if not length_bytes:
+        length_bytes = [0]
+    length_bytes = bytes([(b | 0x80) for b in length_bytes[:-1]] + [length_bytes[-1]])
+    return bytes([tag]) + length_bytes + data
+
+
+def _cd2_encode_varint(field_num: int, value: int) -> bytes:
+    """编码 protobuf varint 字段（wire_type=0，用于 bool/int）。"""
+    tag = (field_num << 3) | 0
+    v = value
+    out = []
+    while v > 0:
+        out.append(v & 0x7F)
+        v >>= 7
+    if not out:
+        out = [0]
+    return bytes([tag]) + bytes([(b | 0x80) for b in out[:-1]] + [out[-1]])
+
+
+def _cd2_grpc_web_frame(payload: bytes) -> bytes:
+    """构造 gRPC-Web 帧：flag(1b, 0) + length(4b BE) + payload。"""
+    return b"\x00" + len(payload).to_bytes(4, "big") + payload
+
+
+def _cd2_parse_grpc_web_response(body: bytes) -> tuple[bytes, str]:
+    """解析 gRPC-Web 响应。返回 (data_payload, grpc_status)。
+
+    响应由多个帧组成：
+    - 数据帧: flag=0x00, 含 protobuf payload
+    - trailer 帧: flag=0x80, 含 grpc-status:N 文本
+    """
+    data = b""
+    grpc_status = ""
+    i = 0
+    while i + 5 <= len(body):
+        flag = body[i]
+        length = int.from_bytes(body[i + 1:i + 5], "big")
+        if i + 5 + length > len(body):
+            break
+        chunk = body[i + 5:i + 5 + length]
+        if flag & 0x80:
+            # trailer 帧
+            text = chunk.decode("utf-8", errors="replace")
+            for line in text.split("\r\n"):
+                if line.startswith("grpc-status:"):
+                    grpc_status = line.split(":", 1)[1].strip()
+        else:
+            data += chunk
+        i += 5 + length
+    return data, grpc_status
+
+
+async def _cd2_grpc_web_call(base: str, method: str, payload: bytes, token: str = "") -> tuple[bytes, str, int]:
+    """调用 CD2 gRPC-Web 端点。返回 (data, grpc_status, http_status)。"""
     import httpx
+    frame = _cd2_grpc_web_frame(payload)
+    headers = {"Content-Type": "application/grpc-web+proto", "X-Grpc-Web": "1"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = base.rstrip("/") + "/clouddrive.CloudDriveFileSrv/" + method
+    async with httpx.AsyncClient(timeout=15, verify=False) as c:
+        r = await c.post(url, content=frame, headers=headers)
+        data, grpc_status = _cd2_parse_grpc_web_response(r.content)
+        # grpc-status 可能也在响应头
+        if not grpc_status:
+            grpc_status = r.headers.get("grpc-status", "")
+        return data, grpc_status, r.status_code
+
+
+async def _push_clouddrive(magnet: str, config: dict) -> dict:
+    """推送到 CloudDrive2（gRPC-Web 协议）。
+
+    CD2 用纯 gRPC（非 REST），web UI 通过 gRPC-Web 网关调用。
+    端点：POST /clouddrive.CloudDriveFileSrv/CreateOfflineTask
+    Content-Type: application/grpc-web+proto
+    鉴权：Bearer token（从 GetToken 获取，或直接配置 API token）
+    """
+    import logging
+    logger = logging.getLogger("avdb.downloaders.cd2")
     url = config.get("clouddrive_url", "")
     if not url:
         return {"ok": False, "message": "CloudDrive2 未配置"}
     save_path = config.get("clouddrive_save_path", "/")
 
-    base = url.rstrip("/")
-    headers = {"Content-Type": "application/json"}
-
-    # 鉴权：优先用配置的 token；否则用用户名密码登录获取 token
+    # 鉴权：优先 token；否则用户名密码 GetToken
     token = config.get("clouddrive_token", "")
     if not token:
         username = config.get("clouddrive_username", "")
         password = config.get("clouddrive_password", "")
         if username and password:
             try:
-                async with httpx.AsyncClient(timeout=15) as c:
-                    login_url = base + "/cloud.drive.CloudDriveService/GetCaptcha"
-                    captcha_resp = await c.post(login_url, json={}, headers={"Content-Type": "application/json"})
-                    captcha_id = ""
-                    if captcha_resp.status_code == 200:
-                        try:
-                            captcha_id = captcha_resp.json().get("id", "") or ""
-                        except Exception:
-                            pass
-                    login_url2 = base + "/cloud.drive.CloudDriveService/Login"
-                    login_payload = {
-                        "userName": username,
-                        "password": password,
-                        "captchaId": captcha_id,
-                    }
-                    login_resp = await c.post(login_url2, json=login_payload, headers={"Content-Type": "application/json"})
-                    if login_resp.status_code == 200:
-                        token = login_resp.json().get("token", "")
+                # GetTokenRequest: field1=userName, field2=password
+                login_payload = _cd2_encode_string(1, username) + _cd2_encode_string(2, password)
+                data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "GetToken", login_payload)
+                if gstatus == "0" and len(data) > 2:
+                    # JWTToken: field3=token (string)
+                    # 简单解析：找 field 3 (tag=0x1a)
+                    token = _cd2_extract_string_field(data, 3)
+                    if not token:
+                        return {"ok": False, "message": "CloudDrive2 登录成功但未返回 token"}
+                else:
+                    return {"ok": False, "message": f"CloudDrive2 登录失败 (grpc-status={gstatus})"}
             except Exception as e:
-                return {"ok": False, "message": f"CloudDrive2 登录失败: {e}"}
+                return {"ok": False, "message": f"CloudDrive2 登录异常: {e}"}
 
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    # CreateOfflineTask（Connect-RPC JSON 端点）
-    # proto service 名是 CloudDriveService（不是 CloudDrive）
-    api_url = base + "/cloud.drive.CloudDriveService/CreateOfflineTask"
-    payload = {"magnet_url": magnet, "parent_folder_id_or_path": save_path}
+    # CreateOfflineTaskRequest: field1=magnet_url, field2=parent_folder_id_or_path
+    payload = _cd2_encode_string(1, magnet) + _cd2_encode_string(2, save_path)
     try:
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(api_url, json=payload, headers=headers)
-            if r.status_code in (200, 201):
-                return {"ok": True, "message": "已推送到 CloudDrive2"}
-            return {"ok": False, "message": f"CloudDrive2 返回 {r.status_code}: {r.text[:200]}"}
+        data, gstatus, httpstatus = await _cd2_grpc_web_call(url, "CreateOfflineTask", payload, token)
+        if gstatus == "0":
+            return {"ok": True, "message": "已推送到 CloudDrive2"}
+        # 常见错误：2=UNKNOWN, 7=PERMISSION_DENIED, 16=UNAUTHENTICATED
+        err_map = {"2": "未知错误", "7": "权限不足", "16": "未认证（token 无效或过期）", "13": "内部错误"}
+        msg = err_map.get(gstatus, f"gRPC status={gstatus}")
+        return {"ok": False, "message": f"CloudDrive2: {msg}"}
     except Exception as e:
-        return {"ok": False, "message": str(e)}
+        return {"ok": False, "message": f"连接失败: {e}"}
+
+
+def _cd2_extract_string_field(data: bytes, field_num: int) -> str:
+    """从 protobuf 二进制中提取指定 string 字段（简单解析，不处理嵌套）。"""
+    i = 0
+    while i < len(data):
+        if i >= len(data):
+            break
+        tag = data[i]
+        wire_type = tag & 0x07
+        fn = tag >> 3
+        i += 1
+        if wire_type == 2:  # length-delimited (string/bytes)
+            # 读 varint 长度
+            length = 0
+            shift = 0
+            while i < len(data):
+                b = data[i]
+                i += 1
+                length |= (b & 0x7F) << shift
+                shift += 7
+                if not (b & 0x80):
+                    break
+            value = data[i:i + length]
+            i += length
+            if fn == field_num:
+                return value.decode("utf-8", errors="replace")
+        elif wire_type == 0:  # varint
+            while i < len(data):
+                b = data[i]
+                i += 1
+                if not (b & 0x80):
+                    break
+        elif wire_type == 5:  # 32-bit
+            i += 4
+        elif wire_type == 1:  # 64-bit
+            i += 8
+        else:
+            break
+    return ""
 
 
 @router.post("/push")
@@ -255,15 +365,12 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     elif downloader == "clouddrive":
         if not config["clouddrive_url"]:
             return {"ok": False, "message": "未配置"}
-        # 真实连接测试：调 GetCaptcha 验证服务可达
-        import httpx
-        base = config["clouddrive_url"].rstrip("/")
+        # 真实连接测试：调 GetSystemInfo（公共方法，无需鉴权）
         try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(base + "/cloud.drive.CloudDriveService/GetCaptcha", json={}, headers={"Content-Type": "application/json"})
-                if r.status_code == 200:
-                    return {"ok": True, "message": "CloudDrive2 服务可达"}
-                return {"ok": False, "message": f"CloudDrive2 返回 {r.status_code}"}
+            data, gstatus, httpstatus = await _cd2_grpc_web_call(config["clouddrive_url"], "GetSystemInfo", b"")
+            if gstatus == "0":
+                return {"ok": True, "message": "CloudDrive2 服务可达"}
+            return {"ok": False, "message": f"CloudDrive2 gRPC status={gstatus}"}
         except Exception as e:
             return {"ok": False, "message": f"连接失败: {e}"}
     return {"ok": False, "message": f"未知下载器: {downloader}"}
