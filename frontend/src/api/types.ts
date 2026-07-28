@@ -152,7 +152,20 @@ export interface Ranking {
   actor_id?: number | null
 }
 
-// ── Dashboard ──
+// ── NewRelease（订阅巡检发现的新作品）──
+export interface NewRelease {
+  id: number
+  actor_id: number
+  actor_name?: string | null
+  video_code: string
+  title: string | null
+  detail_url: string | null
+  cover_url: string | null
+  is_read: boolean
+  added_to_library: boolean
+  task_id: number | null
+  discovered_at: string | null
+}
 export interface DashboardStats {
   total_tasks: number
   visited_tasks: number
@@ -217,6 +230,9 @@ export interface Settings {
   cd2_organize_source_folder: string
   cd2_organize_target_folder: string
   cd2_organize_delay_seconds: number
+  // Emby 媒体库（订阅巡检时比对，避免重复入库）
+  emby_url: string
+  emby_token: string
   javdb_url: string
   // 通知配置（F3）
   notify_bark_key?: string

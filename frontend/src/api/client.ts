@@ -8,7 +8,7 @@ import type {
   Actor, ActorMovie, CastMember, Ranking, RankType, DashboardStats, MonthlyStat,
   CrawlStatus, CrawlLogLine, Settings, SettingsUpdate, ApiOk,
   ThumbnailsResponse, DownloadImagesResult, Magnet,
-  DownloadRecord, DiskInfo, NotifyTestResult,
+  DownloadRecord, DiskInfo, NotifyTestResult, NewRelease,
 } from './types'
 
 const http = axios.create({ baseURL: '', timeout: 60000 })
@@ -275,6 +275,28 @@ export const api = {
       http.put<unknown>(`/api/subscriptions/${id}`, body).then((r) => r.data),
     delete: (id: number) => http.delete<{ ok: boolean }>(`/api/subscriptions/${id}`).then((r) => r.data),
     toggle: (id: number) => http.post<{ ok: boolean; enabled: boolean }>(`/api/subscriptions/${id}/toggle`).then((r) => r.data),
+  },
+
+  // ════════ New Releases（订阅巡检发现的新作品）════════
+  newReleases: {
+    list: (params?: { actor_id?: number; unread_only?: boolean; limit?: number }) =>
+      http.get<{ items: NewRelease[]; total: number }>('/api/new-releases', { params }).then((r) => r.data),
+    markRead: (id: number) =>
+      http.post<{ ok: boolean }>(`/api/new-releases/${id}/read`).then((r) => r.data),
+    addToLibrary: (id: number) =>
+      http.post<{ ok: boolean; task_id?: number }>(`/api/new-releases/${id}/add-to-library`).then((r) => r.data),
+    checkNow: (actorId: number) =>
+      http.post<{ ok: boolean; result: Record<string, unknown> }>(`/api/new-releases/check-now/${actorId}`).then((r) => r.data),
+    checkAll: () =>
+      http.post<{ ok: boolean; result: Record<string, unknown> }>('/api/new-releases/check-all').then((r) => r.data),
+  },
+
+  // ════════ Media Server（Emby）════════
+  mediaServer: {
+    check: (videoCode: string) =>
+      http.get<{ video_code: string; in_library: boolean }>(`/api/media-server/check/${videoCode}`).then((r) => r.data),
+    test: () =>
+      http.get<{ ok: boolean; message: string }>('/api/media-server/test').then((r) => r.data),
   },
 
   // ════════ Insights（Phase 3：数据洞察/月报）════════

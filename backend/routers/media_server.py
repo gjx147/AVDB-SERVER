@@ -1,11 +1,11 @@
-"""媒体服务器路由 —— 在库状态查询/同步。"""
+"""媒体服务器路由 —— 在库状态查询/同步/测试连接。"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
 from deps import CurrentUser
-from services.media_server import check_in_library, sync_library_status
+from services.media_server import check_in_library, sync_library_status, test_connection
 
 router = APIRouter(prefix="/api/media-server", tags=["media-server"])
 
@@ -20,3 +20,9 @@ async def check_code(video_code: str, _user: CurrentUser):
 async def sync(_user: CurrentUser, limit: int = Query(200, le=1000)):
     """批量同步在库状态。"""
     return await sync_library_status(limit)
+
+
+@router.get("/test")
+async def test(_user: CurrentUser):
+    """测试 Emby 连接（用 settings 表配置）。"""
+    return await test_connection()

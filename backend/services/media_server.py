@@ -54,6 +54,33 @@ async def check_in_library(video_code: str) -> bool:
         return False
 
 
+async def test_connection(url: str = "", token: str = "") -> dict:
+    """测试 Emby 连接（调 /emby/System/Info 验证）。"""
+    if not url:
+        config = await _get_config()
+        url = config.get("emby_url", "").rstrip("/")
+        token = config.get("emby_token", "")
+    if not url:
+        return {"ok": False, "message": "未配置 emby_url"}
+    if not token:
+        return {"ok": False, "message": "未配置 emby_token"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{url.rstrip('/')}/emby/System/Info",
+                params={"api_key": token},
+            )
+            if resp.status_code == 200:
+                info = resp.json()
+                return {
+                    "ok": True,
+                    "message": f"Emby 可达: {info.get('ServerName', '?')} {info.get('Version', '?')}",
+                }
+            return {"ok": False, "message": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"ok": False, "message": f"连接失败: {e}"}
+
+
 async def sync_library_status(limit: int = 200) -> dict:
     """批量同步在库状态：扫描所有有番号的任务，查询并缓存。"""
     db = SessionLocal()

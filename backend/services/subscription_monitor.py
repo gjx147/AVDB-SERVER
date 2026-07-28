@@ -103,11 +103,13 @@ async def _check_ranking(sub: Subscription, db) -> dict:
 
 
 async def _check_actor(sub: Subscription, db) -> dict:
-    """actor 订阅：委托 new_works_monitor。"""
+    """actor 订阅：委托 new_works_monitor（含 Emby 比对 + 通知 + auto_add 下载）。"""
     try:
         from services.new_works_monitor import check_actor_new_works
 
-        return await check_actor_new_works(sub.actor_id, sub.id)
+        return await check_actor_new_works(
+            sub.actor_id, subscription_id=sub.id, auto_add=sub.auto_add
+        )
     except ImportError:
         return {"type": "actor", "message": "new_works_monitor 尚未实现"}
     except Exception as e:

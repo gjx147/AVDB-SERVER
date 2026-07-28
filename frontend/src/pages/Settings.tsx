@@ -4,7 +4,7 @@ import type { Settings as S } from '../api/types'
 import { PageHead, Loading, ErrorEmpty } from '../components/States'
 import { useStore } from '../store/useStore'
 
-type Tab = 'crawl' | 'retry' | 'notify' | 'appearance' | 'backup'
+type Tab = 'crawl' | 'retry' | 'notify' | 'media' | 'appearance' | 'backup'
 
 export function Settings() {
   const [s, setS] = useState<S | null>(null)
@@ -66,6 +66,7 @@ export function Settings() {
           <button className={tab === 'crawl' ? 'on' : ''} onClick={() => setTab('crawl')}>爬取设置</button>
           <button className={tab === 'retry' ? 'on' : ''} onClick={() => setTab('retry')}>自动重试</button>
           <button className={tab === 'notify' ? 'on' : ''} onClick={() => setTab('notify')}>通知配置</button>
+          <button className={tab === 'media' ? 'on' : ''} onClick={() => setTab('media')}>媒体库</button>
           <button className={tab === 'appearance' ? 'on' : ''} onClick={() => setTab('appearance')}>外观</button>
           <button className={tab === 'backup' ? 'on' : ''} onClick={() => setTab('backup')}>备份与恢复</button>
         </div>
@@ -126,6 +127,7 @@ export function Settings() {
           )}
 
           {tab === 'notify' && <NotifyTab toastOk={toastOk} toastErr={toastErr} />}
+          {tab === 'media' && <MediaTab toastOk={toastOk} toastErr={toastErr} />}
 
           {tab === 'appearance' && <AppearanceTab />}
 
@@ -247,6 +249,57 @@ function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastE
       <div style={{ display: 'flex', gap: 10 }}>
         <button className="btn btn--gold" onClick={save}>保存通知配置</button>
         <button className="btn btn--ghost" onClick={test} disabled={testing}>{testing ? '发送中…' : '保存并发送测试'}</button>
+      </div>
+    </div>
+  )
+}
+
+function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: (m: string) => void }) {
+  const [embyUrl, setEmbyUrl] = useState('')
+  const [embyToken, setEmbyToken] = useState('')
+  const [testing, setTesting] = useState(false)
+
+  useEffect(() => {
+    api.settings.get().then((s) => {
+      setEmbyUrl(s.emby_url || '')
+      setEmbyToken(s.emby_token && s.emby_token !== '***' ? s.emby_token : '')
+    }).catch(() => {})
+  }, [])
+
+  const save = async () => {
+    try {
+      await api.settings.update({
+        emby_url: embyUrl,
+        emby_token: embyToken || '***',
+      })
+      toastOk('媒体库配置已保存')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const test = async () => {
+    setTesting(true)
+    try {
+      await save()
+      const r = await api.mediaServer.test()
+      if (r.ok) { toastOk(r.message) } else { toastErr(r.message) }
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setTesting(false) }
+  }
+
+  return (
+    <div className="card">
+      <div className="field">
+        <label>Emby 服务器地址</label>
+        <input className="input" placeholder="http://192.168.1.x:8096" value={embyUrl} onChange={(e) => setEmbyUrl(e.target.value)} />
+        <div className="hint">Emby WebUI 的访问地址（含端口）</div>
+      </div>
+      <div className="field">
+        <label>Emby API Key</label>
+        <input className="input" type="password" placeholder="在 Emby 设置 > 高级 > API Keys 创建" value={embyToken} onChange={(e) => setEmbyToken(e.target.value)} />
+        <div className="hint">用于订阅巡检时按番号搜索媒体库，避免重复入库</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="btn btn--gold" onClick={save}>保存</button>
+        <button className="btn btn--ghost" onClick={test} disabled={testing}>{testing ? '测试中…' : '保存并测试连接'}</button>
       </div>
     </div>
   )
