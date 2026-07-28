@@ -251,6 +251,74 @@ def hires_set_poster(task_id: int, index: int):
     return {"ok": True, "message": f"已将预览图 {index} 设为海报"}
 
 
+@router.post("/hires/set-poster-remote/{task_id}/{index}")
+def hires_set_poster_remote(task_id: int, index: int, db: DbSession):
+    """从远程缩略图直接设为海报（无需本地缓存）。
+
+    用于本地无高清缓存时的「设为海报」：从 task.thumbnail_urls[index] 拿远程 URL，
+    用 httpx（走代理 + Referer）下载，存为 poster.jpg + backdrop.jpg，
+    并更新 task.poster_url 保持数据库一致。
+    """
+    from models import Task
+
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 解析缩略图 URL 列表
+    thumb_urls: list[str] = []
+    if task.thumbnail_urls:
+        try:
+            arr = json.loads(task.thumbnail_urls)
+            if isinstance(arr, list):
+                thumb_urls = [u for u in arr if isinstance(u, str) and u.startswith("http")]
+        except Exception:
+            pass
+
+    # 选目标 URL：指定 index 优先，否则用 poster_url
+    target_url = None
+    if 0 <= index < len(thumb_urls):
+        target_url = thumb_urls[index]
+    if not target_url:
+        target_url = task.poster_url
+    if not target_url:
+        raise HTTPException(status_code=400, detail="无可用图片 URL（需先爬取详情页）")
+
+    # 准备目录
+    d = _task_dir(task_id)
+    d.mkdir(parents=True, exist_ok=True)
+
+    # httpx 下载（带 Referer + 代理）
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://javdb.com/",
+    }
+    timeout = httpx.Timeout(30.0, connect=15.0)
+    try:
+        with httpx.Client(proxy=proxy, timeout=timeout, follow_redirects=True, verify=False) as c:
+            r = c.get(target_url, headers=headers)
+            if r.status_code != 200 or len(r.content) < 500:
+                raise HTTPException(status_code=502, detail=f"下载失败: HTTP {r.status_code}, {len(r.content)} bytes")
+            content = r.content
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"下载异常: {e}")
+
+    # 写入 poster.jpg + backdrop.jpg
+    (d / "poster.jpg").write_bytes(content)
+    (d / "backdrop.jpg").write_bytes(content)
+
+    # 同步更新 task.poster_url 保持一致（若远程图与原 poster_url 不同）
+    if task.poster_url != target_url:
+        task.poster_url = target_url
+        db.commit()
+
+    logger.info(f"task {task_id}: 已从远程设为海报 (index={index}, url={target_url[:80]})")
+    return {"ok": True, "message": f"已将预览图 {index} 设为海报"}
+
+
 @router.post("/hires/queue/start")
 def hires_queue_start(task_ids: list[int]):
     """启动串行下载队列（Phase 1 占位）。"""

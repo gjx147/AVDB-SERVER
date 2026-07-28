@@ -148,6 +148,8 @@ export interface Ranking {
   task_poster_url?: string | null
   task_thumbnail_urls?: string | null
   task_status?: string | null
+  // actor 类型排行榜：关联本地 actors 表的 actor_id（运行时 join，无 actor_id 列）
+  actor_id?: number | null
 }
 
 // ── Dashboard ──

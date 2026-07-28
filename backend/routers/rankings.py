@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from deps import CurrentUser, DbSession, Pagination
-from models import ListSource, Ranking, Task, Setting
+from models import ListSource, Ranking, Task, Setting, Actor
 from schemas import BatchAddTasksRequest, RankingOut
 
 router = APIRouter(prefix="/api/rankings", tags=["rankings"])
@@ -32,6 +32,7 @@ def _enrich_with_task(db, rankings: list) -> list:
     """给 ranking 列表补充关联 task 的真实数据（番号/标题/海报/缩略图/状态）。
 
     避免 N+1：先批量查所有 task_id，再一次性取数据。
+    对 actor 类型，额外反查 actors 表拿 actor_id（用 detail_url / name 匹配）。
     返回 dict 列表（RankingOut 兼容）。
     """
     if not rankings:
@@ -41,6 +42,27 @@ def _enrich_with_task(db, rankings: list) -> list:
     if task_ids:
         for t in db.execute(select(Task).where(Task.id.in_(task_ids))).scalars().all():
             tasks_map[t.id] = t
+
+    # actor 类型：批量反查 actor_id（按 detail_url 匹配 actors.source_url，兜底按 name）
+    actor_id_map = {}  # ranking.id -> actor_id | None
+    actor_rankings = [r for r in rankings if r.rank_type == "actor"]
+    if actor_rankings:
+        detail_urls = [r.detail_url for r in actor_rankings if r.detail_url]
+        names = [r.video_code for r in actor_rankings if r.video_code]
+        by_source = {}
+        by_name = {}
+        if detail_urls:
+            for a in db.execute(select(Actor).where(Actor.source_url.in_(detail_urls))).scalars().all():
+                by_source[a.source_url] = a.id
+        if names:
+            for a in db.execute(select(Actor).where(Actor.name.in_(names))).scalars().all():
+                by_name[a.name] = a.id
+        for r in actor_rankings:
+            actor_id = by_source.get(r.detail_url) if r.detail_url else None
+            if not actor_id and r.video_code:
+                actor_id = by_name.get(r.video_code)
+            actor_id_map[r.id] = actor_id
+
     result = []
     for r in rankings:
         item = {
@@ -58,6 +80,8 @@ def _enrich_with_task(db, rankings: list) -> list:
             item["task_poster_url"] = t.poster_url
             item["task_thumbnail_urls"] = t.thumbnail_urls
             item["task_status"] = t.status
+        if r.rank_type == "actor":
+            item["actor_id"] = actor_id_map.get(r.id)
         result.append(item)
     return result
 

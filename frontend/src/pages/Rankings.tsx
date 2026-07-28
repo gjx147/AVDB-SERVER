@@ -22,6 +22,7 @@ type RankingTask = Task & {
   _rank_position: number
   _views: number
   _is_in_library: boolean
+  _actor_id?: number | null
 }
 
 /** Ranking → RankingTask 适配（PosterCard 需要 Task 类型）。
@@ -75,6 +76,7 @@ const toTask = (r: Ranking, isActor = false): RankingTask => {
     _rank_position: r.rank_position,
     _views: r.views,
     _is_in_library: r.is_in_library,
+    _actor_id: r.actor_id ?? null,
   }
 }
 
@@ -130,8 +132,12 @@ export function Rankings() {
   }
 
   const openRank = (r: Ranking) => {
-    // actor 类型：跳转影视库按演员名筛选（演员不是 task，无详情页）
+    // actor 类型：有 actor_id 进演员详情页，否则 fallback 到影视库按演员名筛选
     if (tab === 'actor') {
+      if (r.actor_id) {
+        nav(`/actor/${r.actor_id}`)
+        return
+      }
       const name = r.task_video_code || r.video_code || ''
       if (name) {
         nav(`/library?q=${encodeURIComponent(name)}`)
@@ -193,12 +199,38 @@ export function Rankings() {
       ) : filtered.length === 0 ? (
         <Empty icon="○" title="无匹配结果" sub="尝试更换筛选条件或搜索关键词。" />
       ) : view === 'grid' ? (
-        <div className="gallery">
-          {filtered.map((t) => {
-            const r = list!.find((x) => x.id === t._ranking_id)!
-            return <PosterCard key={t._ranking_id} task={t} onClick={() => openRank(r)} centerImage={isActorTab} />
-          })}
-        </div>
+        isActorTab ? (
+          // 演员月榜：用演员库的 .actor-grid 样式（1:1 正方形头像 + 名字图下）
+          <div className="actor-grid">
+            {filtered.map((t) => {
+              const r = list!.find((x) => x.id === t._ranking_id)!
+              return (
+                <div className="actor" key={t._ranking_id} tabIndex={0} role="button"
+                  aria-label={`查看演员 ${t.video_code || ''}`}
+                  onClick={() => openRank(r)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRank(r) } }}
+                  style={{ cursor: 'pointer' }}>
+                  <div className="actor-photo">
+                    {t.poster_url
+                      ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
+                          onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                      : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
+                  </div>
+                  <div className="actor-name">{t.video_code || '—'}</div>
+                  <div className="actor-count">第 {t._rank_position} 位 · {t._views} 次浏览</div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          // 影片榜：保持原 PosterCard 竖版海报
+          <div className="gallery">
+            {filtered.map((t) => {
+              const r = list!.find((x) => x.id === t._ranking_id)!
+              return <PosterCard key={t._ranking_id} task={t} onClick={() => openRank(r)} />
+            })}
+          </div>
+        )
       ) : (
         <div className="card">
           {filtered.map((t) => {

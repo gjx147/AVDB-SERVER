@@ -272,17 +272,21 @@ export function TaskDetail() {
                   style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'cover', imageRendering: 'auto' }}
                   onError={(e) => { e.currentTarget.style.opacity = '0.2' }}
                 />
-                {/* 手动选择海报按钮（仅本地缓存时可用） */}
-                {hasLocal && (
-                  <button
-                    onClick={async (ev) => {
-                      ev.stopPropagation()
-                      try { await api.images.setPoster(task.id, activeThumb); toastOk('已设为海报'); setImgVersion(v => v + 1) }
-                      catch (e) { toastErr(String((e as Error).message)) }
-                    }}
-                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, background: 'var(--gold)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
-                  >设为海报</button>
-                )}
+                {/* 手动选择海报按钮（始终显示：本地缓存时直接复制，否则远程下载） */}
+                <button
+                  onClick={async (ev) => {
+                    ev.stopPropagation()
+                    try {
+                      if (hasLocal) {
+                        await api.images.setPoster(task.id, activeThumb)
+                      } else {
+                        await api.images.setPosterRemote(task.id, activeThumb)
+                      }
+                      toastOk('已设为海报'); setImgVersion(v => v + 1)
+                    } catch (e) { toastErr(String((e as Error).message)) }
+                  }}
+                  style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, background: 'var(--gold)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                >设为海报</button>
                 {thumbs.length > 1 && <>
                   <button onClick={() => setActiveThumb((i) => (i - 1 + thumbs.length) % thumbs.length)}
                     style={thumbNavBtn('left')}>‹</button>

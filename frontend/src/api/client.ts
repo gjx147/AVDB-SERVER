@@ -339,6 +339,9 @@ export const api = {
     /** 手动选择海报：0=gallery-1, 1=gallery-2, 2=gallery-3... */
     setPoster: (taskId: number, index: number) =>
       http.post<{ ok: boolean; message: string }>(`/api/images/hires/set-poster/${taskId}/${index}`).then((r) => r.data),
+    /** 从远程缩略图直接设为海报（无需本地缓存）：下载远程图 → poster.jpg + 更新 poster_url */
+    setPosterRemote: (taskId: number, index: number) =>
+      http.post<{ ok: boolean; message: string }>(`/api/images/hires/set-poster-remote/${taskId}/${index}`).then((r) => r.data),
     /** 启动串行队列：逐个处理任务（下载图片+提取磁力） */
     queueStart: (taskIds: number[]) =>
       http.post<{ ok: boolean; message: string; total: number }>(`/api/images/hires/queue/start`, taskIds).then((r) => r.data),
