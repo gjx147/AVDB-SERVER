@@ -34,6 +34,18 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+# 全局应用日志文件（data/app.log），记录所有 avdb.* + uvicorn 日志
+_app_log_path = Path(get_settings().DATA_DIR) / "app.log"
+_app_log_path.parent.mkdir(parents=True, exist_ok=True)
+_app_file_handler = logging.FileHandler(_app_log_path, encoding="utf-8")
+_app_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+_app_file_handler.setLevel(logging.DEBUG if get_settings().DEBUG else logging.INFO)
+# 挂到 avdb 根 logger（所有 avdb.* 子 logger 都会继承）
+logging.getLogger("avdb").addHandler(_app_file_handler)
+# uvicorn 访问/错误日志也写入
+logging.getLogger("uvicorn").addHandler(_app_file_handler)
+logging.getLogger("uvicorn.access").addHandler(_app_file_handler)
+
 # 下载器专用日志文件（data/downloaders.log），记录所有推送/测试操作
 _dl_log_path = Path(get_settings().DATA_DIR) / "downloaders.log"
 _dl_log_path.parent.mkdir(parents=True, exist_ok=True)
