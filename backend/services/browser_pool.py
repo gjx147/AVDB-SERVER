@@ -86,9 +86,11 @@ class BrowserPool:
                 launch_args.append(f"--proxy-server={proxy_arg['server']}")
                 logger.info(f"浏览器池使用代理: {proxy_arg['server']}")
             # 用完整 chromium（channel="chromium"），跳过 headless_shell 检测。
-            self._browser = await self._pw.chromium.launch(
-                headless=True, channel="chromium", args=launch_args, **proxy_arg
-            )
+            # proxy 必须作为 launch() 的 proxy= 关键字参数（一个 dict），不能展开成顶层参数
+            launch_kwargs: dict = {"headless": True, "channel": "chromium", "args": launch_args}
+            if proxy_arg:
+                launch_kwargs["proxy"] = proxy_arg
+            self._browser = await self._pw.chromium.launch(**launch_kwargs)
             logger.info("浏览器池就绪")
 
     async def stop(self) -> None:
