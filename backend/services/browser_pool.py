@@ -26,6 +26,21 @@ logger = logging.getLogger("avdb.browser_pool")
 _MAX_CONCURRENCY = 2  # 同时最多 2 个 context（NAS 内存有限）
 
 
+def _get_proxy_from_db() -> str:
+    """从 DB settings 表读 http_proxy（用户在设置页填的代理）。"""
+    try:
+        from database import SessionLocal
+        from models import Setting
+        db = SessionLocal()
+        try:
+            row = db.get(Setting, "http_proxy")
+            return (row.value or "").strip() if row and row.value else ""
+        finally:
+            db.close()
+    except Exception:
+        return ""
+
+
 class BrowserPool:
     """Playwright 异步浏览器池（单例）。"""
 
@@ -49,9 +64,12 @@ class BrowserPool:
             logger.info("启动浏览器池…")
             self._pw = await async_playwright().start()
             launch_args = ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            # 代理：优先从 DB settings 表读（用户在设置页填的），回退到环境变量
+            proxy_url = _get_proxy_from_db() or settings.HTTP_PROXY or ""
             proxy_arg = {}
-            if settings.HTTP_PROXY:
-                proxy_arg = {"server": settings.HTTP_PROXY}
+            if proxy_url:
+                proxy_arg = {"server": proxy_url}
+                logger.info(f"浏览器池使用代理: {proxy_url}")
             # 用完整 chromium（channel="chromium"），跳过 headless_shell 检测。
             # npmmirror 镜像不提供 chromium-headless-shell，新版 playwright 默认会找它导致失败。
             # channel="chromium" 指定用 /ms-playwright/chromium-* 下的完整浏览器。
