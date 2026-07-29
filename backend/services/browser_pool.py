@@ -65,14 +65,27 @@ class BrowserPool:
             self._pw = await async_playwright().start()
             launch_args = ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
             # 代理：优先从 DB settings 表读（用户在设置页填的），回退到环境变量
+            # 对齐 scraper.py 的 proxy 处理：解析 URL + 双保险（launch proxy + --proxy-server arg）
             proxy_url = _get_proxy_from_db() or settings.HTTP_PROXY or ""
             proxy_arg = {}
             if proxy_url:
-                proxy_arg = {"server": proxy_url}
-                logger.info(f"浏览器池使用代理: {proxy_url}")
+                from urllib.parse import urlparse
+                if proxy_url.startswith("http://") or proxy_url.startswith("https://"):
+                    parsed = urlparse(proxy_url)
+                    server = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
+                    proxy_arg = {"server": server}
+                    if parsed.username:
+                        proxy_arg["username"] = parsed.username
+                    if parsed.password:
+                        proxy_arg["password"] = parsed.password
+                else:
+                    # 裸地址 host:port
+                    server = f"http://{proxy_url}"
+                    proxy_arg = {"server": server}
+                # 双保险：launch 级 proxy + Chromium 原生 --proxy-server 参数
+                launch_args.append(f"--proxy-server={proxy_arg['server']}")
+                logger.info(f"浏览器池使用代理: {proxy_arg['server']}")
             # 用完整 chromium（channel="chromium"），跳过 headless_shell 检测。
-            # npmmirror 镜像不提供 chromium-headless-shell，新版 playwright 默认会找它导致失败。
-            # channel="chromium" 指定用 /ms-playwright/chromium-* 下的完整浏览器。
             self._browser = await self._pw.chromium.launch(
                 headless=True, channel="chromium", args=launch_args, **proxy_arg
             )
