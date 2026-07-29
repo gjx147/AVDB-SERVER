@@ -40,10 +40,11 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 # 安装 Playwright Chromium 浏览器（国内镜像加速）
-# 忽略 headless-shell 下载失败（npmmirror 无此文件，但 chromium 主包足够）
+# 只装完整 chromium（npmmirror 不提供 chromium-headless-shell，browser_pool 用 channel="chromium" 启动完整 chromium）
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-RUN PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} python -m playwright install chromium; exit 0
+RUN PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
+    python -m playwright install chromium; exit 0
 
 # 复制应用代码
 COPY backend/ ./backend/

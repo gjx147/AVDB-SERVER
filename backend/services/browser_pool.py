@@ -52,7 +52,12 @@ class BrowserPool:
             proxy_arg = {}
             if settings.HTTP_PROXY:
                 proxy_arg = {"server": settings.HTTP_PROXY}
-            self._browser = await self._pw.chromium.launch(args=launch_args, **proxy_arg)
+            # 用完整 chromium（channel="chromium"），跳过 headless_shell 检测。
+            # npmmirror 镜像不提供 chromium-headless-shell，新版 playwright 默认会找它导致失败。
+            # channel="chromium" 指定用 /ms-playwright/chromium-* 下的完整浏览器。
+            self._browser = await self._pw.chromium.launch(
+                headless=True, channel="chromium", args=launch_args, **proxy_arg
+            )
             logger.info("浏览器池就绪")
 
     async def stop(self) -> None:
