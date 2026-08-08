@@ -42,76 +42,70 @@ def _extract_code(text: str) -> str | None:
     return None
 
 
-async def _resolve_actor_url(actor_name: str) -> str | None:
-    """搜索 javdb 演员页，返回第一个匹配的 /actors/xxx 完整 URL。
+async def _trigger_crawl_actor(actor_name: str) -> bool:
+    """触发 scraper 子进程 crawl-actor --actor-name（跟演员库补齐作品一样）。
 
-    用于 source_url 为空时自动解析演员详情页 URL。
+    scraper 会：搜索演员 → 爬详情页 → 翻页爬所有作品 → 入库 task + 写 source_url。
+    返回 True 表示成功启动（不等完成，因为可能很慢）。
+    实际上这里需要等它完成才能读 source_url，所以用 subprocess 同步等待。
     """
-    from urllib.parse import quote, urljoin
-    from services.browser_pool import browser_pool
-    from config import get_settings
+    from services.scraper_lock import is_running
+    if is_running():
+        logger.warning("[新作监控] scraper 忙，跳过 crawl-actor")
+        return False
 
-    search_url = f"{get_settings().JAVDB_URL}/search?f=actor&q={quote(actor_name)}"
-    logger.info(f"[新作监控] 搜索演员: {actor_name} -> {search_url}")
+    import subprocess, sys
+    cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
+           "crawl-actor", "--actor-name", actor_name]
+    logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[:5])}...")
+    try:
+        # 同步等待完成（crawl-actor 通常 1-3 分钟）
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=300,
+            cwd="/app/magnet_scraper",
+        )
+        if proc.returncode == 0:
+            logger.info(f"[新作监控] scraper crawl-actor 完成: {actor_name}")
+            return True
+        else:
+            stderr = proc.stderr.decode("utf-8", errors="replace")[-500:] if proc.stderr else ""
+            logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode}): {stderr}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.warning(f"[新作监控] scraper crawl-actor 超时(300s): {actor_name}")
+        return False
+    except Exception as e:
+        logger.warning(f"[新作监控] scraper crawl-actor 异常: {e}")
+        return False
 
-    async with browser_pool.acquire() as ctx:
-        page = await ctx.new_page()
-        try:
+
+async def _get_actor_works_from_db(db, actor_id: int) -> list[dict]:
+    """从 DB 读演员已关联的作品（crawl-actor 入库后），返回 [{code, title, url, cover}]。
+
+    用于 crawl-actor 补齐后跳过 _fetch_actor_works 直接对比。
+    """
+    from models import actor_movies
+    rows = db.execute(
+        select(Task.video_code, Task.title, Task.url, Task.thumbnail_urls)
+        .join(actor_movies, actor_movies.c.task_id == Task.id)
+        .where(actor_movies.c.actor_id == actor_id)
+        .order_by(Task.id.desc())
+    ).all()
+    works = []
+    for video_code, title, url, thumbnail_urls in rows:
+        if not video_code:
+            continue
+        cover = None
+        if thumbnail_urls:
             try:
-                from playwright_stealth import stealth_async
-                await stealth_async(page)
+                import json
+                arr = json.loads(thumbnail_urls)
+                if isinstance(arr, list) and arr:
+                    cover = arr[0]
             except Exception:
                 pass
-            await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
-            await browser_pool._handle_cloudflare(page, search_url)
-
-            # 等待搜索结果加载（/actors/ 链接出现，最多 15 秒）
-            try:
-                await page.wait_for_selector("a[href*='/actors/']", timeout=15000)
-            except Exception:
-                logger.warning(f"[新作监控] 搜索页等待 /actors/ 链接超时")
-            await page.wait_for_timeout(2000)
-
-            # 找所有 /actors/xxx 链接，过滤分类页
-            links = await page.locator("a[href*='/actors/']").all()
-            for link in links:
-                try:
-                    href = await link.get_attribute("href") or ""
-                    # 排除分类路径
-                    if any(cat in href for cat in [
-                        "/actors/censored", "/actors/uncensored",
-                        "/actors/western", "/actors/anime", "/actors/recommend",
-                    ]):
-                        continue
-                    text = (await link.inner_text()).strip()
-                    if not text or len(text) < 2:
-                        continue
-                    # 匹配演员名（包含即可，处理空格/变体）
-                    if actor_name in text or text in actor_name:
-                        full_url = urljoin(get_settings().JAVDB_URL, href)
-                        logger.info(f"[新作监控] 匹配到演员: {text} -> {full_url}")
-                        return full_url
-                except Exception:
-                    continue
-            # 没精确匹配，取第一个非分类的 /actors/ 链接
-            for link in links:
-                try:
-                    href = await link.get_attribute("href") or ""
-                    if any(cat in href for cat in [
-                        "/actors/censored", "/actors/uncensored",
-                        "/actors/western", "/actors/anime", "/actors/recommend",
-                    ]):
-                        continue
-                    text = (await link.inner_text()).strip()
-                    if text and len(text) >= 2:
-                        full_url = urljoin(get_settings().JAVDB_URL, href)
-                        logger.info(f"[新作监控] 取首个演员链接: {text} -> {full_url}")
-                        return full_url
-                except Exception:
-                    continue
-            return None
-        finally:
-            await page.close()
+        works.append({"code": video_code, "title": title or "", "url": url or "", "cover": cover})
+    return works
 
 
 async def _fetch_actor_works(actor_url: str) -> list[dict]:
@@ -217,31 +211,36 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
 
         logger.info(f"[新作监控] 开始检查演员 {actor.name} (id={actor_id}, auto_add={auto_add})")
         settings = get_settings()
-        # 优先用演员详情页 URL（/actors/xxx，直接列出所有作品）
+        # 优先用演员详情页 URL（/actors/xxx）
         actor_url = actor.source_url or ""
         if not actor_url:
-            # source_url 为空时尝试从 note 解析（老数据格式 "source_url: xxx"）
             note = actor.note or ""
             if note.startswith("source_url:"):
                 actor_url = note.split(":", 1)[1].strip()
         if not actor_url:
-            # 仍然没有：搜索演员页，解析第一个 /actors/xxx 链接并存入 source_url
-            logger.info(f"[新作监控] {actor.name} 无 source_url，搜索演员页解析 URL")
-            actor_url = await _resolve_actor_url(actor.name)
-            if actor_url:
-                actor.source_url = actor_url
-                db.commit()
-                logger.info(f"[新作监控] {actor.name} 已保存 source_url: {actor_url}")
-            else:
-                actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
-                logger.warning(f"[新作监控] {actor.name} 搜索未找到演员页，回退搜索页: {actor_url}")
+            # source_url 为空：触发 scraper crawl-actor --actor-name 子进程
+            # （跟演员库"补齐作品"一样的方式：搜索+爬详情+入库+写source_url）
+            logger.info(f"[新作监控] {actor.name} 无 source_url，触发 scraper crawl-actor 补齐")
+            ok = await _trigger_crawl_actor(actor.name)
+            if not ok:
+                return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
+            # 重新查 actor 拿 source_url（crawl-actor 会写入）
+            db.refresh(actor)
+            actor_url = actor.source_url or ""
+            if not actor_url:
+                logger.warning(f"[新作监控] {actor.name} crawl-actor 后仍无 source_url")
+                return {"type": "actor", "actor_id": actor_id, "error": "crawl-actor 后仍无 source_url"}
+            logger.info(f"[新作监控] {actor.name} crawl-actor 完成，source_url: {actor_url}")
+            # crawl-actor 已经把所有作品入库为 task 了，直接对比 new_releases 找新作
+            # 跳过 _fetch_actor_works，用已入库的 task 作为"作品列表"
+            works = await _get_actor_works_from_db(db, actor_id)
         else:
             logger.info(f"[新作监控] {actor.name} 用演员详情页: {actor_url}")
-        try:
-            works = await _fetch_actor_works(actor_url)
-        except Exception as e:
-            logger.warning(f"[新作监控] 抓取演员 {actor.name} 作品失败: {e}")
-            return {"type": "actor", "actor_id": actor_id, "error": f"抓取失败: {e}"}
+            try:
+                works = await _fetch_actor_works(actor_url)
+            except Exception as e:
+                logger.warning(f"[新作监控] 抓取演员 {actor.name} 作品失败: {e}")
+                return {"type": "actor", "actor_id": actor_id, "error": f"抓取失败: {e}"}
         logger.info(f"[新作监控] {actor.name}: 抓到 {len(works)} 部作品")
 
         # 去重：已有 task 的 + 已在 new_releases 的
