@@ -116,9 +116,14 @@ class BrowserPool:
             await self.start()
         async with self._sem:
             ctx = await self._browser.new_context(  # type: ignore[union-attr]
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
                 locale="en-US",
                 timezone_id="America/New_York",
                 viewport={"width": 1920, "height": 1080},
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
             )
             try:
                 yield ctx
@@ -149,15 +154,16 @@ class BrowserPool:
 
                 await page.goto(url, timeout=timeout, wait_until=wait_until)
 
-                # 检测并等待 Cloudflare 验证完成（最多等 15 秒）
+                # 检测并等待 Cloudflare 验证完成（最多等 30 秒）
                 # Cloudflare 验证页的 title 是 "Just a moment..."
-                for _ in range(15):
+                for i in range(30):
                     title = await page.title()
-                    if "just a moment" not in title.lower() and "performing security" not in (await page.content()).lower()[:500]:
+                    if "just a moment" not in title.lower():
+                        logger.info(f"Cloudflare 验证通过（等待 {i} 秒）")
                         break
                     await page.wait_for_timeout(1000)
                 else:
-                    logger.warning(f"Cloudflare 验证未在 15 秒内完成: {url}")
+                    logger.warning(f"Cloudflare 验证未在 30 秒内完成: {url}")
 
                 await page.wait_for_timeout(1000)  # 等 JS 渲染
                 return await page.content()
