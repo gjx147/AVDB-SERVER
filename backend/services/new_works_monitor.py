@@ -71,12 +71,15 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
         # 注册 scraper_lock 防止其他路径并发启动 Chromium
         scraper_lock.set_proc(proc, {"mode": "crawl-actor", "pid": proc.pid})
         stdout, _ = proc.communicate(timeout=300)
+        stdout_text = stdout.decode("utf-8", errors="replace") if stdout else ""
+        # 记录 scraper 子进程输出到 app.log（成功和失败都记，排查用）
+        # 截取最后 1000 字符（避免日志太长）
+        logger.info(f"[新作监控] scraper crawl-actor 输出 (rc={proc.returncode}):\n{stdout_text[-1000:]}")
         if proc.returncode == 0:
             logger.info(f"[新作监控] scraper crawl-actor 完成: {actor_name}")
             return True
         else:
-            stderr = stdout.decode("utf-8", errors="replace")[-500:] if stdout else ""
-            logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode}): {stderr}")
+            logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode})")
             return False
     except subprocess.TimeoutExpired:
         if proc:
