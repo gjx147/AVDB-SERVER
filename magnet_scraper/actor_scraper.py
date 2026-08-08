@@ -241,6 +241,13 @@ class ActorScraper:
         except Exception as e:
             logger.error(f"爬取演员信息失败: {e}")
 
+        # 推断 gender：有罩杯信息的是女演员（javdb 男优页没有 cup 字段）
+        if info.get("cup"):
+            info["gender"] = "female"
+        elif any(kw in actor_url for kw in ["/censored", "/uncensored"]):
+            # 有码/无码演员榜爬来的都是女性
+            info["gender"] = "female"
+
         return info
 
     def crawl_actor_movies(self, actor_url: str, max_pages: int = 50) -> list:

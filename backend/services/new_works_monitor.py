@@ -47,10 +47,10 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
 
     有 actor_url → crawl-actor --actor-url（直接爬详情页+翻页作品）
     无 actor_url → crawl-actor --actor-name（搜索+爬详情+入库+写source_url）
-    同步等待完成（最多 300s），返回 True/False。
+    注册 scraper_lock 防止并发 Chromium 冲突，同步等待完成（最多 300s）。
     """
-    from services.scraper_lock import is_running
-    if is_running():
+    from services import scraper_lock
+    if scraper_lock.is_running():
         logger.warning("[新作监控] scraper 忙，跳过 crawl-actor")
         return False
 
@@ -62,25 +62,33 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
         cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
                "crawl-actor", "--actor-name", actor_name]
     logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[-4:])}...")
+    proc = None
     try:
-        # 同步等待完成（crawl-actor 通常 1-3 分钟）
-        proc = subprocess.run(
-            cmd, capture_output=True, timeout=300,
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             cwd="/app/magnet_scraper",
         )
+        # 注册 scraper_lock 防止其他路径并发启动 Chromium
+        scraper_lock.set_proc(proc, {"mode": "crawl-actor", "pid": proc.pid})
+        stdout, _ = proc.communicate(timeout=300)
         if proc.returncode == 0:
             logger.info(f"[新作监控] scraper crawl-actor 完成: {actor_name}")
             return True
         else:
-            stderr = proc.stderr.decode("utf-8", errors="replace")[-500:] if proc.stderr else ""
+            stderr = stdout.decode("utf-8", errors="replace")[-500:] if stdout else ""
             logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode}): {stderr}")
             return False
     except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.communicate()
         logger.warning(f"[新作监控] scraper crawl-actor 超时(300s): {actor_name}")
         return False
     except Exception as e:
         logger.warning(f"[新作监控] scraper crawl-actor 异常: {e}")
         return False
+    finally:
+        scraper_lock.clear()
 
 
 async def _get_actor_works_from_db(db, actor_id: int) -> list[dict]:
@@ -273,18 +281,23 @@ async def _create_task_and_extract(nr: NewRelease) -> int | None:
         logger.info(f"[新作监控] 创建 task {task_id} for {nr.video_code}")
 
         # 2. 触发 scraper extract-single（subprocess，非阻塞 fire-and-forget）
-        from services.scraper_lock import is_running
-        if is_running():
+        import sys as _sys
+        from services import scraper_lock as _lock
+        if _lock.is_running():
             logger.info(f"[新作监控] scraper 忙，task {task_id} 排队等 auto_retry")
         else:
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "python", "/app/magnet_scraper/scraper.py",
+                    _sys.executable, "/app/magnet_scraper/scraper.py",
                     "extract-single", "--url", task_url,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
+                # 注册 scraper_lock 防止并发
+                _lock.set_proc(proc, {"mode": "extract-single", "pid": proc.pid, "auto": True})
                 logger.info(f"[新作监控] 触发 scraper extract-single task {task_id} (pid={proc.pid})")
+                # 启动后台任务等 proc 完成后 clear lock
+                asyncio.create_task(_wait_and_clear_lock(proc))
             except Exception as e:
                 logger.warning(f"[新作监控] 触发 scraper 失败（task {task_id} 保留 pending）: {e}")
 
@@ -293,6 +306,17 @@ async def _create_task_and_extract(nr: NewRelease) -> int | None:
         return task_id
     finally:
         db.close()
+
+
+async def _wait_and_clear_lock(proc) -> None:
+    """等 proc 完成后清除 scraper_lock（防止 extract-single 子进程长期占锁）。"""
+    try:
+        await proc.wait()
+    except Exception:
+        pass
+    finally:
+        from services import scraper_lock
+        scraper_lock.clear()
 
 
 async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180):

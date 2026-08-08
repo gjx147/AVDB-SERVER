@@ -70,14 +70,14 @@ def get_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 
 
 @router.post("/{actor_id}/follow")
-def toggle_follow(actor_id: int, db: DbSession, _user: CurrentUser):
-    """切换关注状态。"""
+def follow(actor_id: int, db: DbSession, _user: CurrentUser):
+    """关注演员（绝对置 true，与 unfollow 对称）。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
-    actor.is_followed = not actor.is_followed
+    actor.is_followed = True
     db.commit()
-    return {"ok": True, "is_followed": actor.is_followed, "actor_id": actor_id}
+    return {"ok": True, "is_followed": True, "actor_id": actor_id}
 
 
 @router.post("/{actor_id}/unfollow")

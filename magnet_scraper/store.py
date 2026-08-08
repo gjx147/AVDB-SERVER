@@ -155,6 +155,7 @@ class SqliteTaskStore:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=10000")
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def _init_db(self) -> None:
@@ -325,28 +326,34 @@ class SqliteTaskStore:
         """新增或更新演员，返回 actor_id。
 
         防御：avatar_url 含 /covers/（影片封面）时丢弃，避免误存。
-        演员头像应该是 /avatars/ 路径。
+        并发安全：用原子 INSERT ... WHERE NOT EXISTS 避免 race condition 产生重名行。
         """
         au = fields.get("avatar_url")
         if au and "/covers/" in au:
             fields["avatar_url"] = None  # 影片封面不是演员头像，丢弃
         with self._conn() as conn:
-            row = conn.execute("SELECT id FROM actors WHERE name=?", (name,)).fetchone()
-            if row:
-                actor_id = row[0]
-                sets = ", ".join(f"{k}=?" for k in fields)
-                if sets:
-                    conn.execute(f"UPDATE actors SET {sets}, updated_at=datetime('now') WHERE id=?",
-                                 (*fields.values(), actor_id))
-                    conn.commit()
-                return actor_id
+            # 原子操作：INSERT ... WHERE NOT EXISTS（避免并发 race）
             cols = ["name", "is_followed", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
             vals = [name, 0, 0] + list(fields.values())
             placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
-            cur = conn.execute(
-                f"INSERT INTO actors ({','.join(cols)}) VALUES ({placeholders})", vals)
+            conn.execute(
+                f"INSERT INTO actors ({','.join(cols)}) "
+                f"SELECT {placeholders} WHERE NOT EXISTS (SELECT 1 FROM actors WHERE name=?)",
+                (*vals, name)
+            )
             conn.commit()
-            return cur.lastrowid
+            # 查 id（INSERT 和 UPDATE 都走这条路径）
+            row = conn.execute("SELECT id FROM actors WHERE name=?", (name,)).fetchone()
+            if not row:
+                return 0
+            actor_id = row[0]
+            # 更新字段（如果有）
+            if fields:
+                sets = ", ".join(f"{k}=?" for k in fields)
+                conn.execute(f"UPDATE actors SET {sets}, updated_at=datetime('now') WHERE id=?",
+                             (*fields.values(), actor_id))
+                conn.commit()
+            return actor_id
 
     def link_actor_movie(self, actor_id: int, task_id: int) -> None:
         """关联演员与作品（去重）。"""
