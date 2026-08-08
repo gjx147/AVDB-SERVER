@@ -54,16 +54,23 @@ def disk_info(_user: CurrentUser):
 
 
 @router.get("/logs")
-def app_logs(_user: CurrentUser, limit: int = 100, filter: str = ""):
-    """读取 app.log 最后 N 行（可选过滤关键词）。"""
+def app_logs(_user: CurrentUser, limit: int = 100, filter: str = "", file: str = "app"):
+    """读取日志文件最后 N 行。
+
+    file=app: data/app.log（应用日志）
+    file=scraper: data/scraper_stderr.log（scraper 子进程 stdout/stderr）
+    file=downloaders: data/downloaders.log（下载器日志）
+    """
     from pathlib import Path
-    log_path = Path(get_settings().DATA_DIR) / "app.log"
+    filenames = {"app": "app.log", "scraper": "scraper_stderr.log", "downloaders": "downloaders.log"}
+    filename = filenames.get(file, "app.log")
+    log_path = Path(get_settings().DATA_DIR) / filename
     if not log_path.exists():
-        return {"lines": [], "total": 0}
+        return {"lines": [], "total": 0, "file": filename}
     try:
         lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
         if filter:
             lines = [l for l in lines if filter.lower() in l.lower()]
-        return {"lines": lines[-limit:], "total": len(lines)}
+        return {"lines": lines[-limit:], "total": len(lines), "file": filename}
     except Exception as e:
-        return {"lines": [], "total": 0, "error": str(e)}
+        return {"lines": [], "total": 0, "error": str(e), "file": filename}
