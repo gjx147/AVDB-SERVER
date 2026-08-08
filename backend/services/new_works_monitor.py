@@ -74,17 +74,21 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
     try:
         actor = db.get(Actor, actor_id)
         if not actor:
+            logger.warning(f"[新作监控] 演员不存在 actor_id={actor_id}")
             return {"error": "演员不存在", "actor_id": actor_id}
         if not actor.name:
+            logger.warning(f"[新作监控] 演员无名字 actor_id={actor_id}")
             return {"error": "演员无名字", "actor_id": actor_id}
 
+        logger.info(f"[新作监控] 开始检查演员 {actor.name} (id={actor_id}, auto_add={auto_add})")
         settings = get_settings()
         actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
         try:
             works = await _fetch_actor_works(actor_url)
         except Exception as e:
-            logger.warning(f"抓取演员 {actor.name} 作品失败: {e}")
+            logger.warning(f"[新作监控] 抓取演员 {actor.name} 作品失败: {e}")
             return {"type": "actor", "actor_id": actor_id, "error": f"抓取失败: {e}"}
+        logger.info(f"[新作监控] {actor.name}: 抓到 {len(works)} 部作品")
 
         # 去重：已有 task 的 + 已在 new_releases 的
         existing_codes: set[str] = set()
@@ -292,6 +296,7 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
 
 async def run_check_all(auto_add: bool = False) -> dict:
     """对所有关注/订阅的演员执行新作品检测。"""
+    logger.info(f"[新作监控] 开始批量巡检 (auto_add={auto_add})")
     db = SessionLocal()
     try:
         from models import Subscription
@@ -308,6 +313,10 @@ async def run_check_all(auto_add: bool = False) -> dict:
             ))
         ).scalars().all()
         actor_ids = {a.id for a in followed} | {a.id for a in sub_actors}
+        logger.info(
+            f"[新作监控] 关注演员 {len(followed)} 个，订阅演员 {len(sub_actors)} 个，"
+            f"合并去重后 {len(actor_ids)} 个待检查"
+        )
     finally:
         db.close()
 

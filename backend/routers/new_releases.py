@@ -103,9 +103,23 @@ async def check_now(actor_id: int, db: DbSession, _user: CurrentUser):
 
 
 @router.post("/check-all")
-async def check_all_now(_user: CurrentUser):
-    """立即巡检所有订阅演员（手动触发）。"""
-    from services.new_works_monitor import run_check_all
+async def check_all_now(db: DbSession, _user: CurrentUser):
+    """立即巡检所有订阅演员（手动触发）。
 
-    result = await run_check_all()
+    auto_add 取任意一个 actor 订阅的 auto_add 设置（有任一订阅开启自动下载则为 True）。
+    """
+    from services.new_works_monitor import run_check_all
+    from models import Subscription
+
+    # 查是否有任意 actor 订阅开启了 auto_add
+    any_auto = db.execute(
+        select(Subscription).where(
+            Subscription.sub_type == "actor",
+            Subscription.enabled == True,  # noqa: E712
+            Subscription.auto_add == True,  # noqa: E712
+        )
+    ).first()
+    auto_add = bool(any_auto)
+
+    result = await run_check_all(auto_add=auto_add)
     return {"ok": True, "result": result}
