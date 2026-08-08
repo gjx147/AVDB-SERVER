@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -136,14 +137,15 @@ class BrowserPool:
     async def fetch_html(self, url: str, timeout: int = 30000, wait_until: str = "domcontentloaded") -> str:
         """便捷方法：用池里的浏览器抓取一个 URL 的 HTML。
 
-        对齐 scraper 的 Cloudflare 绕过策略：
-        1. 给 page 应用 playwright-stealth 反检测
-        2. goto 后等待 Cloudflare 验证完成（title 不再是 "Just a moment"）
+        对齐 scraper 的完整 Cloudflare 绕过策略：
+        1. stealth 反检测
+        2. goto 后主动处理 Cloudflare 验证（点击 Turnstile checkbox / iframe）
+        3. 年龄验证
         """
         async with self.acquire() as ctx:
             page: Page = await ctx.new_page()
             try:
-                # 应用 stealth 反检测（async API）
+                # 应用 stealth 反检测
                 try:
                     from playwright_stealth import stealth_async
                     await stealth_async(page)
@@ -153,22 +155,189 @@ class BrowserPool:
                     logger.warning(f"stealth_async 应用失败: {e}")
 
                 await page.goto(url, timeout=timeout, wait_until=wait_until)
+                await asyncio.sleep(2)  # 等页面加载
 
-                # 检测并等待 Cloudflare 验证完成（最多等 30 秒）
-                # Cloudflare 验证页的 title 是 "Just a moment..."
-                for i in range(30):
-                    title = await page.title()
-                    if "just a moment" not in title.lower():
-                        logger.info(f"Cloudflare 验证通过（等待 {i} 秒）")
-                        break
-                    await page.wait_for_timeout(1000)
-                else:
-                    logger.warning(f"Cloudflare 验证未在 30 秒内完成: {url}")
+                # Cloudflare 验证处理（对齐 scraper._handle_security_check）
+                await self._handle_cloudflare(page, url)
 
-                await page.wait_for_timeout(1000)  # 等 JS 渲染
                 return await page.content()
             finally:
                 await page.close()
+
+    async def _handle_cloudflare(self, page: Page, url: str) -> None:
+        """处理 Cloudflare 验证 + 年龄验证（async 版，对齐 scraper 逻辑）。
+
+        - 检测验证页（title 含 "just a moment" 或 URL 含 challenge）
+        - 主动查找并点击 Turnstile checkbox（页面内 + iframe 内）
+        - 年龄验证按钮点击
+        """
+        try:
+            title = (await page.title()) or ""
+            current_url = page.url
+
+            # 快速判断是否需要验证
+            need_check = (
+                "just a moment" in title.lower()
+                or "challenge" in current_url
+                or await self._has_text(page, "Security Verification")
+                or await self._has_text(page, "确认您是真人")
+            )
+
+            if not need_check:
+                # 可能已经通过，检查年龄验证
+                await self._handle_age_verification(page)
+                return
+
+            logger.info(f"[browser_pool] 检测到 Cloudflare 验证，开始处理: {url}")
+            initial_url = current_url
+            consecutive_no_element = 0
+
+            for i in range(15):
+                logger.debug(f"[browser_pool] 验证处理第 {i+1}/15 次")
+
+                # URL 变化检测
+                current_url = page.url
+                if "challenge" not in current_url and "challenge" in initial_url:
+                    if await self._check_passed(page):
+                        logger.info("[browser_pool] Cloudflare 验证通过（URL 变化）")
+                        break
+
+                # 查找验证按钮（页面内）
+                btn = await self._find_challenge_button(page)
+
+                # 查找 iframe 内的验证按钮
+                if not btn:
+                    btn = await self._find_challenge_button_in_iframe(page)
+
+                if btn:
+                    consecutive_no_element = 0
+                    try:
+                        logger.info("[browser_pool] 找到验证按钮，点击")
+                        await btn.scroll_into_view_if_needed()
+                        await asyncio.sleep(0.5)
+                        await btn.click(timeout=5000)
+                        await asyncio.sleep(random.uniform(5, 8))
+                        if await self._check_passed(page):
+                            logger.info("[browser_pool] Cloudflare 验证通过（点击后）")
+                            break
+                    except Exception as e:
+                        logger.debug(f"[browser_pool] 点击验证按钮失败: {e}")
+                else:
+                    consecutive_no_element += 1
+                    if consecutive_no_element >= 3 and await self._check_passed(page):
+                        logger.info("[browser_pool] Cloudflare 验证自动通过")
+                        break
+                    await asyncio.sleep(3)
+                    if await self._check_passed(page):
+                        logger.info("[browser_pool] Cloudflare 验证自动通过")
+                        break
+
+                await asyncio.sleep(2)
+            else:
+                logger.warning(f"[browser_pool] Cloudflare 验证 15 轮未通过: {url}")
+
+            # 年龄验证
+            await self._handle_age_verification(page)
+
+        except Exception as e:
+            logger.warning(f"[browser_pool] Cloudflare 处理异常: {e}")
+
+    async def _check_passed(self, page: Page) -> bool:
+        """检查验证是否通过（对齐 scraper._check_verification_passed）。"""
+        try:
+            url = page.url
+            if "challenge" in url:
+                return False
+            # 有实际内容就算通过
+            if await page.locator("a[href*='/v/']").count() > 0:
+                return True
+            if await page.locator("a[href^='magnet:']").count() > 0:
+                return True
+            body = await page.locator("body").inner_text()
+            if body and len(body.strip()) > 100:
+                return True
+            # 无验证文本也算通过
+            if not await self._has_text(page, "Security Verification"):
+                return True
+            return False
+        except Exception:
+            return False
+
+    async def _has_text(self, page: Page, text: str) -> bool:
+        try:
+            return await page.locator(f"text={text}").count() > 0
+        except Exception:
+            return False
+
+    async def _find_challenge_button(self, page: Page):
+        """在页面内查找 Cloudflare Turnstile 验证按钮。"""
+        selectors = [
+            ".ctp-checkbox-label",
+            "#challenge-stage",
+            "input[type='checkbox']",
+            "label[for*='challenge']",
+            ".ctp-checkbox",
+        ]
+        for sel in selectors:
+            try:
+                elem = page.locator(sel).first
+                if await elem.count() > 0 and await elem.is_visible():
+                    return elem
+            except Exception:
+                continue
+        # 文本匹配兜底
+        for text in ["确认您是真人", "Verify"]:
+            try:
+                elem = page.locator(f"text={text}").first
+                if await elem.count() > 0:
+                    return elem
+            except Exception:
+                continue
+        return None
+
+    async def _find_challenge_button_in_iframe(self, page: Page):
+        """在 iframe 内查找验证按钮。"""
+        try:
+            iframes = await page.locator("iframe").all()
+            for iframe in iframes:
+                try:
+                    src = await iframe.get_attribute("src") or ""
+                    title = await iframe.get_attribute("title") or ""
+                    if "challenge-platform" not in src and "Cloudflare" not in title:
+                        continue
+                    frame = await iframe.content_frame()
+                    if not frame:
+                        continue
+                    for sel in [".ctp-checkbox-label", "#challenge-stage"]:
+                        try:
+                            elem = frame.locator(sel).first
+                            if await elem.count() > 0:
+                                return elem
+                        except Exception:
+                            continue
+                    for text in ["确认您是真人"]:
+                        try:
+                            elem = frame.locator(f"text={text}").first
+                            if await elem.count() > 0:
+                                return elem
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
+    async def _handle_age_verification(self, page: Page) -> None:
+        """年龄验证（是,我已滿18歲）。"""
+        try:
+            btn = page.locator("text=是,我已滿18歲").first
+            if await btn.count() > 0:
+                logger.info("[browser_pool] 找到年龄验证按钮，点击")
+                await btn.click()
+                await asyncio.sleep(1)
+        except Exception:
+            pass
 
 
 # 单例
