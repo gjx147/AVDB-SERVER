@@ -42,6 +42,72 @@ def _extract_code(text: str) -> str | None:
     return None
 
 
+async def _resolve_actor_url(actor_name: str) -> str | None:
+    """搜索 javdb 演员页，返回第一个匹配的 /actors/xxx 完整 URL。
+
+    用于 source_url 为空时自动解析演员详情页 URL。
+    """
+    from urllib.parse import quote, urljoin
+    from services.browser_pool import browser_pool
+    from config import get_settings
+
+    search_url = f"{get_settings().JAVDB_URL}/search?f=actor&q={quote(actor_name)}"
+    logger.info(f"[新作监控] 搜索演员: {actor_name} -> {search_url}")
+
+    async with browser_pool.acquire() as ctx:
+        page = await ctx.new_page()
+        try:
+            try:
+                from playwright_stealth import stealth_async
+                await stealth_async(page)
+            except Exception:
+                pass
+            await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
+            await browser_pool._handle_cloudflare(page, search_url)
+            await page.wait_for_timeout(2000)
+
+            # 找所有 /actors/xxx 链接，过滤分类页
+            links = await page.locator("a[href*='/actors/']").all()
+            for link in links:
+                try:
+                    href = await link.get_attribute("href") or ""
+                    # 排除分类路径
+                    if any(cat in href for cat in [
+                        "/actors/censored", "/actors/uncensored",
+                        "/actors/western", "/actors/anime", "/actors/recommend",
+                    ]):
+                        continue
+                    text = (await link.inner_text()).strip()
+                    if not text or len(text) < 2:
+                        continue
+                    # 匹配演员名（包含即可，处理空格/变体）
+                    if actor_name in text or text in actor_name:
+                        full_url = urljoin(get_settings().JAVDB_URL, href)
+                        logger.info(f"[新作监控] 匹配到演员: {text} -> {full_url}")
+                        return full_url
+                except Exception:
+                    continue
+            # 没精确匹配，取第一个非分类的 /actors/ 链接
+            for link in links:
+                try:
+                    href = await link.get_attribute("href") or ""
+                    if any(cat in href for cat in [
+                        "/actors/censored", "/actors/uncensored",
+                        "/actors/western", "/actors/anime", "/actors/recommend",
+                    ]):
+                        continue
+                    text = (await link.inner_text()).strip()
+                    if text and len(text) >= 2:
+                        full_url = urljoin(get_settings().JAVDB_URL, href)
+                        logger.info(f"[新作监控] 取首个演员链接: {text} -> {full_url}")
+                        return full_url
+                except Exception:
+                    continue
+            return None
+        finally:
+            await page.close()
+
+
 async def _fetch_actor_works(actor_url: str) -> list[dict]:
     """抓演员作品页，解析作品列表。返回 [{code, title, url, cover}]。
 
@@ -145,8 +211,7 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
 
         logger.info(f"[新作监控] 开始检查演员 {actor.name} (id={actor_id}, auto_add={auto_add})")
         settings = get_settings()
-        # 优先用演员详情页 URL（/actors/xxx，直接列出所有作品），
-        # 没有则回退到搜索页（/search?q=名字&f=actor）
+        # 优先用演员详情页 URL（/actors/xxx，直接列出所有作品）
         actor_url = actor.source_url or ""
         if not actor_url:
             # source_url 为空时尝试从 note 解析（老数据格式 "source_url: xxx"）
@@ -154,8 +219,16 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             if note.startswith("source_url:"):
                 actor_url = note.split(":", 1)[1].strip()
         if not actor_url:
-            actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
-            logger.info(f"[新作监控] {actor.name} 无 source_url，用搜索页: {actor_url}")
+            # 仍然没有：搜索演员页，解析第一个 /actors/xxx 链接并存入 source_url
+            logger.info(f"[新作监控] {actor.name} 无 source_url，搜索演员页解析 URL")
+            actor_url = await _resolve_actor_url(actor.name)
+            if actor_url:
+                actor.source_url = actor_url
+                db.commit()
+                logger.info(f"[新作监控] {actor.name} 已保存 source_url: {actor_url}")
+            else:
+                actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
+                logger.warning(f"[新作监控] {actor.name} 搜索未找到演员页，回退搜索页: {actor_url}")
         else:
             logger.info(f"[新作监控] {actor.name} 用演员详情页: {actor_url}")
         try:
