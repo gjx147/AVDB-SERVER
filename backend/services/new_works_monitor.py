@@ -224,9 +224,11 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             ok = await _trigger_crawl_actor(actor.name)
             if not ok:
                 return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
-            # 重新查 actor 拿 source_url（crawl-actor 会写入）
-            db.refresh(actor)
-            actor_url = actor.source_url or ""
+            # 重新查 actor 拿 source_url（crawl-actor 通过 sqlite3 直连写入）
+            # 必须 expire_all 清 SQLAlchemy 缓存，否则读到的是旧数据
+            db.expire_all()
+            actor = db.get(Actor, actor_id)
+            actor_url = actor.source_url if actor else ""
             if not actor_url:
                 logger.warning(f"[新作监控] {actor.name} crawl-actor 后仍无 source_url")
                 return {"type": "actor", "actor_id": actor_id, "error": "crawl-actor 后仍无 source_url"}
