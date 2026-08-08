@@ -145,7 +145,19 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
 
         logger.info(f"[新作监控] 开始检查演员 {actor.name} (id={actor_id}, auto_add={auto_add})")
         settings = get_settings()
-        actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
+        # 优先用演员详情页 URL（/actors/xxx，直接列出所有作品），
+        # 没有则回退到搜索页（/search?q=名字&f=actor）
+        actor_url = actor.source_url or ""
+        if not actor_url:
+            # source_url 为空时尝试从 note 解析（老数据格式 "source_url: xxx"）
+            note = actor.note or ""
+            if note.startswith("source_url:"):
+                actor_url = note.split(":", 1)[1].strip()
+        if not actor_url:
+            actor_url = f"{settings.JAVDB_URL}/search?q={actor.name}&f=actor"
+            logger.info(f"[新作监控] {actor.name} 无 source_url，用搜索页: {actor_url}")
+        else:
+            logger.info(f"[新作监控] {actor.name} 用演员详情页: {actor_url}")
         try:
             works = await _fetch_actor_works(actor_url)
         except Exception as e:
