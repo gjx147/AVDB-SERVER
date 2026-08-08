@@ -51,3 +51,19 @@ def disk_info(_user: CurrentUser):
         "images_count": images_count,
         "db_size_mb": round(db_size / 1024 / 1024, 1),
     }
+
+
+@router.get("/logs")
+def app_logs(_user: CurrentUser, limit: int = 100, filter: str = ""):
+    """读取 app.log 最后 N 行（可选过滤关键词）。"""
+    from pathlib import Path
+    log_path = Path(get_settings().DATA_DIR) / "app.log"
+    if not log_path.exists():
+        return {"lines": [], "total": 0}
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if filter:
+            lines = [l for l in lines if filter.lower() in l.lower()]
+        return {"lines": lines[-limit:], "total": len(lines)}
+    except Exception as e:
+        return {"lines": [], "total": 0, "error": str(e)}
