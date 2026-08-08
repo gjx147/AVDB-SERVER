@@ -42,12 +42,12 @@ def _extract_code(text: str) -> str | None:
     return None
 
 
-async def _trigger_crawl_actor(actor_name: str) -> bool:
-    """触发 scraper 子进程 crawl-actor --actor-name（跟演员库补齐作品一样）。
+async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
+    """触发 scraper 子进程 crawl-actor（跟演员库"补齐作品"完全一样）。
 
-    scraper 会：搜索演员 → 爬详情页 → 翻页爬所有作品 → 入库 task + 写 source_url。
-    返回 True 表示成功启动（不等完成，因为可能很慢）。
-    实际上这里需要等它完成才能读 source_url，所以用 subprocess 同步等待。
+    有 actor_url → crawl-actor --actor-url（直接爬详情页+翻页作品）
+    无 actor_url → crawl-actor --actor-name（搜索+爬详情+入库+写source_url）
+    同步等待完成（最多 300s），返回 True/False。
     """
     from services.scraper_lock import is_running
     if is_running():
@@ -55,9 +55,13 @@ async def _trigger_crawl_actor(actor_name: str) -> bool:
         return False
 
     import subprocess, sys
-    cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
-           "crawl-actor", "--actor-name", actor_name]
-    logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[:5])}...")
+    if actor_url:
+        cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
+               "crawl-actor", "--actor-url", actor_url]
+    else:
+        cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
+               "crawl-actor", "--actor-name", actor_name]
+    logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[-4:])}...")
     try:
         # 同步等待完成（crawl-actor 通常 1-3 分钟）
         proc = subprocess.run(
@@ -108,89 +112,6 @@ async def _get_actor_works_from_db(db, actor_id: int) -> list[dict]:
     return works
 
 
-async def _fetch_actor_works(actor_url: str) -> list[dict]:
-    """抓演员作品页，解析作品列表。返回 [{code, title, url, cover}]。
-
-    用 browser_pool.acquire() 直接操作 page（不用 fetch_html），因为 javdb
-    搜索结果是 JS 动态加载的，需要等 /v/ 链接出现后再解析。
-    """
-    from services.browser_pool import browser_pool
-
-    works = []
-    async with browser_pool.acquire() as ctx:
-        page = await ctx.new_page()
-        try:
-            # stealth 反检测
-            try:
-                from playwright_stealth import stealth_async
-                await stealth_async(page)
-            except Exception:
-                pass
-
-            await page.goto(actor_url, timeout=30000, wait_until="domcontentloaded")
-
-            # Cloudflare 验证处理
-            await browser_pool._handle_cloudflare(page, actor_url)
-
-            # 等待作品列表加载（最多 15 秒等 /v/ 链接出现）
-            try:
-                await page.wait_for_selector("a[href*='/v/']", timeout=15000)
-            except Exception:
-                logger.warning("[新作监控] 等待 /v/ 链接超时，可能页面无作品或未加载完")
-
-            # 额外等待确保 JS 渲染完
-            await page.wait_for_timeout(2000)
-
-            # 用 page.locator 在浏览器内解析（比 BeautifulSoup 离线解析更可靠）
-            items = await page.locator(
-                ".movie-list .item, .video-list .item, .grid-item, .movie-list > div"
-            ).all()
-
-            # 兜底：如果上面选择器没匹配到，直接找所有含 /v/ 的链接
-            if not items:
-                logger.info("[新作监控] 常规选择器无匹配，用 /v/ 链接兜底解析")
-                links = await page.locator("a[href*='/v/']").all()
-                for link in links:
-                    try:
-                        href = await link.get_attribute("href") or ""
-                        text = (await link.inner_text()).strip()
-                        code = _extract_code(href) or _extract_code(text)
-                        if code:
-                            works.append({"code": code, "title": text[:100], "url": href, "cover": None})
-                    except Exception:
-                        continue
-                return works
-
-            for item in items:
-                try:
-                    link = item.locator("a[href*='/v/']").first
-                    if await link.count() == 0:
-                        continue
-                    href = await link.get_attribute("href") or ""
-                    # 标题
-                    title = ""
-                    try:
-                        title_el = item.locator(".video-title strong, .title, .video-title").first
-                        if await title_el.count() > 0:
-                            title = (await title_el.inner_text()).strip()
-                    except Exception:
-                        pass
-                    code = _extract_code(href) or _extract_code(title)
-                    # 封面
-                    cover = None
-                    try:
-                        img = item.locator("img").first
-                        if await img.count() > 0:
-                            cover = await img.get_attribute("src") or await img.get_attribute("data-src")
-                    except Exception:
-                        pass
-                    if code:
-                        works.append({"code": code, "title": title, "url": href, "cover": cover})
-                except Exception:
-                    continue
-        finally:
-            await page.close()
-    return works
 
 
 async def check_actor_new_works(actor_id: int, subscription_id: int | None = None,
@@ -210,40 +131,25 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             return {"error": "演员无名字", "actor_id": actor_id}
 
         logger.info(f"[新作监控] 开始检查演员 {actor.name} (id={actor_id}, auto_add={auto_add})")
-        settings = get_settings()
-        # 优先用演员详情页 URL（/actors/xxx）
+
+        # 统一逻辑：每次巡检都调 scraper crawl-actor 子进程（跟"补齐作品"完全一样）
+        # source_url 有值 → crawl-actor --actor-url（翻页爬最新作品列表）
+        # source_url 为空 → crawl-actor --actor-name（搜索+爬详情+入库+写source_url）
         actor_url = actor.source_url or ""
         if not actor_url:
             note = actor.note or ""
             if note.startswith("source_url:"):
                 actor_url = note.split(":", 1)[1].strip()
-        if not actor_url:
-            # source_url 为空：触发 scraper crawl-actor --actor-name 子进程
-            # （跟演员库"补齐作品"一样的方式：搜索+爬详情+入库+写source_url）
-            logger.info(f"[新作监控] {actor.name} 无 source_url，触发 scraper crawl-actor 补齐")
-            ok = await _trigger_crawl_actor(actor.name)
-            if not ok:
-                return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
-            # 重新查 actor 拿 source_url（crawl-actor 通过 sqlite3 直连写入）
-            # 必须 expire_all 清 SQLAlchemy 缓存，否则读到的是旧数据
-            db.expire_all()
-            actor = db.get(Actor, actor_id)
-            actor_url = actor.source_url if actor else ""
-            if not actor_url:
-                logger.warning(f"[新作监控] {actor.name} crawl-actor 后仍无 source_url")
-                return {"type": "actor", "actor_id": actor_id, "error": "crawl-actor 后仍无 source_url"}
-            logger.info(f"[新作监控] {actor.name} crawl-actor 完成，source_url: {actor_url}")
-            # crawl-actor 已经把所有作品入库为 task 了，直接对比 new_releases 找新作
-            # 跳过 _fetch_actor_works，用已入库的 task 作为"作品列表"
-            works = await _get_actor_works_from_db(db, actor_id)
-        else:
-            logger.info(f"[新作监控] {actor.name} 用演员详情页: {actor_url}")
-            try:
-                works = await _fetch_actor_works(actor_url)
-            except Exception as e:
-                logger.warning(f"[新作监控] 抓取演员 {actor.name} 作品失败: {e}")
-                return {"type": "actor", "actor_id": actor_id, "error": f"抓取失败: {e}"}
-        logger.info(f"[新作监控] {actor.name}: 抓到 {len(works)} 部作品")
+
+        logger.info(f"[新作监控] {actor.name} 触发 scraper crawl-actor ({actor_url or '按名字搜索'})")
+        ok = await _trigger_crawl_actor(actor.name, actor_url)
+        if not ok:
+            return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
+
+        # crawl-actor 完成后，清 SQLAlchemy 缓存，从 DB 读最新作品列表
+        db.expire_all()
+        works = await _get_actor_works_from_db(db, actor_id)
+        logger.info(f"[新作监控] {actor.name}: DB 读到 {len(works)} 部作品")
 
         # 去重：已有 task 的 + 已在 new_releases 的
         existing_codes: set[str] = set()
