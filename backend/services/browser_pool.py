@@ -129,11 +129,36 @@ class BrowserPool:
                     logger.warning(f"关闭 context 失败: {e}")
 
     async def fetch_html(self, url: str, timeout: int = 30000, wait_until: str = "domcontentloaded") -> str:
-        """便捷方法：用池里的浏览器抓取一个 URL 的 HTML。"""
+        """便捷方法：用池里的浏览器抓取一个 URL 的 HTML。
+
+        对齐 scraper 的 Cloudflare 绕过策略：
+        1. 给 page 应用 playwright-stealth 反检测
+        2. goto 后等待 Cloudflare 验证完成（title 不再是 "Just a moment"）
+        """
         async with self.acquire() as ctx:
             page: Page = await ctx.new_page()
             try:
+                # 应用 stealth 反检测（async API）
+                try:
+                    from playwright_stealth import stealth_async
+                    await stealth_async(page)
+                except ImportError:
+                    logger.warning("playwright-stealth 未安装，跳过反检测")
+                except Exception as e:
+                    logger.warning(f"stealth_async 应用失败: {e}")
+
                 await page.goto(url, timeout=timeout, wait_until=wait_until)
+
+                # 检测并等待 Cloudflare 验证完成（最多等 15 秒）
+                # Cloudflare 验证页的 title 是 "Just a moment..."
+                for _ in range(15):
+                    title = await page.title()
+                    if "just a moment" not in title.lower() and "performing security" not in (await page.content()).lower()[:500]:
+                        break
+                    await page.wait_for_timeout(1000)
+                else:
+                    logger.warning(f"Cloudflare 验证未在 15 秒内完成: {url}")
+
                 await page.wait_for_timeout(1000)  # 等 JS 渲染
                 return await page.content()
             finally:
