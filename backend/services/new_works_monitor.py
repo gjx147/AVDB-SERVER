@@ -43,24 +43,87 @@ def _extract_code(text: str) -> str | None:
 
 
 async def _fetch_actor_works(actor_url: str) -> list[dict]:
-    """抓演员作品页，解析作品列表。返回 [{code, title, url, cover}]。"""
+    """抓演员作品页，解析作品列表。返回 [{code, title, url, cover}]。
+
+    用 browser_pool.acquire() 直接操作 page（不用 fetch_html），因为 javdb
+    搜索结果是 JS 动态加载的，需要等 /v/ 链接出现后再解析。
+    """
     from services.browser_pool import browser_pool
 
-    html = await browser_pool.fetch_html(actor_url, timeout=30000, wait_until="domcontentloaded")
-    soup = BeautifulSoup(html, "html.parser")
     works = []
-    for item in soup.select(".movie-list .item, .video-list .item, .grid-item"):
-        link = item.select_one("a[href^='/v/']")
-        if not link:
-            continue
-        href = link.get("href", "")
-        title_el = item.select_one(".video-title strong, .title")
-        title = title_el.get_text(strip=True) if title_el else ""
-        code = _extract_code(href) or _extract_code(title)
-        cover_el = item.select_one("img")
-        cover = cover_el.get("src") or cover_el.get("data-src") if cover_el else None
-        if code:
-            works.append({"code": code, "title": title, "url": href, "cover": cover})
+    async with browser_pool.acquire() as ctx:
+        page = await ctx.new_page()
+        try:
+            # stealth 反检测
+            try:
+                from playwright_stealth import stealth_async
+                await stealth_async(page)
+            except Exception:
+                pass
+
+            await page.goto(actor_url, timeout=30000, wait_until="domcontentloaded")
+
+            # Cloudflare 验证处理
+            await browser_pool._handle_cloudflare(page, actor_url)
+
+            # 等待作品列表加载（最多 15 秒等 /v/ 链接出现）
+            try:
+                await page.wait_for_selector("a[href*='/v/']", timeout=15000)
+            except Exception:
+                logger.warning("[新作监控] 等待 /v/ 链接超时，可能页面无作品或未加载完")
+
+            # 额外等待确保 JS 渲染完
+            await page.wait_for_timeout(2000)
+
+            # 用 page.locator 在浏览器内解析（比 BeautifulSoup 离线解析更可靠）
+            items = await page.locator(
+                ".movie-list .item, .video-list .item, .grid-item, .movie-list > div"
+            ).all()
+
+            # 兜底：如果上面选择器没匹配到，直接找所有含 /v/ 的链接
+            if not items:
+                logger.info("[新作监控] 常规选择器无匹配，用 /v/ 链接兜底解析")
+                links = await page.locator("a[href*='/v/']").all()
+                for link in links:
+                    try:
+                        href = await link.get_attribute("href") or ""
+                        text = (await link.inner_text()).strip()
+                        code = _extract_code(href) or _extract_code(text)
+                        if code:
+                            works.append({"code": code, "title": text[:100], "url": href, "cover": None})
+                    except Exception:
+                        continue
+                return works
+
+            for item in items:
+                try:
+                    link = item.locator("a[href*='/v/']").first
+                    if await link.count() == 0:
+                        continue
+                    href = await link.get_attribute("href") or ""
+                    # 标题
+                    title = ""
+                    try:
+                        title_el = item.locator(".video-title strong, .title, .video-title").first
+                        if await title_el.count() > 0:
+                            title = (await title_el.inner_text()).strip()
+                    except Exception:
+                        pass
+                    code = _extract_code(href) or _extract_code(title)
+                    # 封面
+                    cover = None
+                    try:
+                        img = item.locator("img").first
+                        if await img.count() > 0:
+                            cover = await img.get_attribute("src") or await img.get_attribute("data-src")
+                    except Exception:
+                        pass
+                    if code:
+                        works.append({"code": code, "title": title, "url": href, "cover": cover})
+                except Exception:
+                    continue
+        finally:
+            await page.close()
     return works
 
 
