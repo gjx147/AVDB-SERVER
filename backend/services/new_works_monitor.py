@@ -64,6 +64,12 @@ async def _resolve_actor_url(actor_name: str) -> str | None:
                 pass
             await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
             await browser_pool._handle_cloudflare(page, search_url)
+
+            # 等待搜索结果加载（/actors/ 链接出现，最多 15 秒）
+            try:
+                await page.wait_for_selector("a[href*='/actors/']", timeout=15000)
+            except Exception:
+                logger.warning(f"[新作监控] 搜索页等待 /actors/ 链接超时")
             await page.wait_for_timeout(2000)
 
             # 找所有 /actors/xxx 链接，过滤分类页
