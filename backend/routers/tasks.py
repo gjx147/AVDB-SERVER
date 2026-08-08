@@ -161,9 +161,24 @@ def extract_single(task_id: int, db: DbSession, _user: CurrentUser):
     scraper = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "magnet_scraper", "scraper.py")
     python = settings.SCRAPER_PYTHON or sys.executable
     try:
+        # 关键修复：从 DB 注入 http_proxy + javdb_url 到子进程 env
+        # （否则 scraper 的 os.environ.get("HTTP_PROXY") 为空，Chromium 无代理被 Cloudflare 拦截）
+        _env = dict(os.environ)
+        from models import Setting
+        for _key in ("http_proxy",):
+            _row = db.get(Setting, _key)
+            if _row and _row.value:
+                _val = _row.value.strip()
+                _env["HTTP_PROXY"] = _val
+                _env["HTTPS_PROXY"] = _val
+                _env["http_proxy"] = _val
+                _env["https_proxy"] = _val
+        _row = db.get(Setting, "javdb_url")
+        if _row and _row.value:
+            _env["JAVDB_URL"] = _row.value.strip()
         subprocess.Popen([python, scraper, "extract-single", "--url", task.url],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         env=dict(os.environ))
+                         env=_env)
     except Exception as e:
         return {"ok": False, "message": str(e)}
     return {"ok": True, "message": "已触发提取"}

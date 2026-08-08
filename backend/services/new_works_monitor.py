@@ -42,6 +42,20 @@ def _extract_code(text: str) -> str | None:
     return None
 
 
+def _get_db_setting(key: str) -> str | None:
+    """从 DB settings 表读配置（http_proxy / javdb_url 等）。
+    scraper 子进程读 env，所以启动前必须把 DB 配置注入 env。
+    """
+    from database import SessionLocal
+    from models import Setting
+    db = SessionLocal()
+    try:
+        row = db.get(Setting, key)
+        return row.value if row else None
+    finally:
+        db.close()
+
+
 async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
     """触发 scraper 子进程 crawl-actor（跟演员库"补齐作品"完全一样）。
 
@@ -54,7 +68,7 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
         logger.warning("[新作监控] scraper 忙，跳过 crawl-actor")
         return False
 
-    import subprocess, sys
+    import subprocess, sys, os
     if actor_url:
         cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
                "crawl-actor", "--actor-url", actor_url]
@@ -62,11 +76,27 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
         cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
                "crawl-actor", "--actor-name", actor_name]
     logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[-4:])}...")
+
+    # 关键修复：从 DB settings 读 http_proxy + javdb_url 注入子进程 env
+    # （与 routers/crawl.py 的 _start_scraper 一致，否则 scraper 的
+    #   os.environ.get("HTTP_PROXY") 为空，Chromium 无代理被 Cloudflare 拦截）
+    env = dict(os.environ)
+    _proxy = _get_db_setting("http_proxy")
+    if _proxy:
+        env["HTTP_PROXY"] = _proxy
+        env["HTTPS_PROXY"] = _proxy
+        env["http_proxy"] = _proxy
+        env["https_proxy"] = _proxy
+        logger.info(f"[新作监控] 注入代理到 scraper env: {_proxy}")
+    _javdb_url = _get_db_setting("javdb_url")
+    if _javdb_url:
+        env["JAVDB_URL"] = _javdb_url
+
     proc = None
     try:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            cwd="/app/magnet_scraper",
+            cwd="/app/magnet_scraper", env=env,
         )
         # 注册 scraper_lock 防止其他路径并发启动 Chromium
         scraper_lock.set_proc(proc, {"mode": "crawl-actor", "pid": proc.pid})
@@ -284,17 +314,29 @@ async def _create_task_and_extract(nr: NewRelease) -> int | None:
         logger.info(f"[新作监控] 创建 task {task_id} for {nr.video_code}")
 
         # 2. 触发 scraper extract-single（subprocess，非阻塞 fire-and-forget）
-        import sys as _sys
+        import sys as _sys, os as _os
         from services import scraper_lock as _lock
         if _lock.is_running():
             logger.info(f"[新作监控] scraper 忙，task {task_id} 排队等 auto_retry")
         else:
             try:
+                # 关键修复：注入 http_proxy + javdb_url 到子进程 env（同 _trigger_crawl_actor）
+                _env = dict(_os.environ)
+                _proxy = _get_db_setting("http_proxy")
+                if _proxy:
+                    _env["HTTP_PROXY"] = _proxy
+                    _env["HTTPS_PROXY"] = _proxy
+                    _env["http_proxy"] = _proxy
+                    _env["https_proxy"] = _proxy
+                _javdb_url = _get_db_setting("javdb_url")
+                if _javdb_url:
+                    _env["JAVDB_URL"] = _javdb_url
                 proc = await asyncio.create_subprocess_exec(
                     _sys.executable, "/app/magnet_scraper/scraper.py",
                     "extract-single", "--url", task_url,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
+                    env=_env,
                 )
                 # 注册 scraper_lock 防止并发
                 _lock.set_proc(proc, {"mode": "extract-single", "pid": proc.pid, "auto": True})
