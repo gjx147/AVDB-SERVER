@@ -504,14 +504,19 @@ class MagnetScraper:
             
             # 检查页面是否有实际内容（说明验证已通过）
             has_content = False
+            has_real_link = False
             try:
-                # 检查是否有详情页链接（列表页）
-                if self.page.locator("a[href^='/v/']").count() > 0:
+                # 最可靠信号：详情/列表/演员链接（拦截页不会有这些）
+                v_count = self.page.locator("a[href^='/v/']").count()
+                a_count = self.page.locator("a[href^='/actors/']").count()
+                s_count = self.page.locator("a[href^='/search']").count()
+                if v_count > 0 or a_count > 0 or s_count > 0:
                     has_content = True
-                    logger.debug("检测到详情页链接，验证可能已通过")
+                    has_real_link = True
+                    logger.debug(f"检测到真实内容链接(/v/={v_count},/actors/={a_count},/search={s_count})，验证已通过")
             except Exception:
                 pass
-            
+
             if not has_content:
                 try:
                     # 检查是否有磁力链接（详情页）
@@ -532,12 +537,22 @@ class MagnetScraper:
                 except Exception:
                     pass
             
-            # 如果URL中没有challenge，且没有验证文本，且有实际内容，则认为已通过
-            if "challenge" not in current_url and not has_security_text and has_content:
-                logger.info("检测到验证已通过（URL正常、无验证文本、有实际内容）")
+            # 对齐 browser_pool._check_passed 的宽松判定：
+            # URL 无 challenge + 有真实内容链接 → 一定通过（拦截页不会有 /v/ /actors/）
+            if "challenge" not in current_url and has_real_link:
+                logger.info("检测到验证已通过（URL正常 + 真实内容链接）")
+                return True
+
+            # URL 无 challenge + 有实际内容（body>100 或磁力链接）→ 通过。
+            # 不再要求 has_security_text=False（拦截页 Just a moment... body 很短，
+            # 不会 >100；真实页面即使残留 Security 文案也有大量内容）。
+            # 这是关键修复：原来要求 not has_security_text，导致有 Security 文案
+            # 的真实页面被误判拦截。
+            if "challenge" not in current_url and has_content:
+                logger.info("检测到验证已通过（URL正常 + 有实际内容）")
                 return True
             
-            # 如果URL中没有challenge，且没有验证文本，即使内容不多也认为可能已通过（可能是空页面）
+            # URL 无 challenge 且无验证文本 → 通过（可能是空页面/加载中）
             if "challenge" not in current_url and not has_security_text:
                 logger.debug("URL正常且无验证文本，可能已通过（但内容较少）")
                 return True
@@ -736,22 +751,27 @@ class MagnetScraper:
                             if self._check_verification_passed():
                                 logger.info("Cloudflare验证已自动通过")
                                 return True
-                            # 兜底：URL 无 challenge + 页面有大量真实内容（>300字）
-                            # → 即使残留 Security 文本（可能是旧文案），也判定通过。
-                            # 真正的拦截页是「Just a moment...」几乎无内容，
-                            # 有大量内容说明已是真实搜索结果/详情页。
+                            # 兜底：URL 无 challenge + 页面有真实内容链接即判定通过。
+                            # 真正的拦截页（Just a moment...）没有 /v/ /actors/ /search 链接，
+                            # 有这些链接说明已是真实详情/搜索/列表页，Security 文本可能是残留误报。
                             try:
                                 if "challenge" not in self.page.url:
+                                    # 重新检测链接（循环中页面可能已加载完成）
+                                    v_count = self.page.locator("a[href^='/v/']").count()
+                                    a_count = self.page.locator("a[href^='/actors/']").count()
+                                    s_count = self.page.locator("a[href^='/search']").count()
+                                    has_real_link = v_count > 0 or a_count > 0 or s_count > 0
                                     body_text = self.page.locator("body").inner_text() or ""
-                                    # 检测到详情/列表/演员链接也算真实内容
-                                    has_real_link = (
-                                        self.page.locator("a[href^='/v/']").count() > 0
-                                        or self.page.locator("a[href^='/actors/']").count() > 0
-                                        or self.page.locator("a[href^='/search']").count() > 0
-                                    )
+                                    body_len = len(body_text.strip())
+                                    logger.debug(f"兜底检测: /v/={v_count} /actors/={a_count} /search={s_count} body_len={body_len}")
+                                    # 有真实内容链接 → 一定是真实页面（拦截页不会有这些）
+                                    if has_real_link:
+                                        logger.info(f"兜底判定通过：URL无challenge + 真实内容链接(/v/={v_count},/actors/={a_count},/search={s_count})")
+                                        return True
+                                    # 无链接但 body 很长且无 Security 元素 → 可能是已通过的空架构页
                                     _no_sec = security_elem is None and confirm_elem is None
-                                    if (len(body_text.strip()) > 300 and _no_sec) or has_real_link:
-                                        logger.info(f"兜底判定通过：URL无challenge + 真实内容(len={len(body_text.strip())}, real_link={has_real_link})")
+                                    if body_len > 500 and _no_sec:
+                                        logger.info(f"兜底判定通过：URL无challenge + 大量正文(len={body_len})无Security元素")
                                         return True
                             except Exception as e:
                                 logger.debug(f"兜底判定异常: {e}")
