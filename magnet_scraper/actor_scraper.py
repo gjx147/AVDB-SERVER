@@ -41,6 +41,66 @@ class ActorScraper:
             self.scraper.init_browser()
             self.page = self.scraper.page
 
+    def resolve_actor_url_from_tasks(self, actor_name: str) -> str:
+        """搜索页被 Cloudflare 拦截时的兜底：从该演员已关联的作品详情页提取演员 URL。
+
+        详情页 Cloudflare 审查宽松（已验证能过），作品详情页的面板块里有
+        a[href^='/actors/'] 链接。匹配演员名即可拿到 /actors/<hash> URL。
+
+        返回演员详情页 URL，找不到返回空字符串。
+        """
+        self._ensure_browser()
+        try:
+            with self.store._conn() as conn:
+                # 查该演员关联的 task URL（取最近 5 个，详情页可能失效）
+                rows = conn.execute(
+                    "SELECT t.url FROM tasks t "
+                    "JOIN actor_movies am ON am.task_id = t.id "
+                    "JOIN actors a ON a.id = am.actor_id "
+                    "WHERE a.name = ? AND t.url IS NOT NULL AND t.url != '' "
+                    "AND t.url NOT LIKE 'pending://%' "
+                    "ORDER BY t.id DESC LIMIT 5",
+                    (actor_name,)
+                ).fetchall()
+            task_urls = [r["url"] for r in rows] if rows else []
+        except Exception as e:
+            logger.debug(f"查询演员关联作品失败: {e}")
+            task_urls = []
+
+        if not task_urls:
+            logger.info(f"演员 {actor_name} 无已关联作品，无法从详情页提取 URL")
+            return ""
+
+        logger.info(f"尝试从 {len(task_urls)} 个已关联作品详情页提取演员 URL")
+        for task_url in task_urls:
+            try:
+                logger.debug(f"访问作品详情页提取演员链接: {task_url}")
+                self.page.goto(task_url, wait_until="domcontentloaded", timeout=60000)
+                self.scraper._handle_security_check()
+                time.sleep(random.uniform(1.5, 3))
+
+                # 详情页面板块里的演员链接
+                links = self.page.locator("a[href^='/actors/']").all()
+                for link in links:
+                    try:
+                        href = link.get_attribute("href") or ""
+                        if any(cat in href for cat in _ACTOR_CATEGORY_PATHS):
+                            continue
+                        link_text = (link.inner_text() or "").strip()
+                        # 匹配演员名（完全匹配或包含）
+                        if link_text and (link_text == actor_name or actor_name in link_text or link_text in actor_name):
+                            resolved = urljoin(self.BASE_URL, href)
+                            logger.info(f"从详情页 {task_url} 提取到演员 URL: {resolved} (匹配名: {link_text})")
+                            return resolved
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.debug(f"访问详情页 {task_url} 失败: {e}")
+                continue
+
+        logger.info(f"从 {len(task_urls)} 个详情页都未匹配到演员 {actor_name} 的链接")
+        return ""
+
     def search_actor(self, keyword: str) -> list:
         """搜索演员，返回 [{name, detail_url, avatar_url}]。
 

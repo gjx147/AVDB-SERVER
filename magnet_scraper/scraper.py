@@ -2095,8 +2095,15 @@ def main():
                             actor_url = results[0]["detail_url"]
                             logger.info(f"找到演员: {results[0]['name']} -> {actor_url}")
                         else:
-                            logger.error(f"未找到演员: {actor_name}")
-                            break
+                            # 搜索页被 Cloudflare 拦截的兜底：从已关联作品详情页提取演员 URL
+                            # （详情页审查宽松，作品页面板块有 /actors/ 链接）
+                            logger.info(f"搜索失败，尝试从已关联作品详情页提取演员 URL: {actor_name}")
+                            actor_url = a.resolve_actor_url_from_tasks(actor_name)
+                            if actor_url:
+                                logger.info(f"兜底找到演员 URL: {actor_url}")
+                            else:
+                                logger.error(f"未找到演员: {actor_name}")
+                                break
                     if not actor_url:
                         logger.error("请提供 --actor-url 或 --actor-name")
                         break
