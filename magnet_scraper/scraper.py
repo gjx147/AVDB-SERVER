@@ -736,6 +736,25 @@ class MagnetScraper:
                             if self._check_verification_passed():
                                 logger.info("Cloudflare验证已自动通过")
                                 return True
+                            # 兜底：URL 无 challenge + 页面有大量真实内容（>300字）
+                            # → 即使残留 Security 文本（可能是旧文案），也判定通过。
+                            # 真正的拦截页是「Just a moment...」几乎无内容，
+                            # 有大量内容说明已是真实搜索结果/详情页。
+                            try:
+                                if "challenge" not in self.page.url:
+                                    body_text = self.page.locator("body").inner_text() or ""
+                                    # 检测到详情/列表/演员链接也算真实内容
+                                    has_real_link = (
+                                        self.page.locator("a[href^='/v/']").count() > 0
+                                        or self.page.locator("a[href^='/actors/']").count() > 0
+                                        or self.page.locator("a[href^='/search']").count() > 0
+                                    )
+                                    _no_sec = security_elem is None and confirm_elem is None
+                                    if (len(body_text.strip()) > 300 and _no_sec) or has_real_link:
+                                        logger.info(f"兜底判定通过：URL无challenge + 真实内容(len={len(body_text.strip())}, real_link={has_real_link})")
+                                        return True
+                            except Exception as e:
+                                logger.debug(f"兜底判定异常: {e}")
                         
                         # 等待页面自动处理验证
                         logger.debug("等待页面自动处理验证...")

@@ -42,13 +42,30 @@ class ActorScraper:
             self.page = self.scraper.page
 
     def search_actor(self, keyword: str) -> list:
-        """搜索演员，返回 [{name, detail_url, avatar_url}]。"""
+        """搜索演员，返回 [{name, detail_url, avatar_url}]。
+
+        搜索页 Cloudflare 审查比首页/详情页更严，直接 goto 常被拦截。
+        策略：先访问主页「暖场」拿到 cf_clearance cookie，再导航到搜索页。
+        """
         self._ensure_browser()
 
         search_url = f"{self.BASE_URL}/search?f=actor&q={quote(keyword)}"
         logger.info(f"搜索演员: {keyword} -> {search_url}")
 
         try:
+            # 关键修复：先访问主页暖场（拿到 cf_clearance cookie），再 goto 搜索页
+            # 直接 goto 搜索页会被 Cloudflare 拦截（搜索页审查更严，Turnstile
+            # 常不渲染可点击元素，导致 _handle_security_check 误判失败）
+            try:
+                logger.debug("搜索前先访问主页暖场拿 cf_clearance...")
+                self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=60000)
+                self.scraper._handle_security_check()
+                time.sleep(random.uniform(1.5, 3))
+                logger.info("主页暖场完成，开始导航到搜索页")
+            except Exception as e:
+                logger.debug(f"主页暖场异常（忽略，继续尝试搜索）: {e}")
+
+            # 带 cookie 导航到搜索页（暖场拿到的 cf_clearance 会自动带上）
             self.page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
             self.scraper._handle_security_check()
             time.sleep(random.uniform(2, 4))
