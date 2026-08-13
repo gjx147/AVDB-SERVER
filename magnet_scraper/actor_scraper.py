@@ -41,6 +41,49 @@ class ActorScraper:
             self.scraper.init_browser()
             self.page = self.scraper.page
 
+    def _warmup_homepage(self) -> None:
+        """主页暖场：先访问首页拿 cf_clearance cookie。
+
+        搜索页/演员页 Cloudflare 审查比首页严，直接 goto 常被拦截或重置。
+        每个爬取会话只暖场一次（_warmed_up 标记去重）。
+        """
+        if getattr(self, "_warmed_up", False):
+            return
+        self._ensure_browser()
+        try:
+            logger.debug("主页暖场：访问首页拿 cf_clearance...")
+            self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=60000)
+            self.scraper._handle_security_check()
+            time.sleep(random.uniform(1.5, 3))
+            self._warmed_up = True
+            logger.debug("主页暖场完成")
+        except Exception as e:
+            # 暖场失败不致命：仍交给 _goto_with_retry 的重试去兜底
+            logger.debug(f"主页暖场失败（忽略，继续）: {e}")
+
+    def _goto_with_retry(self, url: str, *, max_retries: int = 3, timeout: int = 60000) -> bool:
+        """带退避重试的导航。
+
+        goto 失败基本都是网络层瞬时问题（连接关闭/重置/超时/CF 重置），
+        故对任意导航异常都退避重试，重试耗尽返回 False。
+        导航成功后执行 _handle_security_check 处理 Cloudflare 挑战。
+        """
+        self._ensure_browser()
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                self.scraper._handle_security_check()
+                time.sleep(random.uniform(2, 4))
+                return True
+            except Exception as e:
+                if attempt >= max_retries:
+                    logger.error(f"导航失败(第{attempt}/{max_retries}次),不再重试: {url} -> {e}")
+                    return False
+                backoff = random.uniform(2, 5) * attempt
+                logger.warning(f"导航瞬时失败(第{attempt}/{max_retries}次),{backoff:.1f}s 后重试: {url} -> {e}")
+                time.sleep(backoff)
+        return False
+
     def resolve_actor_url_from_tasks(self, actor_name: str) -> str:
         """搜索页被 Cloudflare 拦截时的兜底：从该演员已关联的作品详情页提取演员 URL。
 
@@ -197,6 +240,9 @@ class ActorScraper:
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
 
+        # 0. 主页暖场：先访问首页拿 cf_clearance（演员页 Cloudflare 审查较严）
+        self._warmup_homepage()
+
         # 1. 爬取演员信息
         info = self.crawl_actor_info(actor_url)
         name = info.get("name")
@@ -252,11 +298,10 @@ class ActorScraper:
     def crawl_actor_info(self, actor_url: str) -> dict:
         """爬取演员详情页，提取基本信息。"""
         info = {}
+        if not self._goto_with_retry(actor_url):
+            logger.error(f"无法访问演员页（重试耗尽）: {actor_url}")
+            return info
         try:
-            self.page.goto(actor_url, wait_until="domcontentloaded", timeout=60000)
-            self.scraper._handle_security_check()
-            time.sleep(random.uniform(2, 4))
-
             # 姓名
             try:
                 name_el = self.page.locator(".actor-name, h2, .name, .title").first
@@ -338,9 +383,9 @@ class ActorScraper:
             logger.info(f"爬取演员作品第 {page_num} 页: {url}")
 
             try:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                self.scraper._handle_security_check()
-                time.sleep(random.uniform(2, 4))
+                if not self._goto_with_retry(url):
+                    logger.error(f"第 {page_num} 页导航失败（重试耗尽），停止翻页")
+                    break
 
                 links = self.page.locator("a[href^='/v/']").all()
                 if not links:
