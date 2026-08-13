@@ -156,8 +156,8 @@ export const api = {
       http.get<Ranking[]>('/api/rankings', { params: { rank_type, rank_date, skip, limit } }).then((r) => r.data),
     latest: () =>
       http.get<Record<string, string>>('/api/rankings/latest').then((r) => r.data),
-    crawl: (rank_type: RankType, max_pages = 5) =>
-      http.post<ApiOk>('/api/crawl/ranking', { rank_type, max_pages }).then((r) => r.data),
+    crawl: (rank_type: RankType) =>
+      http.post<ApiOk>('/api/crawl/ranking', { rank_type }).then((r) => r.data),
     addTask: (ranking_id: number) =>
       http.post<ApiOk>(`/api/rankings/${ranking_id}/add-task`).then((r) => r.data),
     batchAddTasks: (ranking_ids: number[]) =>

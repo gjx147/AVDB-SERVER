@@ -59,6 +59,7 @@ class RankingScraper:
         all_entries = []
         page_num = 1
         global_pos = 0  # 跨页累计排名
+        seen_codes: set[str] = set()  # 跨页去重，用于检测翻页失效（返回重复页）
 
         logger.info(f"开始爬取排行榜: {rank_type} (最多 {max_pages} 页)")
         self.scraper._write_crawl_status(
@@ -85,13 +86,25 @@ class RankingScraper:
                     logger.info(f"第 {page_num} 页无条目，停止爬取")
                     break
 
-                # 设置跨页全局排名
-                for e in entries:
+                # 跨页去重：只保留本页新出现的条目
+                new_entries = [e for e in entries if e["video_code"] not in seen_codes]
+                if page_num > 1 and not new_entries:
+                    # 本页全部与前面重复 → 翻页未生效（JavDB 排行榜为单页，不支持 &page= 翻页）
+                    logger.info(
+                        f"第 {page_num} 页 {len(entries)} 条全部与前面重复"
+                        f"（排行榜不支持翻页/已到末尾），停止爬取"
+                    )
+                    break
+
+                for e in new_entries:
+                    seen_codes.add(e["video_code"])
                     global_pos += 1
                     e["rank_position"] = global_pos
-
-                all_entries.extend(entries)
-                logger.info(f"第 {page_num} 页提取 {len(entries)} 条，累计 {len(all_entries)} 条")
+                all_entries.extend(new_entries)
+                logger.info(
+                    f"第 {page_num} 页新增 {len(new_entries)} 条"
+                    f"（本页 {len(entries)}，累计 {len(all_entries)} 条）"
+                )
 
                 self.scraper._write_crawl_status(
                     phase="ranking", crawl_type="ranking", rank_type=rank_type,
