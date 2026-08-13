@@ -1960,6 +1960,7 @@ def main():
     actor_parser.add_argument("--actor-url", type=str, default="", help="演员详情页 URL")
     actor_parser.add_argument("--actor-name", type=str, default="", help="演员名字（自动搜索匹配）")
     actor_parser.add_argument("--actor-id", type=int, default=None, help="已知演员 ID（补齐作品时按 id 关联，不靠名字匹配，杜绝重复演员）")
+    actor_parser.add_argument("--no-extract", action="store_true", help="只入库作品列表，不提取详情（磁力/元数据/图片）；巡检用")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
     # 单任务提取
@@ -2132,6 +2133,14 @@ def main():
                     logger.info(f"执行演员爬取: {actor_url}" + (f"（actor_id={_actor_id}）" if _actor_id else ""))
                     result = a.crawl_actor_full(actor_url, actor_id=_actor_id)
                     logger.info(f"演员爬取完成: {result}")
+                    # 默认提取详情（磁力/元数据/图片），与其他任务一致；--no-extract 跳过（巡检用，避免长时阻塞）
+                    if not getattr(args, "no_extract", False):
+                        _lsid = result.get("list_source_id")
+                        if _lsid:
+                            scraper.list_source_id = _lsid
+                            logger.info("开始提取演员作品详情（磁力/元数据/图片，复用 extract 逻辑）...")
+                            scraper.extract_magnets()
+                            logger.info("演员作品详情提取完成")
                 elif args.command == "extract-single":
                     single_url = getattr(args, "url", "")
                     if not single_url:

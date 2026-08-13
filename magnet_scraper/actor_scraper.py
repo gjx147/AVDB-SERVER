@@ -303,6 +303,7 @@ class ActorScraper:
             "actor_id": actor_id,
             "movie_count": len(movies),
             "tasks_added": tasks_added,
+            "list_source_id": src["id"],
         }
 
     def crawl_actor_info(self, actor_url: str) -> dict:

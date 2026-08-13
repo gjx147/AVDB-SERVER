@@ -78,6 +78,7 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
                "crawl-actor", "--actor-name", actor_name]
     if actor_id is not None:
         cmd += ["--actor-id", str(actor_id)]
+    cmd += ["--no-extract"]  # 巡检只检测新作，不提取详情（避免长时间阻塞 + 300s 超时）
     logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[-4:])}...")
 
     # 关键修复：从 DB settings 读 http_proxy + javdb_url 注入子进程 env
