@@ -49,18 +49,18 @@ export function Actors() {
     try { await api.actors.crawl(url.trim()); toastOk('已开始爬取演员'); setUrl(''); setAdding(false) }
     catch (e) { toastErr(String((e as Error).message)) }
   }
-  // F9: 关注/取关演员
-  const toggleFollow = async (actorId: number, isFollowed?: number) => {
+  // 关注/取关演员（关注 = 创建 actor 订阅，定时检测+通知）
+  const toggleFollow = async (a: Actor) => {
     try {
-      if (isFollowed) {
-        await api.actorsFollow.unfollow(actorId)
+      if (subscribedIds.has(a.id)) {
+        await api.actors.unfollow(a.id)
+        setSubscribedIds((prev) => { const n = new Set(prev); n.delete(a.id); return n })
         toastOk('已取消关注')
       } else {
-        await api.actorsFollow.follow(actorId)
-        toastOk('已关注，有新作将通知你')
+        await api.actors.follow(a.id)
+        setSubscribedIds((prev) => new Set(prev).add(a.id))
+        toastOk(`已关注 ${a.name}，有新作将通知你`)
       }
-      // 更新本地状态
-      setActors((prev) => prev ? prev.map((a) => a.id === actorId ? { ...a, is_followed: isFollowed ? 0 : 1 } : a) : prev)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   // 一键补齐演员作品
@@ -74,15 +74,6 @@ export function Actors() {
       toastOk(`已开始补齐 ${a.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
-  // 一键订阅演员作品（有新作自动入库）
-  const subscribe = async (a: Actor) => {
-    try {
-      await api.subscriptions.create({ sub_type: 'actor', actor_id: a.id, name: a.name, auto_add: true })
-      setSubscribedIds((prev) => new Set(prev).add(a.id))
-      toastOk(`已订阅 ${a.name}，有新作将自动入库`)
-    } catch (e) { toastErr(String((e as Error).message)) }
-  }
-
   return (
     <div className="page">
       <PageHead eyebrow={`Actors · ${actors?.length ?? 0} 位`} title={<>演员<em>库</em></>}
@@ -132,16 +123,16 @@ export function Actors() {
               style={{ cursor: 'pointer' }}>
               <div className="actor-photo">
                 {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
-                {/* F9: 关注按钮 */}
+                {/* 关注按钮（关注 = actor 订阅） */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); toggleFollow(a.id, a.is_followed) }}
+                  onClick={(e) => { e.stopPropagation(); toggleFollow(a) }}
                   style={{
                     position: 'absolute', top: 6, right: 6, border: 'none', borderRadius: '50%',
                     width: 28, height: 28, cursor: 'pointer', fontSize: 14, lineHeight: 1,
-                    background: a.is_followed ? 'var(--gold)' : 'rgba(0,0,0,.5)', color: '#fff',
+                    background: subscribedIds.has(a.id) ? 'var(--gold)' : 'rgba(0,0,0,.5)', color: '#fff',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'all .2s',
-                  }} title={a.is_followed ? '取消关注' : '关注'}>{a.is_followed ? '♥' : '♡'}</button>
+                  }} title={subscribedIds.has(a.id) ? '取消关注' : '关注'}>{subscribedIds.has(a.id) ? '♥' : '♡'}</button>
               </div>
               <div className="actor-name">{a.name}</div>
               <div className="actor-count">{a.movie_count} 部作品{a.local_movie_count ? ` · 本地 ${a.local_movie_count}` : ''}</div>
@@ -156,16 +147,6 @@ export function Actors() {
                     cursor: a.source_url ? 'pointer' : 'not-allowed', opacity: a.source_url ? 1 : 0.4,
                     fontFamily: 'var(--ff-sans)', transition: 'all .2s',
                   }}>补齐作品</button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); subscribe(a) }}
-                  disabled={subscribedIds.has(a.id)}
-                  title={subscribedIds.has(a.id) ? '已订阅' : '订阅该演员，有新作自动入库'}
-                  style={{
-                    flex: 1, border: 'none', borderRadius: 6, padding: '5px 8px', fontSize: 11,
-                    cursor: subscribedIds.has(a.id) ? 'default' : 'pointer', fontFamily: 'var(--ff-sans)',
-                    background: subscribedIds.has(a.id) ? 'var(--gold-wash)' : 'var(--gold)',
-                    color: subscribedIds.has(a.id) ? 'var(--gold)' : '#fff', transition: 'all .2s',
-                  }}>{subscribedIds.has(a.id) ? '✓ 已订阅' : '订阅'}</button>
               </div>
             </div>
           ))}

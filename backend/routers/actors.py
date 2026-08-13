@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
 
 from deps import CurrentUser, DbSession, Pagination
-from models import Actor, Task, actor_movies
+from models import Actor, Subscription, Task, actor_movies
 from schemas import ActorDetailOut, ActorListResponse, ActorOut
 
 router = APIRouter(prefix="/api/actors", tags=["actors"])
@@ -25,14 +25,19 @@ def list_actors(
     """演员列表，支持名字搜索 + 关注/拉黑/头像筛选 + 分页。"""
     stmt = select(Actor)
     count_stmt = select(func.count(Actor.id))
+    # 「有 actor 订阅」子查询（关注现已 = actor 订阅）
+    has_sub_sq = select(Subscription.actor_id).where(Subscription.sub_type == "actor")
     if q:
         like = f"%{q}%"
         cond = or_(Actor.name.like(like), Actor.name_en.like(like))
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
-    if followed is not None:
-        stmt = stmt.where(Actor.is_followed == followed)
-        count_stmt = count_stmt.where(Actor.is_followed == followed)
+    if followed is True:
+        stmt = stmt.where(Actor.id.in_(has_sub_sq))
+        count_stmt = count_stmt.where(Actor.id.in_(has_sub_sq))
+    elif followed is False:
+        stmt = stmt.where(~Actor.id.in_(has_sub_sq))
+        count_stmt = count_stmt.where(~Actor.id.in_(has_sub_sq))
     if blacklisted is not None:
         stmt = stmt.where(Actor.is_blacklisted == blacklisted)
         count_stmt = count_stmt.where(Actor.is_blacklisted == blacklisted)
@@ -44,7 +49,7 @@ def list_actors(
     offset, limit = pagination
     total = db.execute(count_stmt).scalar_one()
     items = (
-        db.execute(stmt.order_by(Actor.is_followed.desc(), Actor.id.desc()).offset(offset).limit(limit))
+        db.execute(stmt.order_by(Actor.id.in_(has_sub_sq).desc(), Actor.id.desc()).offset(offset).limit(limit))
         .scalars()
         .all()
     )
@@ -71,24 +76,51 @@ def get_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 
 @router.post("/{actor_id}/follow")
 def follow(actor_id: int, db: DbSession, _user: CurrentUser):
-    """关注演员（绝对置 true，与 unfollow 对称）。"""
+    """关注演员 = 创建 actor 订阅（auto_add=false：定时检测+通知，不入库）。已存在则 no-op。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
-    actor.is_followed = True
-    db.commit()
-    return {"ok": True, "is_followed": True, "actor_id": actor_id}
+    existing = db.execute(
+        select(Subscription).where(
+            Subscription.sub_type == "actor", Subscription.actor_id == actor_id
+        )
+    ).scalar_one_or_none()
+    if not existing:
+        db.add(Subscription(
+            name=actor.name, sub_type="actor", actor_id=actor_id,
+            auto_add=False, enabled=True, check_interval_hours=6,
+        ))
+        db.commit()
+    return {"ok": True, "actor_id": actor_id, "subscribed": True}
 
 
 @router.post("/{actor_id}/unfollow")
 def unfollow(actor_id: int, db: DbSession, _user: CurrentUser):
-    """取消关注（兼容前端独立 unfollow 调用）。"""
-    actor = db.get(Actor, actor_id)
-    if not actor:
-        raise HTTPException(status_code=404, detail="演员不存在")
-    actor.is_followed = False
+    """取消关注 = 删除该 actor 订阅。"""
+    sub = db.execute(
+        select(Subscription).where(
+            Subscription.sub_type == "actor", Subscription.actor_id == actor_id
+        )
+    ).scalar_one_or_none()
+    if sub:
+        db.delete(sub)
+        db.commit()
+    return {"ok": True, "actor_id": actor_id, "subscribed": False}
+
+
+@router.post("/{actor_id}/auto-add")
+def toggle_auto_add(actor_id: int, db: DbSession, _user: CurrentUser):
+    """切换该演员订阅的 auto_add（自动入库+下载）。需先关注（存在 actor 订阅）。"""
+    sub = db.execute(
+        select(Subscription).where(
+            Subscription.sub_type == "actor", Subscription.actor_id == actor_id
+        )
+    ).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=400, detail="请先关注该演员")
+    sub.auto_add = not sub.auto_add
     db.commit()
-    return {"ok": True, "is_followed": False, "actor_id": actor_id}
+    return {"ok": True, "actor_id": actor_id, "auto_add": sub.auto_add}
 
 
 @router.post("/{actor_id}/blacklist")

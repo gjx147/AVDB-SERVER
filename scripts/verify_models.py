@@ -56,11 +56,11 @@ def main() -> None:
         db.flush()
         print(f"Task: id={t.id} code={t.video_code} status={t.status} view={t.view_status}")
 
-        # Actor（带关注）
-        a = Actor(name="演员A", is_followed=True, movie_count=100)
+        # Actor
+        a = Actor(name="演员A", movie_count=100)
         db.add(a)
         db.flush()
-        print(f"Actor: id={a.id} name={a.name} followed={a.is_followed}")
+        print(f"Actor: id={a.id} name={a.name}")
 
         # Actor-Movie 关联
         a.tasks.append(t)

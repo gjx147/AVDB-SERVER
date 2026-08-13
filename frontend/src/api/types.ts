@@ -102,8 +102,21 @@ export interface Actor {
   tags: string | null
   movie_count: number
   local_movie_count: number
-  is_followed?: number  // F9: 关注标记
   created_at: string | null
+}
+
+// 订阅（关注 = sub_type='actor' 的订阅）
+export interface Subscription {
+  id: number
+  name: string
+  sub_type: string  // actor | ranking | composite
+  rank_type: string | null
+  actor_id: number | null
+  auto_add: boolean
+  enabled: boolean
+  check_interval_hours: number
+  last_checked_at: string | null
+  last_result: string | null
 }
 
 export interface ActorMovie {

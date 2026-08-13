@@ -41,8 +41,7 @@ class Actor(Base):
     debut_date: Mapped[str | None] = mapped_column(String(20))
     movie_count: Mapped[int | None] = mapped_column(Integer)
 
-    # 状态标记（JavdBviewed 移植）
-    is_followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")  # 收藏
+    # 状态标记（is_followed 已并入 Subscription(actor)；此处保留拉黑）
     is_blacklisted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")  # 拉黑
 
     source_url: Mapped[str | None] = mapped_column(String(500))  # JavDB 演员页 URL（用于一键补齐作品）
@@ -57,7 +56,6 @@ class Actor(Base):
 
     __table_args__ = (
         Index("idx_actors_name", "name"),
-        Index("idx_actors_followed", "is_followed"),
         Index("idx_actors_blacklisted", "is_blacklisted"),
     )
 

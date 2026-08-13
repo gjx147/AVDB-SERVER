@@ -12,6 +12,7 @@ export function ActorDetail() {
   const [actor, setActor] = useState<Actor | null | undefined>(undefined)
   const [movies, setMovies] = useState<ActorMovie[]>([])
   const [subscribed, setSubscribed] = useState(false)
+  const [autoAdd, setAutoAdd] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
@@ -24,15 +25,17 @@ export function ActorDetail() {
       api.actors.movies(+id).catch(() => []),
       api.subscriptions.list(true).then((list: unknown) => {
         if (Array.isArray(list)) {
-          return (list as { sub_type?: string; actor_id?: number }[])
-            .some(s => s.sub_type === 'actor' && s.actor_id === +id)
+          const s = (list as { sub_type?: string; actor_id?: number; auto_add?: boolean }[])
+            .find(x => x.sub_type === 'actor' && x.actor_id === +id)
+          return { subscribed: !!s, autoAdd: !!(s && s.auto_add) }
         }
-        return false
-      }).catch(() => false),
+        return { subscribed: false, autoAdd: false }
+      }).catch(() => ({ subscribed: false, autoAdd: false })),
     ]).then(([a, m, sub]) => {
       setActor(a as Actor | null)
       setMovies(m as ActorMovie[])
-      setSubscribed(sub as boolean)
+      setSubscribed((sub as { subscribed: boolean }).subscribed)
+      setAutoAdd((sub as { autoAdd: boolean }).autoAdd)
     })
   }, [id])
 
@@ -44,26 +47,28 @@ export function ActorDetail() {
       toastOk(`已开始补齐 ${actor.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
-  const subscribe = async () => {
-    if (!actor) return
-    try {
-      await api.subscriptions.create({ sub_type: 'actor', actor_id: actor.id, name: actor.name, auto_add: true })
-      setSubscribed(true)
-      toastOk(`已订阅 ${actor.name}，有新作将自动入库`)
-    } catch (e) { toastErr(String((e as Error).message)) }
-  }
+  // 关注 = 创建 actor 订阅（定时检测+通知）；已关注则取消
   const toggleFollow = async () => {
     if (!actor) return
     try {
-      if (actor.is_followed) {
-        await api.actorsFollow.unfollow(actor.id)
-        setActor({ ...actor, is_followed: 0 })
+      if (subscribed) {
+        await api.actors.unfollow(actor.id)
+        setSubscribed(false); setAutoAdd(false)
         toastOk('已取消关注')
       } else {
-        await api.actorsFollow.follow(actor.id)
-        setActor({ ...actor, is_followed: 1 })
-        toastOk('已关注，有新作将通知你')
+        await api.actors.follow(actor.id)
+        setSubscribed(true); setAutoAdd(false)
+        toastOk(`已关注 ${actor.name}，有新作将通知你`)
       }
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  // 切换自动入库（auto_add）：开启则有新作自动入库+下载
+  const toggleAutoAdd = async () => {
+    if (!actor) return
+    try {
+      const r = await api.actors.toggleAutoAdd(actor.id)
+      setAutoAdd(r.auto_add)
+      toastOk(r.auto_add ? '已开启自动入库' : '已关闭自动入库')
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
@@ -106,15 +111,16 @@ export function ActorDetail() {
 
           {/* 操作栏 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-            <button className={`btn ${actor.is_followed ? 'btn--ghost' : 'btn--gold'}`} onClick={toggleFollow}>
-              <Icon.heart />{actor.is_followed ? '已关注' : '关注'}
+            <button className={`btn ${subscribed ? 'btn--ghost' : 'btn--gold'}`} onClick={toggleFollow}>
+              <Icon.heart />{subscribed ? '已关注' : '关注'}
             </button>
             <button className="btn btn--ghost" onClick={crawlWorks} disabled={!actor.source_url}
               title={actor.source_url ? '爬取该演员全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐作品
             </button>
-            <button className={`btn ${subscribed ? 'btn--ghost' : 'btn--gold'}`} onClick={subscribe} disabled={subscribed}>
-              {subscribed ? '✓ 已订阅' : '订阅'}
+            <button className={`btn ${autoAdd ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleAutoAdd} disabled={!subscribed}
+              title={!subscribed ? '请先关注' : (autoAdd ? '点击关闭自动入库' : '点击开启：有新作自动入库+下载')}>
+              自动入库{autoAdd ? ' ✓' : ''}
             </button>
             <button className="btn btn--ghost" onClick={() => nav(`/library?q=${encodeURIComponent(actor.name)}`)}>
               <Icon.library />查看作品库

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -61,6 +61,8 @@ class Subscription(Base):
         Index("idx_subscriptions_type", "sub_type"),
         Index("idx_subscriptions_enabled", "enabled"),
         Index("idx_subscriptions_actor", "actor_id"),
+        # actor 订阅每演员唯一；ranking/composite 的 actor_id 为 NULL，SQLite 视 NULL 互异，不受约束
+        UniqueConstraint("sub_type", "actor_id", name="uq_subscriptions_type_actor"),
     )
 
     def __repr__(self) -> str:

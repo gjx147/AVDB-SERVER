@@ -425,15 +425,15 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
 
 
 async def run_check_all(auto_add: bool = False) -> dict:
-    """对所有关注/订阅的演员执行新作品检测。"""
+    """对所有关注/订阅的演员执行新作品检测。
+
+    关注与订阅现已统一为 actor 订阅，故只查 Subscription(actor, enabled)。
+    """
     logger.info(f"[新作监控] 开始批量巡检 (auto_add={auto_add})")
     db = SessionLocal()
     try:
         from models import Subscription
 
-        followed = db.execute(
-            select(Actor).where(Actor.is_followed == True)  # noqa: E712
-        ).scalars().all()
         sub_actors = db.execute(
             select(Actor).where(Actor.id.in_(
                 select(Subscription.actor_id).where(
@@ -442,11 +442,8 @@ async def run_check_all(auto_add: bool = False) -> dict:
                 )
             ))
         ).scalars().all()
-        actor_ids = {a.id for a in followed} | {a.id for a in sub_actors}
-        logger.info(
-            f"[新作监控] 关注演员 {len(followed)} 个，订阅演员 {len(sub_actors)} 个，"
-            f"合并去重后 {len(actor_ids)} 个待检查"
-        )
+        actor_ids = {a.id for a in sub_actors}
+        logger.info(f"[新作监控] 订阅演员 {len(sub_actors)} 个待检查")
     finally:
         db.close()
 

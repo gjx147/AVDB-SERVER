@@ -140,6 +140,14 @@ export const api = {
       }),
     get: (id: number) =>
       http.get<Actor>(`/api/actors/${id}`).then((r) => r.data),
+    // 关注 = 创建 actor 订阅（auto_add=false，定时检测+通知）
+    follow: (actorId: number) =>
+      http.post<ApiOk & { actor_id: number; subscribed: boolean }>(`/api/actors/${actorId}/follow`).then((r) => r.data),
+    unfollow: (actorId: number) =>
+      http.post<ApiOk & { actor_id: number; subscribed: boolean }>(`/api/actors/${actorId}/unfollow`).then((r) => r.data),
+    // 切换自动入库（auto_add）
+    toggleAutoAdd: (actorId: number) =>
+      http.post<ApiOk & { actor_id: number; auto_add: boolean }>(`/api/actors/${actorId}/auto-add`).then((r) => r.data),
     movies: (id: number) =>
       http.get<ActorMovie[]>(`/api/actors/${id}/movies`).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
@@ -208,14 +216,6 @@ export const api = {
   // ════════ Notify ════════
   notify: {
     test: () => http.post<{ ok: boolean; results: NotifyTestResult }>('/api/notify/test').then((r) => r.data),
-  },
-
-  // ════════ Actors 增强（F9 关注）════════
-  actorsFollow: {
-    follow: (actorId: number) =>
-      http.post<ApiOk & { actor_id: number; is_followed: number }>(`/api/actors/${actorId}/follow`).then((r) => r.data),
-    unfollow: (actorId: number) =>
-      http.post<ApiOk & { actor_id: number; is_followed: number }>(`/api/actors/${actorId}/unfollow`).then((r) => r.data),
   },
 
   // ════════ Collections 收藏分组（F13）════════

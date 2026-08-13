@@ -101,7 +101,6 @@ class ActorOut(BaseModel):
     height: Optional[str] = None
     cup: Optional[str] = None
     movie_count: Optional[int] = None
-    is_followed: bool = False
     is_blacklisted: bool = False
 
 

@@ -98,7 +98,6 @@ CREATE TABLE IF NOT EXISTS actors (
     measurements TEXT,
     debut_date TEXT,
     movie_count INTEGER,
-    is_followed INTEGER NOT NULL DEFAULT 0,
     is_blacklisted INTEGER NOT NULL DEFAULT 0,
     source_url TEXT,
     note TEXT,
@@ -333,8 +332,8 @@ class SqliteTaskStore:
             fields["avatar_url"] = None  # 影片封面不是演员头像，丢弃
         with self._conn() as conn:
             # 原子操作：INSERT ... WHERE NOT EXISTS（避免并发 race）
-            cols = ["name", "is_followed", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
-            vals = [name, 0, 0] + list(fields.values())
+            cols = ["name", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
+            vals = [name, 0] + list(fields.values())
             placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
             conn.execute(
                 f"INSERT INTO actors ({','.join(cols)}) "
