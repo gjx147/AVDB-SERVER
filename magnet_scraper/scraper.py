@@ -1959,6 +1959,7 @@ def main():
     actor_parser = subparsers.add_parser("crawl-actor", help="爬取演员详情页")
     actor_parser.add_argument("--actor-url", type=str, default="", help="演员详情页 URL")
     actor_parser.add_argument("--actor-name", type=str, default="", help="演员名字（自动搜索匹配）")
+    actor_parser.add_argument("--actor-id", type=int, default=None, help="已知演员 ID（补齐作品时按 id 关联，不靠名字匹配，杜绝重复演员）")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
     # 单任务提取
@@ -2127,8 +2128,9 @@ def main():
                     if not actor_url:
                         logger.error("请提供 --actor-url 或 --actor-name")
                         break
-                    logger.info(f"执行演员爬取: {actor_url}")
-                    result = a.crawl_actor_full(actor_url)
+                    _actor_id = getattr(args, "actor_id", None)
+                    logger.info(f"执行演员爬取: {actor_url}" + (f"（actor_id={_actor_id}）" if _actor_id else ""))
+                    result = a.crawl_actor_full(actor_url, actor_id=_actor_id)
                     logger.info(f"演员爬取完成: {result}")
                 elif args.command == "extract-single":
                     single_url = getattr(args, "url", "")

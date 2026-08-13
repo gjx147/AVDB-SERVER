@@ -355,6 +355,29 @@ class SqliteTaskStore:
                 conn.commit()
             return actor_id
 
+    def update_actor_meta(self, actor_id: int, **fields) -> None:
+        """按 id 更新指定演员的元数据字段（仅更新提供的字段）。
+
+        供 crawl_actor_full 在已知 actor_id 时刷新元数据用，避免按名字 upsert
+        造成重复演员。字段做白名单过滤，防止写入非法列。
+        """
+        if not fields:
+            return
+        allowed = {
+            "name", "name_en", "avatar_url", "gender", "birth_date", "height",
+            "cup", "measurements", "debut_date", "movie_count", "source_url", "note",
+        }
+        safe = {k: v for k, v in fields.items() if k in allowed}
+        if not safe:
+            return
+        with self._conn() as conn:
+            sets = ", ".join(f"{k}=?" for k in safe)
+            conn.execute(
+                f"UPDATE actors SET {sets}, updated_at=datetime('now') WHERE id=?",
+                (*safe.values(), actor_id),
+            )
+            conn.commit()
+
     def link_actor_movie(self, actor_id: int, task_id: int) -> None:
         """关联演员与作品（去重）。"""
         with self._conn() as conn:

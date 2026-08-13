@@ -148,5 +148,6 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
     if not url:
         raise HTTPException(status_code=400, detail="该演员无 JavDB URL，需先在演员库通过 URL 添加")
     # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
+    # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
-    return start_actor_crawl(url)
+    return start_actor_crawl(url, actor_id=actor.id)

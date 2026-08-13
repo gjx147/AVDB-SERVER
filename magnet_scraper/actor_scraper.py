@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
 from urllib.parse import quote, urljoin
 
@@ -224,18 +225,21 @@ class ActorScraper:
             logger.error(f"搜索演员失败: {e}")
             return []
 
-    def crawl_actor_full(self, actor_url: str) -> dict:
+    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None) -> dict:
         """完整爬取演员信息 + 作品列表。
 
         1. 爬取演员详情页（姓名/头像/身高/罩杯等）
         2. 翻页爬取演员作品列表
         3. 入库演员 + 创建 pending task
 
+        actor_id：若调用方已知目标演员（如演员库"补齐作品"），直接按 id 更新
+        元数据并关联作品，不依赖名字匹配——杜绝因名字差异/污染而新建重复演员。
+
         返回 {actor, actor_id, movie_count, tasks_added}
         """
         self._ensure_browser()
 
-        logger.info(f"开始完整爬取演员: {actor_url}")
+        logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else ""))
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
@@ -243,33 +247,39 @@ class ActorScraper:
         # 0. 主页暖场：先访问首页拿 cf_clearance（演员页 Cloudflare 审查较严）
         self._warmup_homepage()
 
-        # 1. 爬取演员信息
+        # 1. 爬取演员信息 + 2. 作品列表
         info = self.crawl_actor_info(actor_url)
-        name = info.get("name")
-        if not name:
-            logger.error(f"无法提取演员名称: {actor_url}")
-            return {"actor": None, "actor_id": None, "movie_count": 0, "tasks_added": 0}
-
-        logger.info(f"演员信息: {name}")
-
-        # 2. 爬取作品列表
         movies = self.crawl_actor_movies(actor_url, max_pages=50)
-        logger.info(f"演员 {name} 作品列表: {len(movies)} 部")
+        logger.info(f"演员作品列表: {len(movies)} 部")
 
-        # 3. 入库演员（source_url 存 JavDB 演员页 URL，note 保留兼容）
-        actor_id = self.store.upsert_actor(
-            name,
-            source_url=actor_url,
-            avatar_url=info.get("avatar_url"),
-            gender=info.get("gender"),
-            birth_date=info.get("birth_date"),
-            height=info.get("height"),
-            cup=info.get("cup"),
-            measurements=info.get("measurements"),
-            debut_date=info.get("debut_date"),
-            movie_count=len(movies),
-            note=f"source_url: {actor_url}",
-        )
+        # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
+        meta = {
+            k: v for k, v in {
+                "source_url": actor_url,
+                "avatar_url": info.get("avatar_url"),
+                "gender": info.get("gender"),
+                "birth_date": info.get("birth_date"),
+                "height": info.get("height"),
+                "cup": info.get("cup"),
+                "measurements": info.get("measurements"),
+                "debut_date": info.get("debut_date"),
+                "movie_count": len(movies),
+            }.items() if v is not None
+        }
+
+        # 3. 入库/更新演员
+        if actor_id:
+            # 指定 id：直接更新该演员元数据，按 id 关联作品（不依赖名字匹配，杜绝重复演员）
+            self.store.update_actor_meta(actor_id, **meta)
+            name = info.get("name") or f"actor_{actor_id}"
+            logger.info(f"按指定 actor_id={actor_id} 更新元数据完成: {name}")
+        else:
+            name = info.get("name")
+            if not name:
+                logger.error(f"无法提取演员名称: {actor_url}")
+                return {"actor": None, "actor_id": None, "movie_count": 0, "tasks_added": 0}
+            logger.info(f"演员信息: {name}")
+            actor_id = self.store.upsert_actor(name, note=f"source_url: {actor_url}", **meta)
 
         # 4. 创建列表源 + pending tasks
         # 列表源名: ACTOR_{name}（截取前20字符避免过长）
@@ -303,10 +313,20 @@ class ActorScraper:
             return info
         try:
             # 姓名
+            # JavDB 演员名元素常把 "N movie(s)" 计数一起带进 inner_text，
+            # 需清洗：只取首行 + 去掉残留计数后缀，否则 upsert_actor 因名字
+            # 不匹配而新建重复演员（作品挂错人）。
             try:
                 name_el = self.page.locator(".actor-name, h2, .name, .title").first
                 if name_el.count() > 0:
-                    info["name"] = (name_el.inner_text() or "").strip()
+                    raw = (name_el.inner_text() or "").strip()
+                    name = raw.split("\n")[0].strip()
+                    name = re.sub(
+                        r"\s*\d+\s*(movie\(s\)|movies|videos|works|部作品|部)\s*$",
+                        "", name, flags=re.IGNORECASE,
+                    ).strip()
+                    if name:
+                        info["name"] = name
             except Exception:
                 pass
 

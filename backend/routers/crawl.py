@@ -335,15 +335,18 @@ def crawl_ranking(body: dict, _user: CurrentUser):
     return {"ok": True, "pid": proc.pid, "mode": "ranking"}
 
 
-def start_actor_crawl(actor_url: str) -> dict:
+def start_actor_crawl(actor_url: str, actor_id: int | None = None) -> dict:
     """公共函数：触发演员作品爬取子进程（供 /api/crawl/actor 和 /api/actors/{id}/crawl-works 复用）。
 
     检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
+    actor_id：已知目标演员时传入，scraper 会按 id 关联作品，杜绝因名字匹配建重复演员。
     """
     if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     cmd = ["crawl-actor", "--actor-url", actor_url]
+    if actor_id is not None:
+        cmd += ["--actor-id", str(actor_id)]
     proc = _start_scraper(cmd)
     scraper_lock.set_proc(proc, {
         "mode": "actor", "actor_url": actor_url, "pid": proc.pid,
