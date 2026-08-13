@@ -67,8 +67,10 @@ VOLUME ["/app/data"]
 EXPOSE 8000
 
 # 创建非 root 用户
+# 只 chown /app（小层）。/ms-playwright（Chromium，~500MB）改由 entrypoint 运行时
+# chown——否则这层会随每次 COPY 代码变化而重建，推送时要重传 500MB。
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /bin/sh appuser \
-    && chown -R appuser:appuser /app /ms-playwright
+    && chown -R appuser:appuser /app
 
 # entrypoint: root 启动修复 data 权限 → 降权 appuser 执行
 COPY entrypoint.sh /entrypoint.sh
