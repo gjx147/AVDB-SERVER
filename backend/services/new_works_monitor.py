@@ -56,11 +56,12 @@ def _get_db_setting(key: str) -> str | None:
         db.close()
 
 
-async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
+async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: int | None = None) -> bool:
     """触发 scraper 子进程 crawl-actor（跟演员库"补齐作品"完全一样）。
 
     有 actor_url → crawl-actor --actor-url（直接爬详情页+翻页作品）
     无 actor_url → crawl-actor --actor-name（搜索+爬详情+入库+写source_url）
+    actor_id → 传 --actor-id，按 id 关联作品，杜绝名字匹配建重复演员。
     注册 scraper_lock 防止并发 Chromium 冲突，同步等待完成（最多 300s）。
     """
     from services import scraper_lock
@@ -75,6 +76,8 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "") -> bool:
     else:
         cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
                "crawl-actor", "--actor-name", actor_name]
+    if actor_id is not None:
+        cmd += ["--actor-id", str(actor_id)]
     logger.info(f"[新作监控] 启动 scraper 子进程: {' '.join(cmd[-4:])}...")
 
     # 关键修复：从 DB settings 读 http_proxy + javdb_url 注入子进程 env
@@ -183,12 +186,13 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
                 actor_url = note.split(":", 1)[1].strip()
 
         logger.info(f"[新作监控] {actor.name} 触发 scraper crawl-actor ({actor_url or '按名字搜索'})")
-        ok = await _trigger_crawl_actor(actor.name, actor_url)
+        ok = await _trigger_crawl_actor(actor.name, actor_url, actor_id=actor_id)
         if not ok:
             return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
 
-        # crawl-actor 完成后，清 SQLAlchemy 缓存，从 DB 读最新作品列表
-        db.expire_all()
+        # crawl-actor 完成后，提交当前事务以获取新快照：scraper 子进程在 WAL 下提交的
+        # 新 actor_movies 对本会话不可见（快照隔离），仅 expire_all 不够，必须结束事务重开。
+        db.commit()
         works = await _get_actor_works_from_db(db, actor_id)
         logger.info(f"[新作监控] {actor.name}: DB 读到 {len(works)} 部作品")
 
