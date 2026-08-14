@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, coverFileUrl } from '../api/client'
 import type { Actor, ActorMovie } from '../api/types'
@@ -6,23 +6,38 @@ import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
+const PAGE_SIZE = 30
+
 export function ActorDetail() {
   const { id } = useParams()
   const nav = useNavigate()
   const [actor, setActor] = useState<Actor | null | undefined>(undefined)
   const [movies, setMovies] = useState<ActorMovie[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
+  const loadMovies = useCallback(async (p: number) => {
+    if (!id) return
+    try {
+      const r = await api.actors.movies(+id, p, PAGE_SIZE)
+      setMovies(r.items)
+      setTotal(r.total)
+      setPage(p)
+    } catch {
+      setMovies([]); setTotal(0)
+    }
+  }, [id])
+
   useEffect(() => {
     if (!id) return
-    setActor(undefined); setError(null)
+    setActor(undefined); setError(null); setMovies([]); setTotal(0); setPage(1)
     Promise.all([
       api.actors.get(+id).catch((e) => { setError(String((e as Error).message)); return null }),
-      api.actors.movies(+id).catch(() => []),
       api.subscriptions.list(true).then((list: unknown) => {
         if (Array.isArray(list)) {
           const s = (list as { sub_type?: string; actor_id?: number; auto_add?: boolean }[])
@@ -31,13 +46,13 @@ export function ActorDetail() {
         }
         return { subscribed: false, autoAdd: false }
       }).catch(() => ({ subscribed: false, autoAdd: false })),
-    ]).then(([a, m, sub]) => {
+    ]).then(([a, sub]) => {
       setActor(a as Actor | null)
-      setMovies(m as ActorMovie[])
       setSubscribed((sub as { subscribed: boolean }).subscribed)
       setAutoAdd((sub as { autoAdd: boolean }).autoAdd)
     })
-  }, [id])
+    loadMovies(1)
+  }, [id, loadMovies])
 
   const crawlWorks = async () => {
     if (!actor) return
@@ -142,10 +157,11 @@ export function ActorDetail() {
       </div>
 
       {/* 作品列表 */}
-      <div className="dm-label" style={{ marginBottom: 14 }}>作品（{movies.length}）</div>
-      {movies.length === 0 ? (
+      <div className="dm-label" style={{ marginBottom: 14 }}>作品（{total}）</div>
+      {total === 0 ? (
         <Empty icon="○" title="暂无关联作品" sub="点击「补齐作品」爬取该演员的作品列表。" />
       ) : (
+        <>
         <div className="gallery">
           {movies.map((m) => {
             const remote = m.poster_url || (() => { try { return JSON.parse(m.thumbnail_urls || '[]')[0] } catch { return null } })()
@@ -169,6 +185,13 @@ export function ActorDetail() {
             )
           })}
         </div>
+        {/* 分页 */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
+          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1)}>上一页</button>
+          <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 {total} 部</span>
+          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1)}>下一页</button>
+        </div>
+        </>
       )}
     </div>
   )

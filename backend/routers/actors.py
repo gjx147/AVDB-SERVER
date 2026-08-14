@@ -145,36 +145,45 @@ def delete_actor(actor_id: int, db: DbSession, _user: CurrentUser):
     return {"ok": True, "message": "已删除"}
 
 
-@router.get("/{actor_id}/movies", response_model=list)
-def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: int = Query(500, le=1000)):
-    """演员的关联作品列表。"""
+@router.get("/{actor_id}/movies")
+def actor_movies_list(
+    actor_id: int, db: DbSession, _user: CurrentUser,
+    page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
+):
+    """演员的关联作品列表（分页，只含有磁力链接的作品）。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
-    task_ids = [
-        r[0]
-        for r in db.execute(
-            select(actor_movies.c.task_id).where(actor_movies.c.actor_id == actor_id)
-        ).all()
-    ]
-    if not task_ids:
-        return []
     # 只展示有磁力链接的作品：爬取不到磁力的（pending/failed/空磁力）不在详情页显示
+    conds = (
+        actor_movies.c.actor_id == actor_id,
+        Task.best_magnet.isnot(None),
+        Task.best_magnet != "",
+    )
+    total = db.execute(
+        select(func.count(Task.id))
+        .select_from(Task)
+        .join(actor_movies, actor_movies.c.task_id == Task.id)
+        .where(*conds)
+    ).scalar_one()
     tasks = db.execute(
         select(Task)
-        .where(
-            Task.id.in_(task_ids),
-            Task.best_magnet.isnot(None),
-            Task.best_magnet != "",
-        )
+        .join(actor_movies, actor_movies.c.task_id == Task.id)
+        .where(*conds)
         .order_by(Task.id.desc())
-        .limit(limit)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).scalars().all()
-    return [{
-        "id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status,
-        "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
-        "rating": t.rating, "is_favorite": int(t.is_favorite),
-    } for t in tasks]
+    return {
+        "items": [{
+            "id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status,
+            "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
+            "rating": t.rating, "is_favorite": int(t.is_favorite),
+        } for t in tasks],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.post("/{actor_id}/crawl-works")
