@@ -260,14 +260,15 @@ def refresh_actor_gender(req: CrawlRequest, _user: CurrentUser):
 
 
 @router.post("/refresh-metadata")
-def refresh_metadata(req: CrawlRequest, _user: CurrentUser):
+def refresh_metadata(_user: CurrentUser, body: dict | None = None):
     """刷新已访问任务的元数据面板（发行日期/评分/厂牌/系列等），不重抓磁力。"""
     if not scraper_lock.try_acquire():
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
 
     cmd = ["refresh-metadata"]
-    if req.limit:
-        cmd += ["--limit", str(req.limit)]
+    limit = (body or {}).get("limit")
+    if limit:
+        cmd += ["--limit", str(limit)]
 
     proc = _start_scraper(cmd)
     scraper_lock.set_proc(proc, {
@@ -414,7 +415,7 @@ def crawl_logs(
             f"[{l.level}] {l.message}"
             for l in logs
         ],
-        "running": _running_proc is not None and _running_proc.poll() is None,
+        "running": scraper_lock.is_running(),
     }
 
 
