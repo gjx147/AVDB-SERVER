@@ -149,6 +149,7 @@ def delete_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 def actor_movies_list(
     actor_id: int, db: DbSession, _user: CurrentUser,
     page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
+    sort: str = Query("added", description="排序：added=加入日期 / release=发行日期"),
 ):
     """演员的关联作品列表（分页，只含有磁力链接的作品）。"""
     actor = db.get(Actor, actor_id)
@@ -166,11 +167,13 @@ def actor_movies_list(
         .join(actor_movies, actor_movies.c.task_id == Task.id)
         .where(*conds)
     ).scalar_one()
+    # 排序：release=发行日期降序，否则加入日期(created_at)降序；id 作 tiebreaker 保证分页稳定
+    order = (Task.release_date.desc(), Task.id.desc()) if sort == "release" else (Task.created_at.desc(), Task.id.desc())
     tasks = db.execute(
         select(Task)
         .join(actor_movies, actor_movies.c.task_id == Task.id)
         .where(*conds)
-        .order_by(Task.id.desc())
+        .order_by(*order)
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).scalars().all()

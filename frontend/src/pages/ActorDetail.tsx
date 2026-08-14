@@ -15,19 +15,21 @@ export function ActorDetail() {
   const [movies, setMovies] = useState<ActorMovie[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [sort, setSort] = useState<'added' | 'release'>('added')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const loadMovies = useCallback(async (p: number) => {
+  const loadMovies = useCallback(async (p: number, s: 'added' | 'release') => {
     if (!id) return
     try {
-      const r = await api.actors.movies(+id, p, PAGE_SIZE)
+      const r = await api.actors.movies(+id, p, PAGE_SIZE, s)
       setMovies(r.items)
       setTotal(r.total)
       setPage(p)
+      setSort(s)
     } catch {
       setMovies([]); setTotal(0)
     }
@@ -51,7 +53,7 @@ export function ActorDetail() {
       setSubscribed((sub as { subscribed: boolean }).subscribed)
       setAutoAdd((sub as { autoAdd: boolean }).autoAdd)
     })
-    loadMovies(1)
+    loadMovies(1, 'added')
   }, [id, loadMovies])
 
   const crawlWorks = async () => {
@@ -157,7 +159,13 @@ export function ActorDetail() {
       </div>
 
       {/* 作品列表 */}
-      <div className="dm-label" style={{ marginBottom: 14 }}>作品（{total}）</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
+        <div className="dm-label">作品（{total}）</div>
+        <div className="seg">
+          <button className={sort === 'added' ? 'on' : ''} onClick={() => loadMovies(1, 'added')}>加入日期</button>
+          <button className={sort === 'release' ? 'on' : ''} onClick={() => loadMovies(1, 'release')}>发行日期</button>
+        </div>
+      </div>
       {total === 0 ? (
         <Empty icon="○" title="暂无关联作品" sub="点击「补齐作品」爬取该演员的作品列表。" />
       ) : (
@@ -187,9 +195,9 @@ export function ActorDetail() {
         </div>
         {/* 分页 */}
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
-          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1)}>上一页</button>
+          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1, sort)}>上一页</button>
           <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 {total} 部</span>
-          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1)}>下一页</button>
+          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1, sort)}>下一页</button>
         </div>
         </>
       )}
