@@ -1445,8 +1445,18 @@ class MagnetScraper:
 
     def refresh_metadata(self, limit=None):
         """重新访问已访问任务的详情页，只更新元数据面板（release_date/rating/maker等），不重抓磁力。"""
+        if self.store is None:
+            logger.error("refresh_metadata 需要数据库模式")
+            return 0
         tasks = self.store.get_visited_tasks(limit=limit)
         total = len(tasks)
+        if total == 0:
+            logger.info("无已访问任务，跳过")
+            return 0
+
+        # 确保浏览器已初始化（refresh-metadata 命令不会经过 scan/extract 的自动初始化路径）
+        if not self.page:
+            self.init_browser()
         logger.info(f"开始刷新元数据：{total} 个已访问任务")
         updated = 0
         for i, task in enumerate(tasks, 1):
