@@ -146,7 +146,7 @@ def delete_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 
 
 @router.get("/{actor_id}/movies", response_model=list)
-def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: int = Query(50, le=200)):
+def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: int = Query(500, le=1000)):
     """演员的关联作品列表。"""
     actor = db.get(Actor, actor_id)
     if not actor:
