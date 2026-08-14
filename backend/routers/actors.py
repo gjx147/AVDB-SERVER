@@ -167,8 +167,13 @@ def actor_movies_list(
         .join(actor_movies, actor_movies.c.task_id == Task.id)
         .where(*conds)
     ).scalar_one()
-    # 排序：release=发行日期降序，否则加入日期(created_at)降序；id 作 tiebreaker 保证分页稳定
-    order = (Task.release_date.desc(), Task.id.desc()) if sort == "release" else (Task.created_at.desc(), Task.id.desc())
+    # 排序：release=发行日期 / rating=评分 / 默认 added=加入日期；id 作 tiebreaker 保证分页稳定
+    if sort == "release":
+        order = (Task.release_date.desc(), Task.id.desc())
+    elif sort == "rating":
+        order = (Task.rating.desc(), Task.id.desc())
+    else:
+        order = (Task.created_at.desc(), Task.id.desc())
     tasks = db.execute(
         select(Task)
         .join(actor_movies, actor_movies.c.task_id == Task.id)

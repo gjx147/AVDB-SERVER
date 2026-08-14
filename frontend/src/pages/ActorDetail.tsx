@@ -15,14 +15,14 @@ export function ActorDetail() {
   const [movies, setMovies] = useState<ActorMovie[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [sort, setSort] = useState<'added' | 'release'>('added')
+  const [sort, setSort] = useState<'added' | 'release' | 'rating'>('added')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const loadMovies = useCallback(async (p: number, s: 'added' | 'release') => {
+  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating') => {
     if (!id) return
     try {
       const r = await api.actors.movies(+id, p, PAGE_SIZE, s)
@@ -164,6 +164,7 @@ export function ActorDetail() {
         <div className="seg">
           <button className={sort === 'added' ? 'on' : ''} onClick={() => loadMovies(1, 'added')}>加入日期</button>
           <button className={sort === 'release' ? 'on' : ''} onClick={() => loadMovies(1, 'release')}>发行日期</button>
+          <button className={sort === 'rating' ? 'on' : ''} onClick={() => loadMovies(1, 'rating')}>评分</button>
         </div>
       </div>
       {total === 0 ? (
