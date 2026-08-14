@@ -320,6 +320,20 @@ class SqliteTaskStore:
                 (error_message[:500] if error_message else None, url))
             conn.commit()
 
+    def update_metadata(self, task_id: int, meta: dict) -> None:
+        """只更新元数据字段（不影响磁力/状态/海报等）。供 refresh-metadata 用。"""
+        allowed = {"release_date", "duration", "director", "maker", "label", "series", "rating", "file_size"}
+        fields = {k: v for k, v in meta.items() if k in allowed and v is not None}
+        if not fields:
+            return
+        sets = ", ".join(f"{k}=?" for k in fields)
+        with self._conn() as conn:
+            conn.execute(
+                f"UPDATE tasks SET {sets}, updated_at=datetime('now') WHERE id=?",
+                (*fields.values(), task_id),
+            )
+            conn.commit()
+
     # ---------- 演员关联 ----------
     def upsert_actor(self, name: str, **fields) -> int:
         """新增或更新演员，返回 actor_id。

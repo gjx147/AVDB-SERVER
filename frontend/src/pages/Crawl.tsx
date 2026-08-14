@@ -85,6 +85,9 @@ export function Crawl() {
     if (!sid) return toastErr('请先选择列表源')
     try { await api.crawl.extractFailed({ list_source_id: sid }); toastOk('已开始重试失败任务') } catch (e) { toastErr(String((e as Error).message)) }
   }
+  const doRefreshMetadata = async () => {
+    try { await api.crawl.refreshMetadata(); toastOk('已开始刷新元数据（后台逐条跑，进度见日志）') } catch (e) { toastErr(String((e as Error).message)) }
+  }
   const ctrl = async (op: 'pause' | 'resume' | 'stop') => {
     try { await api.crawl[op](); toastOk(op === 'stop' ? '已停止' : op === 'pause' ? '已暂停' : '已继续') } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -104,6 +107,7 @@ export function Crawl() {
         sub="实时监控采集进度，支持暂停 / 继续 / 停止，日志流实时输出。">
         <button className="btn btn--ghost btn--sm" onClick={doExtractFailed}>重试失败</button>
         <button className="btn btn--gold" onClick={doExtract} disabled={running}><Icon.play />开始提取</button>
+        <button className="btn btn--ghost btn--sm" onClick={doRefreshMetadata} disabled={running}>刷新元数据</button>
       </PageHead>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24 }}>

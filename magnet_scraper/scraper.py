@@ -1443,6 +1443,37 @@ class MagnetScraper:
             pass
         return meta
 
+    def refresh_metadata(self, limit=None):
+        """重新访问已访问任务的详情页，只更新元数据面板（release_date/rating/maker等），不重抓磁力。"""
+        tasks = self.store.get_visited_tasks(limit=limit)
+        total = len(tasks)
+        logger.info(f"开始刷新元数据：{total} 个已访问任务")
+        updated = 0
+        for i, task in enumerate(tasks, 1):
+            url = task.get("url", "")
+            if not url or url.startswith("pending://"):
+                continue
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                self._handle_security_check()
+                time.sleep(random.uniform(2, 4))
+                meta = self._extract_meta_panel()
+                if meta:
+                    self.store.update_metadata(task["id"], meta)
+                    updated += 1
+                    logger.info(f"[{i}/{total}] {task.get('video_code', '')} 元数据更新: {list(meta.keys())}")
+                else:
+                    logger.debug(f"[{i}/{total}] {task.get('video_code', '')} 无元数据")
+                self._write_crawl_status(
+                    phase="refresh-meta", crawl_type="refresh-metadata",
+                    page_current=i, page_max=total, items_found=updated,
+                )
+            except Exception as e:
+                logger.warning(f"[{i}/{total}] {url} 元数据刷新失败: {e}")
+            time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
+        logger.info(f"元数据刷新完成: {updated}/{total} 更新")
+        return updated
+
     def scan_list_pages(self, keep_browser_open: bool = False, update_mode: bool = False):
         """扫描列表页并填充待处理队列。update_mode=True 时从第 1 页开始，遇本页无新任务即停止（更新）；否则扫满 max_pages（全量扫描）。"""
         logger.info("=" * 60)
@@ -1979,6 +2010,11 @@ def main():
     refresh_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
     refresh_parser.add_argument("--limit", type=int, default=None, help="最多处理条数")
 
+    # 刷新元数据面板（发行日期/评分/厂牌等）
+    refresh_meta_parser = subparsers.add_parser("refresh-metadata", help="重新提取已访问任务的元数据面板")
+    refresh_meta_parser.add_argument("--limit", type=int, default=None, help="最多处理条数")
+    refresh_meta_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -1991,7 +2027,7 @@ def main():
 
     use_db = getattr(args, "list_code", None) or getattr(args, "list_source_id", None)
     # ranking 和 crawl-actor 命令始终需要数据库存储
-    if not use_db and args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender"):
+    if not use_db and args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender", "refresh-metadata"):
         use_db = True
     store = None
     list_source_id = None
@@ -2003,7 +2039,7 @@ def main():
     if use_db:
         logger.info("使用数据库模式")
         store = SqliteTaskStore(Path(config.DB_PATH))
-        if args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender"):
+        if args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender", "refresh-metadata"):
             # 这些命令只需要 store，不需要 list_source
             logger.info(f"{args.command} 模式，跳过 list_source 初始化")
         elif getattr(args, "list_source_id", None):
@@ -2157,6 +2193,10 @@ def main():
                         limit=getattr(args, "limit", None),
                     )
                     logger.info(f"刷新结果: {result}")
+                elif args.command == "refresh-metadata":
+                    logger.info("执行元数据刷新...")
+                    scraper.refresh_metadata(limit=getattr(args, "limit", None))
+                    logger.info("元数据刷新完成")
                 logger.info("命令执行成功")
                 break
             except BlockedException as e:

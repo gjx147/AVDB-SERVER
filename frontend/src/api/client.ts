@@ -184,6 +184,8 @@ export const api = {
       http.post<ApiOk>('/api/crawl/extract', body, { params: { background } }).then((r) => r.data),
     extractFailed: (body: { list_code?: string; list_source_id?: number; limit?: number }, background = true) =>
       http.post<ApiOk>('/api/crawl/extract-failed', body, { params: { background } }).then((r) => r.data),
+    refreshMetadata: (limit?: number) =>
+      http.post<ApiOk>('/api/crawl/refresh-metadata', { limit }).then((r) => r.data),
     status: () => http.get<CrawlStatus>('/api/crawl/status').then((r) => r.data),
     logs: () => http.get<CrawlLogLine>('/api/crawl/logs').then((r) => r.data),
     pause: () => http.post<ApiOk>('/api/crawl/pause').then((r) => r.data),

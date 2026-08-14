@@ -259,6 +259,24 @@ def refresh_actor_gender(req: CrawlRequest, _user: CurrentUser):
     return {"ok": True, "pid": proc.pid, "mode": "refresh-actor-gender"}
 
 
+@router.post("/refresh-metadata")
+def refresh_metadata(req: CrawlRequest, _user: CurrentUser):
+    """刷新已访问任务的元数据面板（发行日期/评分/厂牌/系列等），不重抓磁力。"""
+    if not scraper_lock.try_acquire():
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+
+    cmd = ["refresh-metadata"]
+    if req.limit:
+        cmd += ["--limit", str(req.limit)]
+
+    proc = _start_scraper(cmd)
+    scraper_lock.set_proc(proc, {
+        "mode": "refresh-metadata", "pid": proc.pid,
+        "started_at": _now_iso(),
+    })
+    return {"ok": True, "pid": proc.pid, "mode": "refresh-metadata"}
+
+
 @router.post("/stop")
 def stop_crawl(_user: CurrentUser):
     """停止当前爬取进程（杀整个进程树）。"""
