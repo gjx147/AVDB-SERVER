@@ -1392,12 +1392,12 @@ class MagnetScraper:
         """从详情页元数据面板提取结构化信息（发行日期/时长/导演/制作商/系列/评分等）"""
         meta = {}
         try:
-            # 尝试通用的元数据行选择器
-            rows = self.page.locator(".movie-panel-info .row, .meta-row, .info-panel .item, .video-meta-panel .row").all()
+            # JavDB 用 Bulma：元数据面板行是 .panel-block（不是 .row）
+            rows = self.page.locator(".movie-panel-info .panel-block, .movie-panel-info .row, .meta-row, .info-panel .item, .video-meta-panel .row").all()
             for row in rows:
                 try:
                     # 尝试 label: value 结构
-                    label_el = row.locator(".label, .key, .meta-label, .meta-key, dt").first
+                    label_el = row.locator(".header, .label, .key, .meta-label, .meta-key, dt").first
                     value_el = row.locator(".value, .meta-value, dd").first
                     label = (label_el.inner_text() or "").strip() if label_el.count() > 0 else ""
                     value = (value_el.inner_text() or "").strip() if value_el.count() > 0 else ""
@@ -1431,7 +1431,10 @@ class MagnetScraper:
                     elif any(kw in label_lower for kw in ['系列', 'series']):
                         meta["series"] = value
                     elif any(kw in label_lower for kw in ['評分', '评分', 'score', 'rating']):
-                        meta["rating"] = value
+                        import re as _re
+                        _m = _re.search(r"(\d+\.?\d*)", value)
+                        if _m:
+                            meta["rating"] = float(_m.group(1))
                     elif any(kw in label_lower for kw in ['大小', 'size', '文件']):
                         meta["file_size"] = value
                 except Exception:
