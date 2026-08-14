@@ -154,12 +154,22 @@ def actor_movies_list(actor_id: int, db: DbSession, _user: CurrentUser, limit: i
     task_ids = [
         r[0]
         for r in db.execute(
-            select(actor_movies.c.task_id).where(actor_movies.c.actor_id == actor_id).limit(limit)
+            select(actor_movies.c.task_id).where(actor_movies.c.actor_id == actor_id)
         ).all()
     ]
     if not task_ids:
         return []
-    tasks = db.execute(select(Task).where(Task.id.in_(task_ids)).order_by(Task.id.desc())).scalars().all()
+    # 只展示有磁力链接的作品：爬取不到磁力的（pending/failed/空磁力）不在详情页显示
+    tasks = db.execute(
+        select(Task)
+        .where(
+            Task.id.in_(task_ids),
+            Task.best_magnet.isnot(None),
+            Task.best_magnet != "",
+        )
+        .order_by(Task.id.desc())
+        .limit(limit)
+    ).scalars().all()
     return [{
         "id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status,
         "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
