@@ -187,6 +187,7 @@ def actor_movies_list(
             "id": t.id, "video_code": t.video_code, "title": t.title, "status": t.status,
             "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
             "rating": t.rating, "is_favorite": int(t.is_favorite),
+            "media_in_library": t.media_in_library,
         } for t in tasks],
         "total": total,
         "page": page,

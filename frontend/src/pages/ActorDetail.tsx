@@ -185,6 +185,12 @@ export function ActorDetail() {
                     onLoad={(e) => { e.currentTarget.classList.add('loaded') }} />
                   <div className="poster-grad-top">
                     <span className="poster-code">{m.video_code || '—'}</span>
+                    {m.media_in_library === true && (
+                      <span title="已在 Emby 媒体库" style={{
+                        position: 'absolute', top: 6, right: 6, background: 'rgba(76,175,80,.9)',
+                        color: '#fff', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
+                      }}>库</span>
+                    )}
                   </div>
                   <div className="poster-info">
                     <div className="poster-title">{m.title || '未命名'}</div>

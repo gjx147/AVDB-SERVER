@@ -301,6 +301,10 @@ export const api = {
       http.get<{ video_code: string; in_library: boolean }>(`/api/media-server/check/${videoCode}`).then((r) => r.data),
     test: () =>
       http.get<{ ok: boolean; message: string }>('/api/media-server/test').then((r) => r.data),
+    sync: (limit = 200, force = false) =>
+      http.post<{ ok: boolean; checked: number; in_library: number; failed: number }>(
+        '/api/media-server/sync', null, { params: { limit, force } }
+      ).then((r) => r.data),
   },
 
   // ════════ Insights（Phase 3：数据洞察/月报）════════

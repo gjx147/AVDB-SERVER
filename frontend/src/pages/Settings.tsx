@@ -257,12 +257,17 @@ function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastE
 function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: (m: string) => void }) {
   const [embyUrl, setEmbyUrl] = useState('')
   const [embyToken, setEmbyToken] = useState('')
+  const [embyLibraryId, setEmbyLibraryId] = useState('')
+  const [autoSync, setAutoSync] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     api.settings.get().then((s) => {
       setEmbyUrl(s.emby_url || '')
       setEmbyToken(s.emby_token && s.emby_token !== '***' ? s.emby_token : '')
+      setEmbyLibraryId(s.emby_library_id || '')
+      setAutoSync(s.emby_auto_sync === 'true')
     }).catch(() => {})
   }, [])
 
@@ -271,6 +276,8 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
       await api.settings.update({
         emby_url: embyUrl,
         emby_token: embyToken || '***',
+        emby_library_id: embyLibraryId,
+        emby_auto_sync: autoSync ? 'true' : 'false',
       })
       toastOk('媒体库配置已保存')
     } catch (e) { toastErr(String((e as Error).message)) }
@@ -283,6 +290,15 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
       if (r.ok) { toastOk(r.message) } else { toastErr(r.message) }
     } catch (e) { toastErr(String((e as Error).message)) }
     finally { setTesting(false) }
+  }
+  const syncNow = async () => {
+    setSyncing(true)
+    try {
+      await save()
+      const r = await api.mediaServer.sync(500, true)
+      toastOk(`同步完成：${r.checked} 部已核对，${r.in_library} 部在库${r.failed ? `，${r.failed} 部查询失败（保持原状态）` : ''}`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setSyncing(false) }
   }
 
   return (
@@ -297,9 +313,22 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
         <input className="input" type="password" placeholder="在 Emby 设置 > 高级 > API Keys 创建" value={embyToken} onChange={(e) => setEmbyToken(e.target.value)} />
         <div className="hint">用于订阅巡检时按番号搜索媒体库，避免重复入库</div>
       </div>
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div className="field">
+        <label>媒体库 ID（可选）</label>
+        <input className="input" placeholder="留空 = 搜索全部媒体库" value={embyLibraryId} onChange={(e) => setEmbyLibraryId(e.target.value)} />
+        <div className="hint">限定搜索范围到指定媒体库，多库用户建议填写（Emby 库设置页 URL 里的 parentid）</div>
+      </div>
+      <div className="field">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />
+          每日自动同步在库状态
+        </label>
+        <div className="hint">开启后每天增量核对一次番号是否在库（失败不覆盖已有状态）</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="btn btn--gold" onClick={save}>保存</button>
         <button className="btn btn--ghost" onClick={test} disabled={testing}>{testing ? '测试中…' : '保存并测试连接'}</button>
+        <button className="btn btn--ghost" onClick={syncNow} disabled={syncing}>{syncing ? '同步中…' : '立即同步'}</button>
       </div>
     </div>
   )

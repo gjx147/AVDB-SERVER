@@ -207,6 +207,14 @@ export function TaskDetail() {
             </div>
           )}
 
+          {task.media_in_library != null && (
+            <div style={{ marginBottom: 14, display: 'inline-block', padding: '5px 12px', borderRadius: 'var(--r-sm)',
+              background: task.media_in_library ? 'rgba(76,175,80,.1)' : 'var(--bg-page)',
+              fontSize: 12, color: task.media_in_library ? 'var(--green)' : 'var(--t-mute)' }}>
+              {task.media_in_library ? '✓ 已在媒体库' : '· 不在媒体库'}
+            </div>
+          )}
+
           {/* 女主演关联（头像+名字，点击跳转影视库按演员筛选） */}
           {cast.length > 0 && (
             <div className="cast-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>

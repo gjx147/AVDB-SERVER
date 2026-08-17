@@ -17,9 +17,9 @@ async def check_code(video_code: str, _user: CurrentUser):
 
 
 @router.post("/sync")
-async def sync(_user: CurrentUser, limit: int = Query(200, le=1000)):
-    """批量同步在库状态。"""
-    return await sync_library_status(limit)
+async def sync(_user: CurrentUser, limit: int = Query(200, le=1000), force: bool = Query(False, description="全量同步（默认增量：只查缓存为空或过期的）")):
+    """批量同步在库状态（并发；查询失败不污染缓存）。"""
+    return await sync_library_status(limit, force=force)
 
 
 @router.get("/test")

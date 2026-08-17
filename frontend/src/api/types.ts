@@ -60,6 +60,7 @@ export interface Task {
   created_at: string | null
   updated_at: string | null
   download_status?: string | null  // null=未下载, pushed, downloading, completed, failed
+  media_in_library?: boolean | null  // Emby 在库缓存；null=未知
 }
 
 export interface Magnet {
@@ -129,6 +130,7 @@ export interface ActorMovie {
   status: string | null
   is_favorite: 0 | 1
   detail_url: string | null
+  media_in_library?: boolean | null
 }
 
 /** 详情页女主演关联（按 task.actors 名字查 actors 表） */
@@ -246,6 +248,8 @@ export interface Settings {
   // Emby 媒体库（订阅巡检时比对，避免重复入库）
   emby_url: string
   emby_token: string
+  emby_library_id: string
+  emby_auto_sync: string
   javdb_url: string
   // 通知配置（F3）
   notify_bark_key?: string
