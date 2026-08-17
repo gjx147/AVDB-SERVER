@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Actor } from '../api/types'
-import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
+import { PageHead, Empty, ErrorEmpty } from '../components/States'
+import { SkeletonGallery } from '../components/Skeleton'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -111,7 +112,7 @@ export function Actors() {
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => load(kw)} /> :
-       actors === null ? <Loading /> : actors.length === 0 ? (
+       actors === null ? <SkeletonGallery square /> : actors.length === 0 ? (
         <Empty icon="○" title="暂无演员" sub="请通过搜索或 URL 添加。" />
       ) : (
         <div className="actor-grid">

@@ -4,7 +4,8 @@ import { api, coverFileUrl } from '../api/client'
 import type { Task, ListSourceWithStats } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { QueueOverlay } from '../components/QueueOverlay'
-import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
+import { PageHead, Empty, ErrorEmpty } from '../components/States'
+import { SkeletonGallery } from '../components/Skeleton'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -214,7 +215,7 @@ export function Library() {
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => { setPage(0); load(0) }} /> :
-       tasks === null ? <Loading /> : tasks.length === 0 ? (
+       tasks === null ? <SkeletonGallery /> : tasks.length === 0 ? (
         <Empty icon="○" title="暂无任务" sub="请先到列表源执行扫描，或按番号创建任务。" />
       ) : view === 'grid' ? (
         <div className="gallery">

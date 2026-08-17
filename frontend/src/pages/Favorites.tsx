@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import type { Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
-import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
+import { PageHead, Empty, ErrorEmpty } from '../components/States'
+import { SkeletonGallery } from '../components/Skeleton'
 import { useStore } from '../store/useStore'
 
 interface Collection { id: number; name: string; icon: string; task_count: number }
@@ -92,7 +93,7 @@ export function Favorites() {
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={load} /> :
-       tasks === null ? <Loading /> : tasks.length === 0 ? (
+       tasks === null ? <SkeletonGallery /> : tasks.length === 0 ? (
         <Empty icon="♡" title={activeCol !== null ? '该分组暂无影片' : '还没有收藏任何影片'}
           sub={activeCol !== null ? '在详情页将影片加入此分组' : '在影片库点击海报卡片上的收藏按钮即可加入。'} />
       ) : (

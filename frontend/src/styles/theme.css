@@ -557,3 +557,32 @@ img{display:block;max-width:100%}
 /* 滚动条再细一点、悬停更深 */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-thumb{border-radius:6px}
+
+/* 骨架屏 */
+@keyframes skeletonPulse{0%,100%{opacity:.5}50%{opacity:1}}
+.skeleton-card{aspect-ratio:7/10;border-radius:var(--r-md);background:linear-gradient(120deg,var(--bg-raised) 25%,var(--bg-page) 50%,var(--bg-raised) 75%);background-size:200% 100%;animation:skeletonPulse 1.6s ease-in-out infinite,skeletonSheen 1.8s linear infinite}
+.skeleton-card--square{aspect-ratio:1/1}
+.skeleton-row{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line-hair)}
+.skeleton-row:last-child{border-bottom:none}
+.skeleton-row-thumb{width:46px;height:64px;border-radius:6px;background:var(--bg-page);flex:none;animation:skeletonPulse 1.6s ease-in-out infinite}
+.skeleton-row-lines{flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.skeleton-line{height:10px;border-radius:5px;background:var(--bg-page);animation:skeletonPulse 1.6s ease-in-out infinite}
+@keyframes skeletonSheen{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* PageHead 下方细分隔线，增强结构感 */
+.page-head{padding-bottom:18px;border-bottom:1px solid var(--line-hair)}
+
+/* 侧栏品牌区：衬线字标 + 金色小方块 */
+.brand .brand-mark{font-family:var(--ff-serif)}
+.brand .brand-tag{letter-spacing:.22em}
+
+/* 登录页：居中卡片 + 品牌字标 */
+.login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
+.login-card{width:380px;background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:44px 40px;box-shadow:0 10px 40px rgba(60,42,20,.10);animation:fade .4s ease}
+.login-brand{text-align:center;margin-bottom:28px}
+.login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
+.login-mark em{color:var(--gold);font-style:normal}
+.login-tag{margin-top:6px;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--t-faint)}
+.login-error{margin-bottom:16px;padding:10px 14px;border-radius:var(--r-sm);background:rgba(192,68,58,.08);border:1px solid rgba(192,68,58,.25);color:var(--red);font-size:12px;text-align:center}
+.nav-item{transition:background .18s ease,color .18s ease;border-radius:8px;margin:1px 8px}
+.nav-item:hover{background:rgba(60,42,20,.045)}

@@ -4,7 +4,8 @@ import { api, coverFileUrl } from '../api/client'
 import type { Ranking, RankType, Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { QueueOverlay } from '../components/QueueOverlay'
-import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
+import { PageHead, Empty, ErrorEmpty } from '../components/States'
+import { SkeletonGallery } from '../components/Skeleton'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -209,7 +210,7 @@ export function Rankings() {
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => load(tab)} /> :
-       list === null ? <Loading /> : list.length === 0 ? (
+       list === null ? <SkeletonGallery /> : list.length === 0 ? (
         <Empty icon="○" title="暂无排行数据" sub="系统启动后会自动爬取，或点击右上角刷新。" />
       ) : filtered.length === 0 ? (
         <Empty icon="○" title="无匹配结果" sub="尝试更换筛选条件或搜索关键词。" />
