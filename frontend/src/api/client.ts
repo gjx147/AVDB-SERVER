@@ -30,8 +30,12 @@ http.interceptors.response.use(
       localStorage.removeItem('apiToken')
       window.location.href = '/login'
     }
-    const detail = err?.response?.data?.detail || err?.message || '请求失败'
-    return Promise.reject(new Error(String(detail)))
+    // 422 的 detail 是数组、部分错误是对象 —— 非字符串统一 JSON.stringify，避免 toast 显示 [object Object]
+    const rawDetail = err?.response?.data?.detail
+    const detail = rawDetail !== undefined && rawDetail !== null && rawDetail !== ''
+      ? (typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail))
+      : (err?.message || '请求失败')
+    return Promise.reject(new Error(detail))
   },
 )
 
@@ -98,14 +102,15 @@ export const api = {
     delete: (taskId: number) =>
       http.delete<ApiOk>(`/api/tasks/${taskId}`).then((r) => r.data),
 
+    // 后端签名是裸数组 body（task_ids: list[int]），不能包对象，否则 422
     batchDelete: (task_ids: number[]) =>
-      http.post<ApiOk>('/api/tasks/batch/delete', { task_ids }).then((r) => r.data),
+      http.post<ApiOk>('/api/tasks/batch/delete', task_ids).then((r) => r.data),
 
     batchRetry: (task_ids: number[]) =>
-      http.post<ApiOk>('/api/tasks/batch/retry', { task_ids }).then((r) => r.data),
+      http.post<ApiOk>('/api/tasks/batch/retry', task_ids).then((r) => r.data),
 
     batchFavorite: (task_ids: number[]) =>
-      http.post<ApiOk>('/api/tasks/batch/favorite', { task_ids }).then((r) => r.data),
+      http.post<ApiOk>('/api/tasks/batch/favorite', task_ids).then((r) => r.data),
 
     stats: (list_source_id?: number) =>
       http.get<TaskStats[]>('/api/tasks/stats', { params: { list_source_id } }).then((r) => r.data),
