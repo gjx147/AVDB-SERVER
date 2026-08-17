@@ -18,11 +18,11 @@
   --line-strong: rgba(255,180,200,.22);
 
   /* 鐜孩涓昏壊锛堢化绮夋洿鑹筹級 */
-  --gold: #ff4fd8;
-  --gold-bright: #ff9ee8;
-  --gold-deep: #ff1fb8;
-  --gold-wash: rgba(255,79,216,.14);
-  --gold-glow: rgba(255,79,216,.40);
+  --gold: #ff5cb8;
+  --gold-bright: #ffa8dd;
+  --gold-deep: #ff2f9e;
+  --gold-wash: rgba(255,92,184,.14);
+  --gold-glow: rgba(255,92,184,.40);
   --peach: #ff8a72;
 
   /* 璇箟鑹诧紙鏆楀簳鎻愪寒锛?*/
@@ -84,7 +84,7 @@ body::after{
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 42% at 18% 0%, rgba(255,79,216,.18), transparent 70%),
+    radial-gradient(60% 42% at 18% 0%, rgba(255,92,184),.18), transparent 70%),
     radial-gradient(52% 62% at 100% 100%, rgba(128,40,200,.20), transparent 62%),
     radial-gradient(40% 40% at 55% 45%, rgba(255,217,194,.06), transparent 70%),
     var(--bg-page);
@@ -211,7 +211,7 @@ img{display:block;max-width:100%}
 .poster-frame img.loaded{opacity:1}
 .poster:hover .poster-frame img{transform:scale(1.06)}
 .poster-grad-top{position:absolute;top:0;left:0;right:0;height:64px;background:linear-gradient(180deg,rgba(14,12,11,.55),transparent);display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px}
-.poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,79,216,.65),0 1px 3px rgba(0,0,0,.8)}
+.poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,92,184),.65),0 1px 3px rgba(0,0,0,.8)}
 .badge-fav{width:24px;height:24px;border-radius:50%;background:rgba(201,138,138,.85);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
 .badge-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:4px;backdrop-filter:blur(6px);margin-bottom:6px}
 .badge-dl{margin-left:4px;text-transform:none;letter-spacing:0}
@@ -332,7 +332,7 @@ img{display:block;max-width:100%}
 .detail-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;image-rendering:auto}
 .detail-cover-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:12px}
 .detail-info{min-width:0;overflow:hidden}
-.detail-code{font-family:var(--ff-mono);font-size:15px;color:var(--gold);font-weight:600;letter-spacing:.04em;word-break:break-all;text-shadow:0 0 14px rgba(255,79,216,.55)}
+.detail-code{font-family:var(--ff-mono);font-size:15px;color:var(--gold);font-weight:600;letter-spacing:.04em;word-break:break-all;text-shadow:0 0 14px rgba(255,92,184),.55)}
 .detail-title{font-family:var(--ff-serif);font-size:28px;color:var(--t-display);margin:6px 0 16px;line-height:1.25;font-weight:700;overflow-wrap:break-word;word-break:break-word}
 .detail-actions{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
 .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:36px}
@@ -501,9 +501,9 @@ img{display:block;max-width:100%}
 .btn{border-radius:8px}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .btn--ghost{background:rgba(36,19,48,.6);backdrop-filter:blur(8px)}
-.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,31,184,.22)}
-.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,31,184,.32)}
-.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,31,184,.42);transform:translateY(-1px)}
+.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,47,158,.22)}
+.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,47,158,.32)}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,47,158,.42);transform:translateY(-1px)}
 .btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
 
 /* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
@@ -577,7 +577,7 @@ img{display:block;max-width:100%}
 
 /* 登录字标呼吸辉光 */
 .login-mark{animation:markGlow 2.4s ease-in-out infinite}
-@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,31,184,.25)}50%{text-shadow:0 0 34px rgba(255,31,184,.55)}}
+@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,47,158,.25)}50%{text-shadow:0 0 34px rgba(255,47,158,.55)}}
 
 /* 画廊海报 hover：信息条上滑 + 金粉描边 */
 .poster-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
@@ -586,11 +586,11 @@ img{display:block;max-width:100%}
 .poster:hover .poster-info{transform:translateY(0);opacity:1}
 
 /* 排行榜前三名：番号金色发光 */
-.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,31,184,.5);font-weight:700}
+.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,47,158,.5);font-weight:700}
 
 /* 演员头像玫红光晕 */
-.actor-photo{box-shadow:0 0 0 0 rgba(255,31,184,0);transition:box-shadow .3s,transform .3s}
-.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,31,184,.35)}
+.actor-photo{box-shadow:0 0 0 0 rgba(255,47,158,0);transition:box-shadow .3s,transform .3s}
+.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,47,158,.35)}
 .actor{transition:transform .25s cubic-bezier(.23,1,.32,1)}
 .actor:hover{transform:translateY(-3px)}
 
@@ -598,10 +598,10 @@ img{display:block;max-width:100%}
 ::selection{background:var(--gold-glow);color:var(--t-display)}
 
 /* 详情页最优磁力框：玫红渐变竖条 */
-.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,31,184,.14),rgba(255,31,184,.05)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,47,158,.14),rgba(255,47,158,.05)),var(--bg-page)}
 
 /* 页标题 em 金字发光 */
-.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,31,184,.35)}
+.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,47,158,.35)}
 
 /* 绌虹姸鎬侊細琛嚎瑁呴グ鍥炬爣 */
 .empty .em-icon{font-family:var(--ff-serif);color:var(--gold-wash);opacity:1}
@@ -651,7 +651,7 @@ img{display:block;max-width:100%}
 
 /* 鐧诲綍椤碉細灞呬腑鍗＄墖 + 鍝佺墝瀛楁爣 */
 .login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
-.login-card{width:380px;background:rgba(26,15,38,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,31,184,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
+.login-card{width:380px;background:rgba(26,15,38,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,47,158,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
 .login-brand{text-align:center;margin-bottom:28px}
 .login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
 .login-mark em{color:var(--gold);font-style:normal}
@@ -677,7 +677,7 @@ img{display:block;max-width:100%}
 @property --gb-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
 
 /* 呼吸光晕：主按钮 2.4s 循环外发光 */
-@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,31,184,.28)}50%{box-shadow:0 6px 30px rgba(255,31,184,.55)}}
+@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,47,158,.28)}50%{box-shadow:0 6px 30px rgba(255,47,158,.55)}}
 .btn--gold{animation:goldPulse 2.4s ease-in-out infinite}
 .btn--gold:hover{animation:none}
 
@@ -706,14 +706,14 @@ img{display:block;max-width:100%}
 .input:focus,.textarea:focus,.select-full:focus{background-size:100% 2px}
 
 /* 最优磁力框竖条：桃粉→蜜桃橘渐变 */
-.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,31,184,.16),rgba(255,154,139,.06)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,47,158,.16),rgba(255,154,139,.06)),var(--bg-page)}
 
 /* 排行榜前三名 mini 皇冠 */
 .gallery .poster:nth-child(-n+3) .poster-code::before,.card .row-item:nth-child(-n+3) .row-code::before{content:"♛ ";}
 
 /* 演员头像桃粉描边亮线 */
-.actor-photo{outline:1px solid rgba(255,79,216,0);outline-offset:2px;transition:outline-color .3s,box-shadow .3s}
-.actor:hover .actor-photo{outline-color:rgba(255,79,216,.55)}
+.actor-photo{outline:1px solid rgba(255,92,184),0);outline-offset:2px;transition:outline-color .3s,box-shadow .3s}
+.actor:hover .actor-photo{outline-color:rgba(255,92,184),.55)}
 
 /* 登录卡背后漂移光斑 */
 .login-card{position:relative}
@@ -721,14 +721,14 @@ img{display:block;max-width:100%}
   content:"";position:absolute;width:180px;height:180px;border-radius:50%;pointer-events:none;z-index:-1;
   filter:blur(46px);
 }
-.login-card::before{background:rgba(255,79,216,.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
+.login-card::before{background:rgba(255,92,184),.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
 .login-card::after{background:rgba(255,154,139,.16);bottom:-60px;right:-50px;animation:blobDrift2 14s ease-in-out infinite alternate}
 @keyframes blobDrift1{from{transform:translate(0,0)}to{transform:translate(36px,22px)}}
 @keyframes blobDrift2{from{transform:translate(0,0)}to{transform:translate(-30px,-26px)}}
 
 /* 鼠标光晕容器（JS 注入的 aura 元素样式） */
 .aura{position:fixed;width:340px;height:340px;border-radius:50%;pointer-events:none;z-index:1;
-  background:radial-gradient(circle,rgba(255,79,216,.10),transparent 65%);
+  background:radial-gradient(circle,rgba(255,92,184),.10),transparent 65%);
   transform:translate(-50%,-50%);will-change:transform}
 
 /* 涟漪 */
@@ -772,7 +772,7 @@ img{display:block;max-width:100%}
 
 /* 海报 hover 凑近 + 体温内光 */
 .poster:hover .poster-frame img{transform:scale(1.12)}
-.poster:hover .poster-frame{box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,79,216,.35)}
+.poster:hover .poster-frame{box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,92,184),.35)}
 
 /* 封面加载「掀纱」：更慢更撩（0.9s + 过冲） */
 @keyframes focusIn{0%{opacity:0;filter:blur(10px);transform:scale(1.06)}70%{opacity:1;filter:blur(0);transform:scale(.995)}100%{transform:scale(1)}}
@@ -783,12 +783,12 @@ img{display:block;max-width:100%}
 .toast.show{transform:translateX(0) rotate(0)}
 
 /* 鼠标光晕双色呼吸（桃粉⇄肤金） */
-@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,79,216,.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
+@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,92,184),.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
 .aura{animation:auraShift 7s ease-in-out infinite}
 
 /* 红心爆击：唇印元素 */
 .burst-kiss{position:absolute;font-size:13px;pointer-events:none;z-index:5;line-height:1;
-  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,79,216,.6))}
+  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,92,184),.6))}
 
 /* 顶部心跳光带（两快一慢） */
 .pulse-band{position:fixed;top:0;left:0;right:0;height:2px;z-index:250;pointer-events:none;
