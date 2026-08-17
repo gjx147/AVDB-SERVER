@@ -21,6 +21,7 @@ export function Library() {
   const [sourceId, setSourceId] = useState<number | ''>('')
   const [view, setView] = useState<'grid' | 'row'>('grid')
   const [sort, setSort] = useState('date_desc')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
@@ -101,6 +102,7 @@ export function Library() {
         const r = await api.v2.tasks({
           status: status || undefined,
           list_source_id: sourceId || undefined,  // P1#5: 列表源筛选（之前漏传）
+          in_library: inLib === 'all' ? undefined : inLib === 'in',
           sort,
           limit: PAGE, offset: skip,
         })
@@ -110,7 +112,7 @@ export function Library() {
       }
     } catch (e) { setError(String((e as Error).message)); setTasks([]) }
     // P0#3: page 不进依赖（通过 pageOverride 传入），避免翻页时 load 重建→effect 回弹到第0页
-  }, [page, status, sourceId, sort])
+  }, [page, status, sourceId, sort, inLib])
 
   useEffect(() => {
     // 优先读 store 缓存，避免重复请求
@@ -126,7 +128,7 @@ export function Library() {
   useEffect(() => {
     setPage(0); setSelected(new Set()); loadRef.current(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, sourceId, sort])
+  }, [status, sourceId, sort, inLib])
 
   const toggleSel = (id: number) => {
     setSelected((prev) => {
@@ -184,6 +186,11 @@ export function Library() {
         <select className="select" value={sourceId} onChange={(e) => setSourceId(e.target.value ? +e.target.value : '')} aria-label="筛选列表源">
           <option value="">全部列表源</option>
           {sources.map((s) => <option key={s.id} value={s.id}>{s.list_code}</option>)}
+        </select>
+        <select className="select" value={inLib} onChange={(e) => setInLib(e.target.value as 'all' | 'in' | 'out')} aria-label="媒体库筛选">
+          <option value="all">全部媒体库状态</option>
+          <option value="in">✓ 在媒体库</option>
+          <option value="out">✗ 不在媒体库</option>
         </select>
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="筛选状态">
           <option value="">全部状态</option>

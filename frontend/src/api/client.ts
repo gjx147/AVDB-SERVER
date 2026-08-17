@@ -89,8 +89,8 @@ export const api = {
     remove: (id: number) =>
       http.delete<ApiOk>(`/api/tasks/${id}`).then((r) => r.data),
 
-    favorites: (skip = 0, limit = 50) =>
-      http.get<Task[]>('/api/tasks/favorites/list', { params: { skip, limit } }).then((r) => {
+    favorites: (skip = 0, limit = 50, inLibrary?: boolean) =>
+      http.get<Task[]>('/api/tasks/favorites/list', { params: { skip, limit, in_library: inLibrary } }).then((r) => {
         const d = r.data as unknown
         return Array.isArray(d) ? d : (d as { items?: Task[] }).items || []
       }),
@@ -148,9 +148,9 @@ export const api = {
     // 切换自动入库（auto_add）
     toggleAutoAdd: (actorId: number) =>
       http.post<ApiOk & { actor_id: number; auto_add: boolean }>(`/api/actors/${actorId}/auto-add`).then((r) => r.data),
-    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added') =>
+    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added', inLibrary?: boolean) =>
       http.get<{ items: ActorMovie[]; total: number; page: number; page_size: number }>(
-        `/api/actors/${id}/movies`, { params: { page, page_size, sort } }
+        `/api/actors/${id}/movies`, { params: { page, page_size, sort, in_library: inLibrary } }
       ).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),
@@ -162,8 +162,8 @@ export const api = {
 
   // ════════ Rankings ════════
   rankings: {
-    list: (rank_type: RankType = 'daily', rank_date?: string, skip = 0, limit = 100) =>
-      http.get<Ranking[]>('/api/rankings', { params: { rank_type, rank_date, skip, limit } }).then((r) => r.data),
+    list: (rank_type: RankType = 'daily', rank_date?: string, skip = 0, limit = 100, inLibrary?: boolean) =>
+      http.get<Ranking[]>('/api/rankings', { params: { rank_type, rank_date, skip, limit, in_library: inLibrary } }).then((r) => r.data),
     latest: () =>
       http.get<Record<string, string>>('/api/rankings/latest').then((r) => r.data),
     crawl: (rank_type: RankType) =>
@@ -233,7 +233,7 @@ export const api = {
     remove: (id: number) => http.delete<ApiOk>(`/api/collections/${id}`).then((r) => r.data),
     addTask: (collectionId: number, taskId: number) => http.post<ApiOk>(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
     removeTask: (collectionId: number, taskId: number) => http.delete<ApiOk>(`/api/collections/${collectionId}/tasks/${taskId}`).then((r) => r.data),
-    tasks: (collectionId: number) => http.get<{ tasks: Task[] }>(`/api/collections/${collectionId}/tasks`).then((r) => {
+    tasks: (collectionId: number, inLibrary?: boolean) => http.get<{ tasks: Task[] }>(`/api/collections/${collectionId}/tasks`, { params: { in_library: inLibrary } }).then((r) => {
       const d = r.data as unknown as { tasks?: Task[]; items?: Task[] }
       return { tasks: d.tasks || d.items || [] }
     }),
@@ -243,7 +243,7 @@ export const api = {
   v2: {
     tasks: (params: {
       status?: string; list_source_id?: number; actor?: string; tag?: string; date_from?: string; date_to?: string;
-      min_rating?: number; sort?: string; limit?: number; offset?: number;
+      min_rating?: number; in_library?: boolean; sort?: string; limit?: number; offset?: number;
     }) => http.get<{ tasks: Task[]; total: number }>('/api/v2/tasks', { params }).then((r) => r.data),
     searchFts: (q: string, limit = 48) =>
       http.get<{ tasks: Task[]; total: number; engine: string }>('/api/v2/tasks/search-fts', { params: { q, limit } }).then((r) => r.data),

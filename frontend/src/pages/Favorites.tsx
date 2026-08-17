@@ -14,19 +14,21 @@ export function Favorites() {
   const [error, setError] = useState<string | null>(null)
   const [addingCol, setAddingCol] = useState(false)
   const [newColName, setNewColName] = useState('')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const load = () => {
+  const load = (lib: 'all' | 'in' | 'out' = inLib) => {
     setTasks(null); setError(null)
+    const inLibrary = lib === 'all' ? undefined : lib === 'in'
     if (activeCol !== null) {
-      api.collections.tasks(activeCol).then((r) => { setTasks(r.tasks); setError(null) }).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
+      api.collections.tasks(activeCol, inLibrary).then((r) => { setTasks(r.tasks); setError(null) }).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
     } else {
-      api.tasks.favorites(0, 100).then(setTasks).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
+      api.tasks.favorites(0, 100, inLibrary).then(setTasks).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
     }
     api.collections.list().then((r) => setCollections(r.collections as unknown as Collection[])).catch(() => {})
   }
-  useEffect(() => { load() }, [activeCol])
+  useEffect(() => { load() }, [activeCol, inLib])
 
   const createCol = async () => {
     if (!newColName.trim()) return
@@ -66,7 +68,7 @@ export function Favorites() {
 
       {/* F13: 分组侧栏 */}
       {collections.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className={`chip${activeCol === null ? ' chip-green' : ''}`} style={{ cursor: 'pointer', padding: '6px 14px' }}
             onClick={() => setActiveCol(null)}>全部收藏</button>
           {collections.map((c) => (
@@ -79,6 +81,15 @@ export function Favorites() {
           ))}
         </div>
       )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <select className="select" value={inLib}
+          onChange={(e) => setInLib(e.target.value as 'all' | 'in' | 'out')} aria-label="媒体库筛选">
+          <option value="all">全部媒体库状态</option>
+          <option value="in">✓ 在媒体库</option>
+          <option value="out">✗ 不在媒体库</option>
+        </select>
+      </div>
 
       {error ? <ErrorEmpty message={error} onRetry={load} /> :
        tasks === null ? <Loading /> : tasks.length === 0 ? (

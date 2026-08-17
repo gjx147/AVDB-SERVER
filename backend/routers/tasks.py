@@ -96,8 +96,11 @@ def search_count(db: DbSession, _user: CurrentUser, q: str = Query(..., min_leng
 
 
 @router.get("/favorites/list")
-def list_favorites_tasks(db: DbSession, _user: CurrentUser, skip: int = Query(0, ge=0), limit: int = Query(48, ge=1, le=200)):
+def list_favorites_tasks(db: DbSession, _user: CurrentUser, skip: int = Query(0, ge=0), limit: int = Query(48, ge=1, le=200),
+                         in_library: bool | None = Query(None, description="按 Emby 在库状态筛选")):
     stmt = select(Task).where(Task.is_favorite == True)  # noqa: E712
+    if in_library is not None:
+        stmt = stmt.where(Task.media_in_library == in_library)
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = db.execute(stmt.order_by(Task.favorite_at.desc().nullslast(), Task.id.desc()).offset(skip).limit(limit)).scalars().all()
     return {"total": total, "items": items}

@@ -80,6 +80,7 @@ def _enrich_with_task(db, rankings: list) -> list:
             item["task_poster_url"] = t.poster_url
             item["task_thumbnail_urls"] = t.thumbnail_urls
             item["task_status"] = t.status
+            item["task_media_in_library"] = t.media_in_library
         if r.rank_type == "actor":
             item["actor_id"] = actor_id_map.get(r.id)
         result.append(item)
@@ -170,6 +171,7 @@ def list_rankings_compat(
     rank_date: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=500),
+    in_library: bool | None = Query(None, description="按关联任务的 Emby 在库状态筛选（无任务关联的行被排除）"),
 ):
     """兼容 AVDB 前端：按 type/date 查询排行榜，支持分页。"""
     stmt = select(Ranking)
@@ -186,7 +188,10 @@ def list_rankings_compat(
     if rank_date:
         stmt = stmt.where(Ranking.rank_date == rank_date)
     rows = db.execute(stmt.order_by(Ranking.rank_position).offset(skip).limit(limit)).scalars().all()
-    return _enrich_with_task(db, rows)
+    enriched = _enrich_with_task(db, rows)
+    if in_library is not None:
+        enriched = [x for x in enriched if x.get("task_media_in_library") == in_library]
+    return enriched
 
 
 # ── 动态路由 /{rank_type} ──

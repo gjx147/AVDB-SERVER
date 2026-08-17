@@ -16,20 +16,22 @@ export function ActorDetail() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [sort, setSort] = useState<'added' | 'release' | 'rating'>('added')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
-  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating') => {
+  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all') => {
     if (!id) return
     try {
-      const r = await api.actors.movies(+id, p, PAGE_SIZE, s)
+      const r = await api.actors.movies(+id, p, PAGE_SIZE, s, lib === 'all' ? undefined : lib === 'in')
       setMovies(r.items)
       setTotal(r.total)
       setPage(p)
       setSort(s)
+      setInLib(lib)
     } catch {
       setMovies([]); setTotal(0)
     }
@@ -161,14 +163,22 @@ export function ActorDetail() {
       {/* 作品列表 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
         <div className="dm-label">作品（{total}）</div>
-        <div className="seg">
-          <button className={sort === 'added' ? 'on' : ''} onClick={() => loadMovies(1, 'added')}>加入日期</button>
-          <button className={sort === 'release' ? 'on' : ''} onClick={() => loadMovies(1, 'release')}>发行日期</button>
-          <button className={sort === 'rating' ? 'on' : ''} onClick={() => loadMovies(1, 'rating')}>评分</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="seg">
+            <button className={sort === 'added' ? 'on' : ''} onClick={() => loadMovies(1, 'added', inLib)}>加入日期</button>
+            <button className={sort === 'release' ? 'on' : ''} onClick={() => loadMovies(1, 'release', inLib)}>发行日期</button>
+            <button className={sort === 'rating' ? 'on' : ''} onClick={() => loadMovies(1, 'rating', inLib)}>评分</button>
+          </div>
+          <select className="select" value={inLib} onChange={(e) => loadMovies(1, sort, e.target.value as 'all' | 'in' | 'out')} aria-label="媒体库筛选">
+            <option value="all">全部媒体库状态</option>
+            <option value="in">✓ 在媒体库</option>
+            <option value="out">✗ 不在媒体库</option>
+          </select>
         </div>
       </div>
       {total === 0 ? (
-        <Empty icon="○" title="暂无关联作品" sub="点击「补齐作品」爬取该演员的作品列表。" />
+        <Empty icon="○" title="暂无关联作品"
+          sub={inLib !== 'all' ? '没有匹配的在库状态——若从未同步过 Emby，请到 设置→媒体→立即同步' : '点击「补齐作品」爬取该演员的作品列表。'} />
       ) : (
         <>
         <div className="gallery">
@@ -199,9 +209,9 @@ export function ActorDetail() {
         </div>
         {/* 分页 */}
         <div className="pagination-card" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24, padding: '10px 16px', width: 'fit-content', margin: '24px auto 0' }}>
-          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1, sort)}>上一页</button>
+          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1, sort, inLib)}>上一页</button>
           <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 {total} 部</span>
-          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1, sort)}>下一页</button>
+          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1, sort, inLib)}>下一页</button>
         </div>
         </>
       )}

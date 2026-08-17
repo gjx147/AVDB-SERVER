@@ -26,6 +26,7 @@ def list_tasks_v2(
     maker: str | None = Query(None),
     list_source_id: int | None = Query(None),
     min_rating: float | None = Query(None),
+    in_library: bool | None = Query(None, description="按 Emby 在库状态筛选（null 不同值，不参与筛选）"),
     sort: str = Query("created_desc", description="created_desc/rating_desc/title_asc/date_desc/favorite_desc"),
     limit: int = Query(48, le=200),
     offset: int = Query(0, ge=0),
@@ -53,6 +54,8 @@ def list_tasks_v2(
         stmt = stmt.where(Task.list_source_id == list_source_id)
     if min_rating is not None:
         stmt = stmt.where(Task.rating >= min_rating)
+    if in_library is not None:
+        stmt = stmt.where(Task.media_in_library == in_library)
 
     sort_map = {
         "created_desc": Task.created_at.desc(),

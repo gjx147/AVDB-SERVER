@@ -91,6 +91,7 @@ export function Rankings() {
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -113,16 +114,26 @@ export function Rankings() {
     setFilterStatus('all')
     setError(null)
     try {
-      // 只读取排行榜数据（由 scraper ranking 命令完整爬取后写入）
-      const data = await api.rankings.list(t)
+      // 只读取排行榜数据（由 scraper ranking 命令完整爬取后写入）；非演员榜支持在库筛选
+      const data = await api.rankings.list(t, undefined, 0, 100,
+        t === 'actor' ? undefined : (inLib === 'all' ? undefined : inLib === 'in'))
       if (reqId !== reqSeqRef.current) return
       setList(data)
     } catch (e) {
       setError(String((e as Error).message))
       setList([])
     }
-  }, [toastErr])
-  useEffect(() => { load('daily') }, [load])
+  }, [toastErr, inLib])
+  // load 含 inLib 依赖会重建：挂载/切筛选都用 ref 取最新 load，避免 effect 把 tab 弹回 daily
+  const loadRef = useRef(load)
+  useEffect(() => { loadRef.current = load }, [load])
+  useEffect(() => { loadRef.current('daily') }, [])
+  const inLibTouched = useRef(false)
+  useEffect(() => {
+    if (!inLibTouched.current) { inLibTouched.current = true; return }  // 跳过首渲染
+    loadRef.current(tab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inLib])
 
   const crawl = async () => {
     try { await api.rankings.crawl(tab); toastOk(`已开始刷新${TABS.find(t => t.key === tab)?.label || ''}排行榜`) } catch (e) { toastErr(String((e as Error).message)) }
@@ -182,6 +193,13 @@ export function Rankings() {
           <option value="all">全部状态</option>
           <option value="visited">已入库</option>
           <option value="pending">待处理</option>
+        </select>
+        <select className="select" value={inLib} disabled={tab === 'actor'}
+          onChange={(e) => setInLib(e.target.value as 'all' | 'in' | 'out')}
+          aria-label="媒体库筛选" title={tab === 'actor' ? '演员榜不支持在库筛选' : undefined}>
+          <option value="all">全部媒体库状态</option>
+          <option value="in">✓ 在媒体库</option>
+          <option value="out">✗ 不在媒体库</option>
         </select>
         <div className="seg">
           <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>画廊</button>

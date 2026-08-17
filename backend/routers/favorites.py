@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from fastapi import Query
 from sqlalchemy import select
 
 from deps import CurrentUser, DbSession, Pagination
@@ -61,11 +62,14 @@ def delete_collection(collection_id: int, db: DbSession, _user: CurrentUser):
 
 
 @router.get("/api/collections/{collection_id}/tasks", response_model=TaskListResponse)
-def list_collection_tasks(collection_id: int, db: DbSession, _user: CurrentUser, pagination: Pagination):
+def list_collection_tasks(collection_id: int, db: DbSession, _user: CurrentUser, pagination: Pagination,
+                          in_library: bool | None = Query(None, description="按 Emby 在库状态筛选")):
     c = db.get(Collection, collection_id)
     if not c:
         raise HTTPException(status_code=404, detail="分组不存在")
     tasks = c.tasks
+    if in_library is not None:
+        tasks = [t for t in tasks if t.media_in_library == in_library]
     offset, limit = pagination
     total = len(tasks)
     page_items = tasks[offset:offset + limit]

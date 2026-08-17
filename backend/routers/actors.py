@@ -150,17 +150,20 @@ def actor_movies_list(
     actor_id: int, db: DbSession, _user: CurrentUser,
     page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
     sort: str = Query("added", description="排序：added=加入日期 / release=发行日期"),
+    in_library: bool | None = Query(None, description="按 Emby 在库状态筛选"),
 ):
     """演员的关联作品列表（分页，只含有磁力链接的作品）。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
     # 只展示有磁力链接的作品：爬取不到磁力的（pending/failed/空磁力）不在详情页显示
-    conds = (
+    conds = [
         actor_movies.c.actor_id == actor_id,
         Task.best_magnet.isnot(None),
         Task.best_magnet != "",
-    )
+    ]
+    if in_library is not None:
+        conds.append(Task.media_in_library == in_library)
     total = db.execute(
         select(func.count(Task.id))
         .select_from(Task)

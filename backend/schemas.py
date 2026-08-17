@@ -139,6 +139,7 @@ class RankingOut(BaseModel):
     task_poster_url: Optional[str] = None
     task_thumbnail_urls: Optional[str] = None
     task_status: Optional[str] = None
+    task_media_in_library: Optional[bool] = None
 
 
 class BatchAddTasksRequest(BaseModel):
