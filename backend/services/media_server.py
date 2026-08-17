@@ -66,17 +66,19 @@ def _extract_codes_from_item(item: dict) -> set[str]:
     return codes
 
 
-async def check_in_library(video_code: str) -> bool | None:
-    """查询单个番号是否在 Emby 媒体库。
+def _library_ids(config: dict) -> list[str]:
+    """解析 emby_library_id 配置：支持多个库 ID，逗号/中文逗号/空格分隔。空 → []（不限库）。"""
+    raw = config.get("emby_library_id", "")
+    if not raw:
+        return []
+    parts = re.split(r"[,，\s]+", raw.strip())
+    return [p for p in parts if p]
 
-    返回 True/False；未配置或查询失败返回 None（未知，不等于 False）。
-    """
-    config = await _get_config()
-    url = config.get("emby_url", "").rstrip("/")
-    token = config.get("emby_token", "")
-    if not url or not token:
-        return None
-    target = normalize_code(video_code)
+
+async def _query_one(
+    client: httpx.AsyncClient, url: str, token: str, library_id: str, video_code: str,
+) -> bool | None:
+    """在单个范围内查询番号（library_id 空 = 全库）。精确匹配；失败返回 None。"""
     params = {
         "searchTerm": video_code,
         "Recursive": "true",
@@ -84,25 +86,49 @@ async def check_in_library(video_code: str) -> bool | None:
         "Fields": "Path,SeriesName",
         "api_key": token,
     }
-    # 限定媒体库（配置了 emby_library_id 时），避免多库误判
-    library_id = config.get("emby_library_id", "")
     if library_id:
         params["ParentId"] = library_id
     try:
-        async with httpx.AsyncClient(timeout=_SYNC_TIMEOUT) as client:
-            resp = await client.get(f"{url}/emby/Items", params=params)
-            if resp.status_code != 200:
-                logger.debug(f"Emby 查询 HTTP {resp.status_code} ({video_code})")
-                return None
-            items = resp.json().get("Items", [])
-            # 精确匹配：返回条目的番号需与目标完全相等（防 ABC-123 命中 ABC-1234）
-            for item in items:
-                if target in _extract_codes_from_item(item):
-                    return True
-            return False
+        resp = await client.get(f"{url}/emby/Items", params=params)
+        if resp.status_code != 200:
+            logger.debug(f"Emby 查询 HTTP {resp.status_code} ({video_code}, lib={library_id or 'all'})")
+            return None
+        items = resp.json().get("Items", [])
+        target = normalize_code(video_code)
+        # 精确匹配：返回条目的番号需与目标完全相等（防 ABC-123 命中 ABC-1234）
+        return any(target in _extract_codes_from_item(it) for it in items)
     except Exception as e:
-        logger.debug(f"Emby 查询失败({video_code}): {e}")
+        logger.debug(f"Emby 查询失败({video_code}, lib={library_id or 'all'}): {e}")
         return None
+
+
+def _combine(results: list[bool | None]) -> bool | None:
+    """合并多库结果：任一 True → True；否则任一有效 False → False；全失败 → None。"""
+    if any(r is True for r in results):
+        return True
+    if any(r is False for r in results):
+        return False
+    return None
+
+
+async def check_in_library(video_code: str) -> bool | None:
+    """查询单个番号是否在 Emby 媒体库。
+
+    返回 True/False；未配置或查询失败返回 None（未知，不等于 False）。
+    配置了多个库 ID 时逐库并发查询，任一命中即在库。
+    """
+    config = await _get_config()
+    url = config.get("emby_url", "").rstrip("/")
+    token = config.get("emby_token", "")
+    if not url or not token:
+        return None
+    libs = _library_ids(config)
+    scopes = libs or [""]
+    async with httpx.AsyncClient(timeout=_SYNC_TIMEOUT) as client:
+        results = await asyncio.gather(*(
+            _query_one(client, url, token, lib, video_code) for lib in scopes
+        ))
+    return _combine(list(results))
 
 
 async def test_connection(url: str = "", token: str = "") -> dict:
@@ -133,40 +159,24 @@ async def test_connection(url: str = "", token: str = "") -> dict:
 
 
 async def _check_many(video_codes: list[str]) -> dict[str, bool | None]:
-    """并发查询一批番号（连接复用 + 信号量限流）。返回 {code: True/False/None}。"""
+    """并发查询一批番号（连接复用 + 信号量限流 + 多库逐库合并）。返回 {code: True/False/None}。"""
     config = await _get_config()
     url = config.get("emby_url", "").rstrip("/")
     token = config.get("emby_token", "")
     if not url or not token:
         return {c: None for c in video_codes}
-    library_id = config.get("emby_library_id", "")
+    scopes = _library_ids(config) or [""]
     sem = asyncio.Semaphore(_SYNC_CONCURRENCY)
     results: dict[str, bool | None] = {}
 
     async with httpx.AsyncClient(timeout=_SYNC_TIMEOUT) as client:
-        async def one(code: str) -> None:
-            params = {
-                "searchTerm": code,
-                "Recursive": "true",
-                "IncludeItemTypes": "Movie,Video",
-                "Fields": "Path,SeriesName",
-                "api_key": token,
-            }
-            if library_id:
-                params["ParentId"] = library_id
+        async def one_scope(code: str, lib: str) -> bool | None:
             async with sem:
-                try:
-                    resp = await client.get(f"{url}/emby/Items", params=params)
-                    if resp.status_code != 200:
-                        results[code] = None
-                        return
-                    items = resp.json().get("Items", [])
-                    target = normalize_code(code)
-                    results[code] = any(
-                        target in _extract_codes_from_item(it) for it in items
-                    )
-                except Exception:
-                    results[code] = None
+                return await _query_one(client, url, token, lib, code)
+
+        async def one(code: str) -> None:
+            per_lib = await asyncio.gather(*(one_scope(code, lib) for lib in scopes))
+            results[code] = _combine(list(per_lib))
 
         await asyncio.gather(*(one(c) for c in video_codes))
     return results

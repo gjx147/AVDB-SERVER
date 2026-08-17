@@ -315,8 +315,8 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
       </div>
       <div className="field">
         <label>媒体库 ID（可选）</label>
-        <input className="input" placeholder="留空 = 搜索全部媒体库" value={embyLibraryId} onChange={(e) => setEmbyLibraryId(e.target.value)} />
-        <div className="hint">限定搜索范围到指定媒体库，多库用户建议填写（Emby 库设置页 URL 里的 parentid）</div>
+        <input className="input" placeholder="留空 = 搜索全部媒体库；多库用逗号分隔" value={embyLibraryId} onChange={(e) => setEmbyLibraryId(e.target.value)} />
+        <div className="hint">限定搜索范围到指定媒体库，多个用逗号分隔（如 id1,id2）；ID 见 Emby 库设置页 URL 里的 parentid</div>
       </div>
       <div className="field">
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
