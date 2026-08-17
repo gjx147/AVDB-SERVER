@@ -53,7 +53,7 @@ export function Favorites() {
   return (
     <div className="page">
       <PageHead eyebrow={`Favorites · ${tasks?.length ?? 0} 部`} title={<>收<em>藏</em></>}
-        sub="你标记为收藏的作品。可创建分组分类管理。">
+        sub="被你点过心的珍藏，随时翻出来温存。">
         <button className="btn btn--ghost btn--sm" onClick={() => setAddingCol(!addingCol)}>＋ 新建分组</button>
       </PageHead>
 

@@ -168,7 +168,7 @@ export function Library() {
   return (
     <div className="page">
       <PageHead eyebrow={`Library · ${tasks?.length ?? 0} 部`} title={<>影片<em>库</em></>}
-        sub="按画廊式海报墙浏览全部藏品。支持按番号、演员、标签筛选与批量管理。">
+        sub="把每一张让你心动的脸，收进你的深夜画廊。">
       </PageHead>
 
       <div className="gallery-toolbar">
@@ -240,7 +240,7 @@ export function Library() {
                 {t.is_favorite ? <span className="chip chip-rose">收藏</span> : null}
               </div>
               <div style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: 'var(--t-faint)' }}>
-                {t.rating ? `★ ${t.rating}` : ''}
+                {t.rating ? `♥ ${t.rating}` : ''}
               </div>
             </div>
           ))}

@@ -176,7 +176,7 @@ export function Rankings() {
   return (
     <div className="page">
       <PageHead eyebrow="Rankings" title={<>排<em>行榜</em></>}
-        sub="每日、每周、每月的热门作品排行。系统后台自动提取元数据和海报。">
+        sub="今夜最热的她们，已经按心动值排好了队。">
         <button className="btn btn--ghost btn--sm" onClick={crawl}><Icon.refresh />刷新排行</button>
       </PageHead>
 
@@ -271,7 +271,7 @@ export function Rankings() {
                   )}
                 </div>
                 <div style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: 'var(--t-faint)' }}>
-                  {t.rating ? `★ ${t.rating}` : ''}{t._views > 0 ? ` · ${t._views.toLocaleString()}` : ''}
+                  {t.rating ? `♥ ${t.rating}` : ''}{t._views > 0 ? ` · ${t._views.toLocaleString()}` : ''}
                 </div>
               </div>
             )

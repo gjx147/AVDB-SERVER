@@ -78,7 +78,7 @@ export function Actors() {
   return (
     <div className="page">
       <PageHead eyebrow={`Actors · ${actors?.length ?? 0} 位`} title={<>演员<em>库</em></>}
-        sub="按演员浏览作品集合，支持搜索与通过详情页 URL 添加。">
+        sub="从心动的那张脸开始，补齐她的全部作品。">
         <button className="btn btn--gold" onClick={() => setAdding(!adding)}><Icon.plus />粘贴演员 URL</button>
       </PageHead>
 

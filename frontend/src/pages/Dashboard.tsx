@@ -32,7 +32,7 @@ export function Dashboard() {
   return (
     <div className="page">
       <PageHead eyebrow="Overview" title={<>仪表<em>盘</em></>}
-        sub="影片库整体概览：采集进度、收藏趋势与近期完成的作品。">
+        sub="你的私人藏品厅——今夜，也别急着入睡。">
         <button className="btn btn--ghost btn--sm" onClick={() => location.reload()}><Icon.refresh />刷新</button>
       </PageHead>
 

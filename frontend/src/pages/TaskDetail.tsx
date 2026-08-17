@@ -435,7 +435,7 @@ export function TaskDetail() {
                   style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'right center', borderRadius: 'var(--r-md)' }}
                   onError={(e) => { if (sRemote && e.currentTarget.src !== sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>
-                {s.rating && <div style={{ fontSize: 10, color: 'var(--gold)' }}>★ {s.rating}</div>}
+                {s.rating && <div style={{ fontSize: 10, color: 'var(--gold)' }}>♥ {s.rating}</div>}
               </div>
               )
             })}

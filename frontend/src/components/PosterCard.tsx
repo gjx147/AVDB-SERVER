@@ -106,7 +106,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           <div className="poster-meta">
             {task.release_date && <span>{task.release_date.slice(0, 4)}</span>}
             {task.release_date && <span className="sep">·</span>}
-            {task.rating && <span className="poster-score">★ {task.rating}</span>}
+            {task.rating && <span className="poster-score">♥ {task.rating}</span>}
           </div>
         </div>
       </div>
