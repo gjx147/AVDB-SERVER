@@ -17,11 +17,12 @@
   --line-strong: rgba(255,180,200,.22);
 
   /* 鐜孩涓昏壊锛堢化绮夋洿鑹筹級 */
-  --gold: #ff7a9c;
-  --gold-bright: #ff93b1;
-  --gold-deep: #f43f6e;
-  --gold-wash: rgba(255,122,156,.12);
-  --gold-glow: rgba(255,122,156,.28);
+  --gold: #ff6f9c;
+  --gold-bright: #ffb0c8;
+  --gold-deep: #ff5c8a;
+  --gold-wash: rgba(255,111,156,.12);
+  --gold-glow: rgba(255,111,156,.30);
+  --peach: #ff9a8b;
 
   /* 璇箟鑹诧紙鏆楀簳鎻愪寒锛?*/
   --rose: #e0698a;
@@ -71,9 +72,9 @@ body{
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 42% at 18% 0%, rgba(244,63,110,.14), transparent 70%),
-    radial-gradient(52% 62% at 100% 100%, rgba(122,44,84,.16), transparent 62%),
-    radial-gradient(40% 40% at 55% 45%, rgba(255,180,84,.045), transparent 70%),
+    radial-gradient(60% 42% at 18% 0%, rgba(255,111,156,.16), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(150,50,95,.16), transparent 62%),
+    radial-gradient(40% 40% at 55% 45%, rgba(255,154,139,.05), transparent 70%),
     var(--bg-page);
 }
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -489,8 +490,8 @@ img{display:block;max-width:100%}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .btn--ghost{background:rgba(48,32,39,.6);backdrop-filter:blur(8px)}
 .btn--ghost:hover{box-shadow:0 2px 14px rgba(244,63,110,.22)}
-.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold));border-color:transparent}
-.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(244,63,110,.38);transform:translateY(-1px)}
+.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,92,138,.42);transform:translateY(-1px)}
 .btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
 
 /* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
@@ -646,3 +647,101 @@ img{display:block;max-width:100%}
 .login-error{margin-bottom:16px;padding:10px 14px;border-radius:var(--r-sm);background:rgba(192,68,58,.08);border:1px solid rgba(192,68,58,.25);color:var(--red);font-size:12px;text-align:center}
 .nav-item{transition:background .18s ease,color .18s ease;border-radius:8px;margin:1px 8px}
 .nav-item:hover{background:rgba(255,180,200,.06)}
+
+/* ════════ 桃夭特效（娇艳桃粉 + 华丽互动） ════════ */
+
+/* 渐变流动边框：海报卡/统计卡 hover 触发 conic 旋转光环 */
+.poster-frame,.stat{position:relative}
+.poster-frame::before,.stat::before{
+  content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
+  background:conic-gradient(from var(--gb-angle,0deg),var(--gold-deep),var(--gold-bright),var(--peach),var(--gold-deep));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  opacity:0;transition:opacity .35s;
+  animation:gbSpin 3s linear infinite paused;
+}
+.poster:hover .poster-frame::before,.stat:hover::before{opacity:1;animation-play-state:running}
+@keyframes gbSpin{to{--gb-angle:360deg}}
+@property --gb-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+
+/* 呼吸光晕：主按钮 2.4s 循环外发光 */
+@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,92,138,.28)}50%{box-shadow:0 6px 30px rgba(255,92,138,.55)}}
+.btn--gold{animation:goldPulse 2.4s ease-in-out infinite}
+.btn--gold:hover{animation:none}
+
+/* 画廊入场升级：scale+blur+微旋 */
+@keyframes posterIn{from{opacity:0;transform:translateY(18px) scale(.94) rotate(-1.2deg);filter:blur(8px)}to{opacity:1;transform:translateY(0) scale(1) rotate(0);filter:blur(0)}}
+
+/* 标题周期性柔光扫过（极浅） */
+.page-title,.card-title{position:relative;overflow:hidden}
+.page-title::before,.card-title::before{
+  content:"";position:absolute;top:0;bottom:0;width:38%;left:-45%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,176,200,.12),transparent);
+  animation:titleSheen 6s ease-in-out infinite;
+}
+@keyframes titleSheen{0%,60%{left:-45%}90%,100%{left:120%}}
+
+/* 分段控件激活项底部金线滑动 */
+.seg button{position:relative}
+.seg button::after{content:"";position:absolute;left:50%;bottom:2px;height:2px;width:0;background:var(--gold);border-radius:2px;transform:translateX(-50%);transition:width .25s cubic-bezier(.23,1,.32,1)}
+.seg button.on::after{width:60%}
+
+/* Toast 弹簧入场（保留进度条） */
+.toast{transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .3s}
+
+/* 输入聚焦底部金线展开 */
+.input,.textarea,.select-full{position:relative;background-image:linear-gradient(var(--gold),var(--gold));background-size:0% 2px;background-repeat:no-repeat;background-position:0 100%;transition:border-color .2s,box-shadow .2s,background-size .3s}
+.input:focus,.textarea:focus,.select-full:focus{background-size:100% 2px}
+
+/* 最优磁力框竖条：桃粉→蜜桃橘渐变 */
+.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,92,138,.16),rgba(255,154,139,.06)),var(--bg-page)}
+
+/* 排行榜前三名 mini 皇冠 */
+.gallery .poster:nth-child(-n+3) .poster-code::before,.card .row-item:nth-child(-n+3) .row-code::before{content:"♛ ";}
+
+/* 演员头像桃粉描边亮线 */
+.actor-photo{outline:1px solid rgba(255,111,156,0);outline-offset:2px;transition:outline-color .3s,box-shadow .3s}
+.actor:hover .actor-photo{outline-color:rgba(255,111,156,.55)}
+
+/* 登录卡背后漂移光斑 */
+.login-card{position:relative}
+.login-card::before,.login-card::after{
+  content:"";position:absolute;width:180px;height:180px;border-radius:50%;pointer-events:none;z-index:-1;
+  filter:blur(46px);
+}
+.login-card::before{background:rgba(255,111,156,.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
+.login-card::after{background:rgba(255,154,139,.16);bottom:-60px;right:-50px;animation:blobDrift2 14s ease-in-out infinite alternate}
+@keyframes blobDrift1{from{transform:translate(0,0)}to{transform:translate(36px,22px)}}
+@keyframes blobDrift2{from{transform:translate(0,0)}to{transform:translate(-30px,-26px)}}
+
+/* 鼠标光晕容器（JS 注入的 aura 元素样式） */
+.aura{position:fixed;width:340px;height:340px;border-radius:50%;pointer-events:none;z-index:1;
+  background:radial-gradient(circle,rgba(255,111,156,.10),transparent 65%);
+  transform:translate(-50%,-50%);will-change:transform}
+
+/* 涟漪 */
+.ripple{position:absolute;border-radius:50%;background:rgba(255,176,200,.35);transform:scale(0);pointer-events:none;
+  animation:ripple .55s ease-out forwards;z-index:3}
+@keyframes ripple{to{transform:scale(2.6);opacity:0}}
+
+/* 红心爆击小点 */
+.burst-dot{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--gold);pointer-events:none;z-index:5;
+  animation:burstFly .6s cubic-bezier(.23,1,.32,1) forwards}
+@keyframes burstFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--bx),var(--by)) scale(.2);opacity:0}}
+
+/* 卡片光斑跟随（JS 写 --mx/--my） */
+.spotlight{position:relative}
+.spotlight::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(180px circle at var(--mx,50%) var(--my,50%),rgba(255,176,200,.10),transparent 70%);
+  opacity:0;transition:opacity .3s}
+.spotlight:hover::after{opacity:1}
+
+/* 3D 倾斜时的平滑过渡（JS 控制角度，CSS 管回弹） */
+.tilt{transform-style:preserve-3d;transition:transform .18s ease-out;will-change:transform}
+
+/* 减动效整体关闭 */
+@media (prefers-reduced-motion:reduce){
+  .poster-frame::before,.stat::before,.page-title::before,.card-title::before,
+  .btn--gold,.login-card::before,.login-card::after,.login-mark{animation:none!important}
+  .aura{display:none}
+}
