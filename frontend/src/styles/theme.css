@@ -6,11 +6,12 @@
 
 :root{
   /* 鑹叉澘锛氱化鏆紙娣卞閰掔孩 + 鐜孩棣欐閲戯級 */
-  --bg-ink: #120a10;
-  --bg-page: #1a0f16;
-  --bg-surface: #24141d;
-  --bg-raised: #2e1a26;
-  --bg-overlay: rgba(36,20,29,.82);
+  --bg-ink: #0d070c;
+  --bg-page: #150b12;
+  --bg-surface: #1d1017;
+  --bg-raised: #26141f;
+  --bg-overlay: rgba(29,16,23,.82);
+  --skin: #ffd9c2;
 
   --line-hair: rgba(255,180,200,.08);
   --line-soft: rgba(255,180,200,.13);
@@ -69,6 +70,17 @@ body{
   background:var(--bg-ink);
   -webkit-font-smoothing:antialiased;
 }
+/* 烛光呼吸 + 漂移：一层暖肤光在房里缓缓摇曳 */
+body::after{
+  content:"";position:fixed;inset:-8%;z-index:-1;pointer-events:none;
+  background:radial-gradient(46% 38% at 32% 24%, rgba(255,217,194,.05), transparent 70%);
+  animation:candleDrift 22s ease-in-out infinite alternate, candleBreath 6s ease-in-out infinite;
+}
+@keyframes candleDrift{from{transform:translate(0,0)}to{transform:translate(48px,30px)}}
+@keyframes candleBreath{0%,100%{opacity:.65}50%{opacity:1}}
+/* 暗角：视线聚向中央 */
+.app::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.30) 100%)}
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
@@ -430,7 +442,7 @@ img{display:block;max-width:100%}
 @media(min-width:769px){.detail-title{font-size:32px}.detail-title::after{content:"";display:block;width:40px;height:3px;margin-top:12px;background:var(--gold);border-radius:2px}}
 
 /* 鏋佺畝姣涚幓鐠冩晥鏋?*/
-.detail-bg img{filter:blur(4px) brightness(.88) saturate(1.05);transform:scale(1.03)}
+.detail-bg img{filter:blur(4px) sepia(.22) saturate(1.35) brightness(.8);transform:scale(1.03)}
 .detail-bg::after{background:linear-gradient(180deg,rgba(23,16,20,.48) 0%,rgba(23,16,20,.78) 100%)}
 .detail-bg{top:-2%;left:-2%;right:-2%;bottom:-2%}
 .detail-bg img{width:104%;height:104%}
@@ -744,4 +756,46 @@ img{display:block;max-width:100%}
   .poster-frame::before,.stat::before,.page-title::before,.card-title::before,
   .btn--gold,.login-card::before,.login-card::after,.login-mark{animation:none!important}
   .aura{display:none}
+}
+
+/* ════════ 烛房氛围（更诱惑 · 放开版） ════════ */
+
+/* 标题 em / 最优磁力条：桃粉⇄肤色 8s 呼吸 */
+@keyframes skinBreath{0%,100%{color:var(--gold)}50%{color:var(--skin)}}
+.page-title em{animation:skinBreath 8s ease-in-out infinite}
+.magnet-box--best{border-left-color:var(--gold);animation:bestBreath 8s ease-in-out infinite}
+@keyframes bestBreath{0%,100%{border-left-color:var(--gold-deep)}50%{border-left-color:var(--skin)}}
+
+/* 演员名 hover「发烫」 */
+.actor-name{transition:color .25s,transform .25s}
+.actor:hover .actor-name{color:var(--skin);transform:translateY(-1px)}
+
+/* 海报 hover 凑近 + 体温内光 */
+.poster:hover .poster-frame img{transform:scale(1.12)}
+.poster:hover .poster-frame{box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,111,156,.35)}
+
+/* 封面加载「掀纱」：更慢更撩（0.9s + 过冲） */
+@keyframes focusIn{0%{opacity:0;filter:blur(10px);transform:scale(1.06)}70%{opacity:1;filter:blur(0);transform:scale(.995)}100%{transform:scale(1)}}
+.poster-frame img.loaded,.recent-thumb,.row-thumb{animation-duration:.9s;animation-timing-function:cubic-bezier(.23,1,.32,1)}
+
+/* Toast 眨眼进场 */
+.toast{transform:translateX(120%) rotate(2deg)}
+.toast.show{transform:translateX(0) rotate(0)}
+
+/* 鼠标光晕双色呼吸（桃粉⇄肤金） */
+@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,88,150,.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
+.aura{animation:auraShift 7s ease-in-out infinite}
+
+/* 红心爆击：唇印元素 */
+.burst-kiss{position:absolute;font-size:13px;pointer-events:none;z-index:5;line-height:1;
+  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,88,150,.6))}
+
+/* 顶部心跳光带（两快一慢） */
+.pulse-band{position:fixed;top:0;left:0;right:0;height:2px;z-index:250;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--gold),var(--skin),var(--gold),transparent);
+  opacity:0;animation:heartLine 1.8s ease-in-out infinite}
+@keyframes heartLine{0%,100%{opacity:0}8%{opacity:.55}16%{opacity:.12}24%{opacity:.6}42%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){
+  body::after,.pulse-band,.page-title em,.magnet-box--best,.aura{animation:none!important}
 }

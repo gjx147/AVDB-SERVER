@@ -20,6 +20,15 @@ export function initAmbientEffects() {
   initSpotlight()
   initTilt()
   initHeartBurst()
+  initPulseBand()
+}
+
+/* 顶部心跳光带（纯注入，动画在 CSS） */
+function initPulseBand() {
+  const band = document.createElement('div')
+  band.className = 'pulse-band'
+  band.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(band)
 }
 
 /* 1. 鼠标追随光晕 */
@@ -31,8 +40,8 @@ function initAura() {
   let tx = window.innerWidth / 2, ty = window.innerHeight / 2
   let x = tx, y = ty, raf = 0
   const loop = () => {
-    x += (tx - x) * 0.12
-    y += (ty - y) * 0.12
+    x += (tx - x) * 0.08
+    y += (ty - y) * 0.08
     aura.style.transform = `translate(${x - 170}px, ${y - 170}px)`
     raf = requestAnimationFrame(loop)
   }
@@ -124,13 +133,15 @@ function initHeartBurst() {
     const cy = e.clientY - rect.top
     const prevPos = getComputedStyle(btn).position
     if (prevPos === 'static') btn.style.position = 'relative'
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 12; i++) {
+      const kiss = i % 3 === 1  // 每三瓣混入一枚唇印
       const dot = document.createElement('span')
-      dot.className = 'burst-dot'
-      const angle = (Math.PI / 3) * i - Math.PI / 2
-      const dist = 26 + Math.random() * 14
+      dot.className = kiss ? 'burst-kiss' : 'burst-dot'
+      if (kiss) dot.textContent = '💋'
+      const angle = (Math.PI / 6) * i - Math.PI / 2
+      const dist = 24 + Math.random() * 20
       dot.style.setProperty('--bx', `${Math.cos(angle) * dist}px`)
-      dot.style.setProperty('--by', `${Math.sin(angle) * dist - 8}px`)
+      dot.style.setProperty('--by', `${Math.sin(angle) * dist - 10}px`)
       dot.style.left = `${cx - 3}px`
       dot.style.top = `${cy - 3}px`
       btn.appendChild(dot)

@@ -137,7 +137,7 @@ export function Rankings() {
   }, [inLib])
 
   const crawl = async () => {
-    try { await api.rankings.crawl(tab); toastOk(`已开始刷新${TABS.find(t => t.key === tab)?.label || ''}排行榜`) } catch (e) { toastErr(String((e as Error).message)) }
+    try { await api.rankings.crawl(tab); toastOk('今晚的新面孔正在赶来') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
   const openRank = (r: Ranking) => {

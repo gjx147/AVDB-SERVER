@@ -68,7 +68,7 @@ export default function Login() {
             />
           </div>
           <button type="submit" className="btn btn--gold" disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '11px 0' }}>
-            {loading ? '登录中…' : '登录'}
+            {loading ? '正在开门…' : '深夜入口'}
           </button>
         </form>
       </div>

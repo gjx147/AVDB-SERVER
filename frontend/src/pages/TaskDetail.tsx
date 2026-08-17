@@ -121,12 +121,12 @@ export function TaskDetail() {
   const fav = async () => {
     try {
       task.is_favorite ? await api.tasks.unfavorite(task.id) : await api.tasks.favorite(task.id)
-      toastOk(task.is_favorite ? '已取消收藏' : '已收藏')
+      toastOk(task.is_favorite ? '已取消收藏' : '心动了，收进私藏')
       load()
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const extract = async () => {
-    try { await api.tasks.extract(task.id); toastOk('已开始提取磁力') } catch (e) { toastErr(String((e as Error).message)) }
+    try { await api.tasks.extract(task.id); toastOk('正在把她带回家…') } catch (e) { toastErr(String((e as Error).message)) }
   }
   const copyMagnet = (m: string) => {
     navigator.clipboard.writeText(m).then(() => toastOk('磁力已复制')).catch(() => toastErr('复制失败'))
@@ -143,7 +143,7 @@ export function TaskDetail() {
   const download = async (magnet: string) => {
     try {
       await api.downloaders.download(magnet, dlDownloader || undefined, undefined, task.id)
-      toastOk(`已推送${dlDownloader ? '到 ' + dlDownloader : ''}`)
+      toastOk(`已占为己有${dlDownloader ? ' · ' + dlDownloader : ''}`)
       load()  // 刷新下载状态
     } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -204,9 +204,9 @@ export function TaskDetail() {
             <button className={`btn ${task.is_favorite ? 'btn--ghost' : 'btn--gold'}`} onClick={fav}>
               <Icon.heart />{task.is_favorite ? '取消收藏' : '收藏'}
             </button>
-            <button className="btn btn--ghost" onClick={extract}><Icon.link />提取磁力</button>
+            <button className="btn btn--ghost" onClick={extract}><Icon.link />把她带回家</button>
             <button className="btn btn--ghost" onClick={() => fetchImages()} disabled={downloading}>
-              <Icon.download />{downloading ? '下载中…' : (hasLocal ? '重新下载图片' : '重新下载高清图片')}
+              <Icon.download />{downloading ? '正在看清…' : '看得更清楚一点'}
             </button>
             {task.best_magnet && <button className="btn btn--ghost" onClick={() => copyMagnet(task.best_magnet!)}><Icon.copy />复制最佳</button>}
             <button className="btn btn--danger" onClick={remove} title="删除该任务（含关联数据，不可恢复）">删除</button>
@@ -408,7 +408,7 @@ export function TaskDetail() {
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                       <button className="btn btn--ghost btn--sm" onClick={() => copyMagnet(m.link)}><Icon.copy />复制</button>
-                      {dlOpen && <button className="btn btn--gold btn--sm" onClick={() => download(m.link)}>推送</button>}
+                      {dlOpen && <button className="btn btn--gold btn--sm" onClick={() => download(m.link)}>占为己有</button>}
                     </div>
                   </div>
                 ))}
@@ -421,7 +421,7 @@ export function TaskDetail() {
       {/* F15: 相似影片推荐 */}
       {similar.length > 0 && (
         <div style={{ position: 'relative', zIndex: 1, marginTop: 28 }}>
-          <div className="dm-label" style={{ marginBottom: 12 }}>相似影片</div>
+          <div className="dm-label" style={{ marginBottom: 12 }}>同样让你心动</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 14 }}>
             {similar.map((s) => {
               // 与详情页封面统一：poster_url 优先（横版裁剪主角），兜底 thumbnail_urls[0]

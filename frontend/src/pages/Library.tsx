@@ -216,7 +216,7 @@ export function Library() {
 
       {error ? <ErrorEmpty message={error} onRetry={() => { setPage(0); load(0) }} /> :
        tasks === null ? <SkeletonGallery /> : tasks.length === 0 ? (
-        <Empty icon="○" title="暂无任务" sub="请先到列表源执行扫描，或按番号创建任务。" />
+        <Empty icon="♡" title="还空着呢" sub="去把她们带回来——先扫描列表源，或按番号创建任务。" />
       ) : view === 'grid' ? (
         <div className="gallery">
           {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)} />)}
