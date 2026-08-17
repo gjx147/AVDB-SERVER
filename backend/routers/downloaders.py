@@ -182,24 +182,6 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     db.commit()
     db.refresh(dl)
 
-    # 推送成功 → 触发 CMS 后处理（延迟整理 + 生成 strm）
-    # 异常隔离：CMS 钩子失败绝不影响 push 的成功状态
-    if result["ok"]:
-        try:
-            from services.cms_sync import schedule_sync
-            schedule_sync(req.magnet, task.video_code if task else None)
-        except Exception as e:
-            logger.warning(f"CMS 钩子调度失败（不影响推送）: {e}")
-
-    # 推送成功 → 触发 CD2 自动迁移（MoveFile 到媒体库女优子目录 + 通知 CMS）
-    # 异常隔离：CD2 迁移钩子失败绝不影响 push 的成功状态
-    if result["ok"]:
-        try:
-            from services.cd2_organize import schedule_organize
-            schedule_organize(req.task_id, task.video_code if task else None)
-        except Exception as e:
-            logger.warning(f"CD2 迁移钩子调度失败（不影响推送）: {e}")
-
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
@@ -230,9 +212,7 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     downloader = body.get("downloader", "")
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
-              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password",
-              "cms_url", "cms_token",
-              "cd2_organize_source_folder", "cd2_organize_target_folder"]:
+              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
         result = await asyncio.to_thread(_test_qbittorrent_sync, config)
@@ -257,24 +237,12 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         except Exception as e:
             logger.error(f"测试连接 [clouddrive]: 异常 {e}")
             return {"ok": False, "message": f"连接失败: {e}"}
-    elif downloader == "cms":
-        # CMS 是后处理钩子，复用 auto_organize（幂等可安全测试）
-        from services.cms_sync import test_connection as _cms_test
-        result = await _cms_test(config["cms_url"], config["cms_token"])
-        logger.info(f"测试连接 [cms]: ok={result.get('ok')} msg={result.get('message','')}")
-        return result
-    elif downloader == "cd2_organize":
-        # CD2 迁移测试：列源文件夹验证 CD2 连接 + 路径配置
-        from services.cd2_organize import test_organize
-        result = await test_organize(config)
-        logger.info(f"测试连接 [cd2_organize]: ok={result.get('ok')} msg={result.get('message','')}")
-        return result
     return {"ok": False, "message": f"未知下载器: {downloader}"}
 
 
 @router.get("/list-cd2-folder")
 async def list_cd2_folder(path: str, db: DbSession, _user: CurrentUser):
-    """调试端点：列出 CD2 任意路径的目录内容，用于排查 cd2_organize 路径问题。
+    """调试端点：列出 CD2 任意路径的目录内容（排查 CloudDrive2 挂载路径问题）。
 
     Query 参数 path：要列的 CD2 路径（如 / 或 /115open）
     """

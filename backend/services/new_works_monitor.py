@@ -414,13 +414,6 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
             db.add(dl)
             db.commit()
             logger.info(f"[新作监控] 自动推送 {video_code} 成功")
-
-            # 触发 CD2 迁移（push_magnet 内置钩子是 HTTP 路径才触发，这里手动调）
-            try:
-                from services.cd2_organize import schedule_organize
-                schedule_organize(task_id, video_code)
-            except Exception as e:
-                logger.warning(f"[新作监控] CD2 迁移钩子失败（不影响推送）: {e}")
         else:
             logger.warning(f"[新作监控] 自动推送 {video_code} 失败: {result.get('message')}")
     except Exception as e:

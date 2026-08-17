@@ -236,16 +236,6 @@ export interface Settings {
   qbittorrent_password: string
   qbittorrent_save_path: string
   default_downloader: string
-  // CMS 后处理钩子（推送成功后延迟触发整理 + 生成 strm）
-  cms_enabled: boolean
-  cms_url: string
-  cms_token: string
-  cms_delay_seconds: number
-  // CD2 自动迁移（推送成功后 MoveFile 到媒体库女优子目录 + 通知 CMS）
-  cd2_organize_enabled: boolean
-  cd2_organize_source_folder: string
-  cd2_organize_target_folder: string
-  cd2_organize_delay_seconds: number
   // Emby 媒体库（订阅巡检时比对，避免重复入库）
   emby_url: string
   emby_token: string
