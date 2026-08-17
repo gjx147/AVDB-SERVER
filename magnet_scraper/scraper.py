@@ -1006,18 +1006,20 @@ class MagnetScraper:
         return None
 
     def _extract_poster(self) -> Optional[str]:
-        """提取海报大图 URL（真封面，/covers/ 路径）。
+        """提取海报大图 URL。
 
-        JavDB 封面 URL 是确定性规则：/v/{hash} ↔ c0.jdbstatic.com/covers/{hash[:2].lower()}/{hash}.jpg
-        DOM 提取只接受含 /covers/ 的结果；全部落空时直接按规则推导，
-        绝不把 samples 预览截图当海报（此前 gallery-1 兜底导致海报=场景截图）。
+        JavDB 详情页 gallery 结构：
+        - #gallery-1: 缩略图（竖图）
+        - #gallery-2: 缩略图（竖图）
+        - #gallery-3: 正式封面（横图）← 这才是海报
+        - .boxcover img: 页面顶部的封面图
         """
         # 方法1: JavDB gallery-3 是正式封面（横版大图）
         try:
             g3 = self.page.locator("#gallery-3 img").first
             if g3.count() > 0:
                 src = g3.get_attribute("src") or g3.get_attribute("data-src") or g3.get_attribute("data-original")
-                if src and "/covers/" in (src or ""):
+                if src and src.startswith("http"):
                     return src
         except Exception:
             pass
@@ -1027,28 +1029,28 @@ class MagnetScraper:
             img = self.page.locator(".boxcover img, .cover-container img, .video-cover img, img.boxcover").first
             if img.count() > 0:
                 src = img.get_attribute("src") or img.get_attribute("data-src")
-                if src and "/covers/" in (src or ""):
+                if src and src.startswith("http"):
                     return src
         except Exception:
             pass
 
-        # 方法3: 任意 jdbstatic 图里找 /covers/
+        # 方法3: 从 cover URL 模式匹配
         try:
             imgs = self.page.locator("img[src*='jdbstatic']").all()
             for img in imgs:
                 src = img.get_attribute("src") or img.get_attribute("data-src")
-                if src and "/covers/" in src:
+                if src and "cover" in src.lower() and src.startswith("http"):
                     return src
         except Exception:
             pass
 
-        # 方法4: 按确定性规则从当前详情页 URL 推导封面
-        # /v/ZNzgXJ → https://c0.jdbstatic.com/covers/zn/ZNzgXJ.jpg
+        # 方法4: fallback 到 gallery-1
         try:
-            m = re.search(r"/v/([A-Za-z0-9]+)", self.page.url or "")
-            if m:
-                h = m.group(1)
-                return f"https://c0.jdbstatic.com/covers/{h[:2].lower()}/{h}.jpg"
+            g1 = self.page.locator("#gallery-1 img").first
+            if g1.count() > 0:
+                src = g1.get_attribute("src") or g1.get_attribute("data-src")
+                if src and src.startswith("http"):
+                    return src
         except Exception:
             pass
 

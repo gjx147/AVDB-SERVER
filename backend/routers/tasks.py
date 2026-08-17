@@ -112,35 +112,7 @@ def list_favorites_tasks(db: DbSession, _user: CurrentUser, skip: int = Query(0,
 def get_task(task_id: int, db: DbSession, _user: CurrentUser):
     task = db.get(Task, task_id)
     if not task: raise HTTPException(status_code=404, detail="任务不存在")
-    _normalize_poster(task, db)
     return task
-
-
-def _normalize_poster(task, db) -> None:
-    """懒修复错误海报：poster_url 是 samples 预览截图时，按 /v/{hash} ↔ covers 规则改回真封面，
-    并删除本地按旧 URL 缓存的海报文件（否则本地文件继续覆盖显示）。"""
-    import re as _re
-    pu = task.poster_url or ""
-    if "/samples/" not in pu or "/covers/" in pu:
-        return
-    m = _re.search(r"/v/([A-Za-z0-9]+)", task.url or "")
-    if not m:
-        return
-    h = m.group(1)
-    task.poster_url = f"https://c0.jdbstatic.com/covers/{h[:2].lower()}/{h}.jpg"
-    db.commit()
-    # 删本地坏海报（images 目录按 task_id 分目录）
-    try:
-        from config import get_settings
-        from pathlib import Path
-        d = Path(get_settings().IMAGES_DIR) / str(task.id)
-        if d.exists():
-            for name in ("poster.jpg", "cover.jpg", "gallery-1.jpg"):
-                p = d / name
-                if p.exists():
-                    p.unlink()
-    except Exception:
-        pass
 
 
 @router.get("/{task_id}/cast")

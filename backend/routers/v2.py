@@ -74,10 +74,6 @@ def list_tasks_v2(
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     tasks = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
-    # 懒修复错误海报（samples 截图 → 真封面），浏览列表时批量自愈
-    from routers.tasks import _normalize_poster
-    for t in tasks:
-        _normalize_poster(t, db)
     return {"tasks": tasks, "total": total}
 
 
