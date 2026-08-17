@@ -131,6 +131,15 @@ export function TaskDetail() {
   const copyMagnet = (m: string) => {
     navigator.clipboard.writeText(m).then(() => toastOk('磁力已复制')).catch(() => toastErr('复制失败'))
   }
+  const remove = async () => {
+    if (!task) return
+    if (!confirm(`确定删除 ${task.video_code || '该任务'}？关联数据一并清理，不可恢复。`)) return
+    try {
+      await api.tasks.delete(task.id)
+      toastOk('已删除')
+      nav('/library')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
   const download = async (magnet: string) => {
     try {
       await api.downloaders.download(magnet, dlDownloader || undefined, undefined, task.id)
@@ -200,6 +209,7 @@ export function TaskDetail() {
               <Icon.download />{downloading ? '下载中…' : (hasLocal ? '重新下载图片' : '重新下载高清图片')}
             </button>
             {task.best_magnet && <button className="btn btn--ghost" onClick={() => copyMagnet(task.best_magnet!)}><Icon.copy />复制最佳</button>}
+            <button className="btn btn--danger" onClick={remove} title="删除该任务（含关联数据，不可恢复）">删除</button>
           </div>
           {downloading && !hasLocal && (
             <div style={{ fontSize: 12, color: 'var(--gold)', marginBottom: 20, padding: '8px 12px', background: 'var(--gold-wash)', borderRadius: 'var(--r-sm)' }}>

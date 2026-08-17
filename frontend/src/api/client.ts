@@ -95,6 +95,9 @@ export const api = {
         return Array.isArray(d) ? d : (d as { items?: Task[] }).items || []
       }),
 
+    delete: (taskId: number) =>
+      http.delete<ApiOk>(`/api/tasks/${taskId}`).then((r) => r.data),
+
     batchDelete: (task_ids: number[]) =>
       http.post<ApiOk>('/api/tasks/batch/delete', { task_ids }).then((r) => r.data),
 
