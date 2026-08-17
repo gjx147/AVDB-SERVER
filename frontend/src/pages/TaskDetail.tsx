@@ -450,7 +450,7 @@ const thumbNavBtn = (side: 'left' | 'right'): React.CSSProperties => ({
   position: 'absolute', top: '50%', [side]: 8,
   transform: 'translateY(-50%)',
   width: 36, height: 36, borderRadius: '50%',
-  border: 'none', background: 'rgba(20,17,16,.6)', color: '#fff',
+  border: 'none', background: 'rgba(46,22,32,.62)', color: '#fff',
   fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
   backdropFilter: 'blur(4px)',
 })

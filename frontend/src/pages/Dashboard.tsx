@@ -78,7 +78,7 @@ export function Dashboard() {
             {monthly.length === 0 ? <Empty title="暂无数据" /> : (
               <div className="bar-chart">
                 {monthly.slice().reverse().map((m) => (
-                  <div className="bar-col" key={m.month} title={`${m.month}: ${m.count} 部`}>
+                  <div className="bar-col" key={m.month} data-num={`${m.month} · ${m.count}部`} title={`${m.month}: ${m.count} 部`}>
                     <div className="bar" style={{ height: `${(m.count / maxCount) * 100}%` }} />
                     <div className="bar-x">{m.month.slice(5)}</div>
                   </div>

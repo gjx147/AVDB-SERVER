@@ -166,7 +166,7 @@ export function Library() {
   }
 
   return (
-    <div className="page">
+    <div className="page fade-bottom">
       <PageHead eyebrow={`Library · ${tasks?.length ?? 0} 部`} title={<>影片<em>库</em></>}
         sub="把每一张让你心动的脸，收进你的深夜画廊。">
       </PageHead>

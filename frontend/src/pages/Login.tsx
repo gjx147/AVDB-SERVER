@@ -56,7 +56,8 @@ export default function Login() {
       {wall.length > 0 && (
         <div className="login-wall" aria-hidden="true">
           {wall.map((u, i) => (
-            <img key={i} src={u} alt="" referrerPolicy="no-referrer"
+            <img key={i} src={u} alt="" referrerPolicy="no-referrer" loading="lazy"
+              onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
               style={{ '--d': `${(i % 9) * 1.6}s` } as React.CSSProperties} />
           ))}
         </div>

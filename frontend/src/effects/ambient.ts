@@ -21,6 +21,33 @@ export function initAmbientEffects() {
   initTilt()
   initHeartBurst()
   initPulseBand()
+  initScrollReveal()
+}
+
+/* 滚动显现：视口外的海报暂停入场动画+隐藏，滚到时再播放。
+   首屏直接标记 rv（避免首屏闪烁）；分页/筛选新增的海报由 MutationObserver 追加观察。 */
+function initScrollReveal() {
+  document.documentElement.classList.add('reveal')
+  const io = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (en.isIntersecting) {
+        en.target.classList.add('rv')
+        io.unobserve(en.target)
+      }
+    }
+  }, { rootMargin: '60px', threshold: 0.05 })
+
+  const observeAll = () => {
+    document.querySelectorAll('.poster:not(.rv)').forEach((el) => io.observe(el))
+  }
+  observeAll()
+
+  let timer = 0
+  const mo = new MutationObserver(() => {
+    clearTimeout(timer)
+    timer = window.setTimeout(observeAll, 150)
+  })
+  mo.observe(document.body, { childList: true, subtree: true })
 }
 
 /* 顶部心跳光带（纯注入，动画在 CSS） */
