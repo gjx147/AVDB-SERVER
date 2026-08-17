@@ -12,9 +12,15 @@ export default function Login() {
 
   // 订阅演员作品海报墙（免鉴权接口；失败静默回退纯色背景）
   useEffect(() => {
-    fetch('/api/system/login-wall')
+    fetch('/api/system/login-wall?limit=24')
       .then((r) => (r.ok ? r.json() : { wall: [] }))
-      .then((d) => { if (Array.isArray(d.wall) && d.wall.length) setWall(d.wall.slice(0, 10)) })
+      .then((d) => {
+        if (!Array.isArray(d.wall) || !d.wall.length) return
+        const list = d.wall.slice(0, 24)
+        // 拼接墙需要足够磁贴铺满屏：不足 18 张时循环补齐
+        while (list.length < 18) list.push(...list.slice(0, Math.min(list.length, 18 - list.length)))
+        setWall(list)
+      })
       .catch(() => {})
   }, [])
 
@@ -51,7 +57,7 @@ export default function Login() {
         <div className="login-wall" aria-hidden="true">
           {wall.map((u, i) => (
             <img key={i} src={u} alt="" referrerPolicy="no-referrer"
-              style={{ animationDelay: `${(i * 44 / Math.min(wall.length, 10)).toFixed(1)}s` }} />
+              style={{ animationDelay: `${(i % 12) * 70}ms` }} />
           ))}
         </div>
       )}

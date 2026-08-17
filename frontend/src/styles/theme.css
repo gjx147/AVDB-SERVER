@@ -6,11 +6,11 @@
 
 :root{
   /* 鑹叉澘锛氱化鏆紙娣卞閰掔孩 + 鐜孩棣欐閲戯級 */
-  --bg-ink: #0b0712;
-  --bg-page: #120a1c;
-  --bg-surface: #1a0f26;
-  --bg-raised: #241330;
-  --bg-overlay: rgba(26,15,38,.82);
+  --bg-ink: #1c0d13;
+  --bg-page: #241119;
+  --bg-surface: #2e1621;
+  --bg-raised: #3a1d2a;
+  --bg-overlay: rgba(38,19,28,.82);
   --skin: #ffd9c2;
 
   --line-hair: rgba(255,180,200,.08);
@@ -18,11 +18,11 @@
   --line-strong: rgba(255,180,200,.22);
 
   /* 鐜孩涓昏壊锛堢化绮夋洿鑹筹級 */
-  --gold: #ff5cb8;
-  --gold-bright: #ffa8dd;
-  --gold-deep: #ff2f9e;
-  --gold-wash: rgba(255,92,184,.14);
-  --gold-glow: rgba(255,92,184,.40);
+  --gold: #ff6b9e;
+  --gold-bright: #ffa9c6;
+  --gold-deep: #ff3d7f;
+  --gold-wash: rgba(255,107,158,.14);
+  --gold-glow: rgba(255,107,158,.42);
   --peach: #ff8a72;
 
   /* 璇箟鑹诧紙鏆楀簳鎻愪寒锛?*/
@@ -84,8 +84,8 @@ body::after{
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 42% at 18% 0%, rgba(255,92,184),.18), transparent 70%),
-    radial-gradient(52% 62% at 100% 100%, rgba(128,40,200,.20), transparent 62%),
+    radial-gradient(60% 42% at 18% 0%, rgba(255,107,158,.18), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(210,45,95,.20), transparent 62%),
     radial-gradient(40% 40% at 55% 45%, rgba(255,217,194,.06), transparent 70%),
     var(--bg-page);
 }
@@ -211,7 +211,7 @@ img{display:block;max-width:100%}
 .poster-frame img.loaded{opacity:1}
 .poster:hover .poster-frame img{transform:scale(1.06)}
 .poster-grad-top{position:absolute;top:0;left:0;right:0;height:64px;background:linear-gradient(180deg,rgba(14,12,11,.55),transparent);display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px}
-.poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,92,184),.65),0 1px 3px rgba(0,0,0,.8)}
+.poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,107,158,.65),0 1px 3px rgba(0,0,0,.8)}
 .badge-fav{width:24px;height:24px;border-radius:50%;background:rgba(201,138,138,.85);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
 .badge-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:4px;backdrop-filter:blur(6px);margin-bottom:6px}
 .badge-dl{margin-left:4px;text-transform:none;letter-spacing:0}
@@ -318,7 +318,7 @@ img{display:block;max-width:100%}
 /* 鈹€鈹€ 璇︽儏 鈹€鈹€ */
 /* 鈹€鈹€ 璇︽儏椤?emby 椋庢牸鑳屾櫙灞?鈹€鈹€ */
 .detail-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;overflow:hidden}
-.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(16,10,24,.80)}
+.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(28,13,19,.80)}
 .detail-bg img{width:100%;height:100%;object-fit:cover;filter:blur(50px) brightness(.8) saturate(1.1);transform:scale(1.15)}
 
 /* 绱у噾澶撮儴锛氬乏灏侀潰 + 鍙充俊鎭紝娑堥櫎椤堕儴绌虹櫧 */
@@ -332,7 +332,7 @@ img{display:block;max-width:100%}
 .detail-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;image-rendering:auto}
 .detail-cover-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:12px}
 .detail-info{min-width:0;overflow:hidden}
-.detail-code{font-family:var(--ff-mono);font-size:15px;color:var(--gold);font-weight:600;letter-spacing:.04em;word-break:break-all;text-shadow:0 0 14px rgba(255,92,184),.55)}
+.detail-code{font-family:var(--ff-mono);font-size:15px;color:var(--gold);font-weight:600;letter-spacing:.04em;word-break:break-all;text-shadow:0 0 14px rgba(255,107,158,.55)}
 .detail-title{font-family:var(--ff-serif);font-size:28px;color:var(--t-display);margin:6px 0 16px;line-height:1.25;font-weight:700;overflow-wrap:break-word;word-break:break-word}
 .detail-actions{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
 .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:36px}
@@ -443,7 +443,7 @@ img{display:block;max-width:100%}
 
 /* 鏋佺畝姣涚幓鐠冩晥鏋?*/
 .detail-bg img{filter:blur(4px) sepia(.22) saturate(1.35) brightness(.8);transform:scale(1.03)}
-.detail-bg::after{background:linear-gradient(180deg,rgba(16,10,24,.48) 0%,rgba(16,10,24,.78) 100%)}
+.detail-bg::after{background:linear-gradient(180deg,rgba(28,13,19,.48) 0%,rgba(28,13,19,.78) 100%)}
 .detail-bg{top:-2%;left:-2%;right:-2%;bottom:-2%}
 .detail-bg img{width:104%;height:104%}
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
@@ -455,7 +455,7 @@ img{display:block;max-width:100%}
 /* 鍥剧墖闅愮妯″紡閫傞厤锛堟瘺鐜荤拑鐗堬級*/
 .img-mode-blur .detail-bg img{filter:blur(40px) brightness(.38) saturate(.5)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(16,10,24,.95)}
+.img-mode-hidden .detail-bg::after{background:rgba(28,13,19,.95)}
 
 /* 鐢诲粖浜ら敊鍏ュ満 */
 .poster{animation:posterIn .5s cubic-bezier(.23,1,.32,1) forwards}
@@ -480,7 +480,7 @@ img{display:block;max-width:100%}
 /* 鍥剧墖闅愮妯″紡閫傞厤 emby 鑳屾櫙 */
 .img-mode-blur .detail-bg img{filter:blur(60px) brightness(.3) saturate(.5)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(16,10,24,.95)}
+.img-mode-hidden .detail-bg::after{background:rgba(28,13,19,.95)}
 
 /* 绉诲姩绔眽鍫¤彍鍗?+ 閬僵 */
 .mobile-menu-btn{display:none}
@@ -500,14 +500,14 @@ img{display:block;max-width:100%}
 /* 鎸夐挳锛氭洿灏忓渾瑙?+ 骞界伒鎸夐挳瀹炲簳 + focus 鐜?*/
 .btn{border-radius:8px}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.btn--ghost{background:rgba(36,19,48,.6);backdrop-filter:blur(8px)}
-.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,47,158,.22)}
-.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,47,158,.32)}
-.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,47,158,.42);transform:translateY(-1px)}
+.btn--ghost{background:rgba(46,23,33,.6);backdrop-filter:blur(8px)}
+.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,61,127,.22)}
+.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,61,127,.32)}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,61,127,.42);transform:translateY(-1px)}
 .btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
 
 /* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
-.card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(26,15,38,.78)}
+.card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(38,19,28,.78)}
 .card-title{position:relative;padding-bottom:10px}
 .card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.6}
 
@@ -542,7 +542,7 @@ img{display:block;max-width:100%}
 /* ════════ 绯暮主题：组件翻新 + 动效系统 ════════ */
 
 /* 侧栏毛玻璃 */
-.sidebar{background:rgba(18,10,28,.82);backdrop-filter:blur(16px)}
+.sidebar{background:rgba(30,14,20,.82);backdrop-filter:blur(16px)}
 
 /* 按压回弹（所有可点元素） */
 .btn:active{transform:scale(.97)}
@@ -577,7 +577,7 @@ img{display:block;max-width:100%}
 
 /* 登录字标呼吸辉光 */
 .login-mark{animation:markGlow 2.4s ease-in-out infinite}
-@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,47,158,.25)}50%{text-shadow:0 0 34px rgba(255,47,158,.55)}}
+@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,61,127,.25)}50%{text-shadow:0 0 34px rgba(255,61,127,.55)}}
 
 /* 画廊海报 hover：信息条上滑 + 金粉描边 */
 .poster-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
@@ -586,11 +586,11 @@ img{display:block;max-width:100%}
 .poster:hover .poster-info{transform:translateY(0);opacity:1}
 
 /* 排行榜前三名：番号金色发光 */
-.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,47,158,.5);font-weight:700}
+.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,61,127,.5);font-weight:700}
 
 /* 演员头像玫红光晕 */
-.actor-photo{box-shadow:0 0 0 0 rgba(255,47,158,0);transition:box-shadow .3s,transform .3s}
-.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,47,158,.35)}
+.actor-photo{box-shadow:0 0 0 0 rgba(255,61,127,0);transition:box-shadow .3s,transform .3s}
+.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,61,127,.35)}
 .actor{transition:transform .25s cubic-bezier(.23,1,.32,1)}
 .actor:hover{transform:translateY(-3px)}
 
@@ -598,10 +598,10 @@ img{display:block;max-width:100%}
 ::selection{background:var(--gold-glow);color:var(--t-display)}
 
 /* 详情页最优磁力框：玫红渐变竖条 */
-.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,47,158,.14),rgba(255,47,158,.05)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,61,127,.14),rgba(255,61,127,.05)),var(--bg-page)}
 
 /* 页标题 em 金字发光 */
-.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,47,158,.35)}
+.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,61,127,.35)}
 
 /* 绌虹姸鎬侊細琛嚎瑁呴グ鍥炬爣 */
 .empty .em-icon{font-family:var(--ff-serif);color:var(--gold-wash);opacity:1}
@@ -651,15 +651,18 @@ img{display:block;max-width:100%}
 
 /* 鐧诲綍椤碉細灞呬腑鍗＄墖 + 鍝佺墝瀛楁爣 */
 .login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page);position:relative;overflow:hidden}
-.login-wall{position:absolute;inset:0;z-index:0}
-.login-wall img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  filter:blur(20px) brightness(.42) saturate(1.25) sepia(.08);transform:scale(1.12);
-  opacity:0;animation:wallFade 44s ease-in-out infinite}
+.login-wall{position:absolute;inset:0;z-index:0;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));grid-auto-rows:minmax(170px,1fr);
+  gap:6px;padding:6px;animation:wallBreathe 40s ease-in-out infinite alternate}
+.login-wall img{width:100%;height:100%;object-fit:cover;min-height:150px;
+  filter:blur(4px) brightness(.34) saturate(1.2) sepia(.06);
+  opacity:0;animation:tileIn .9s ease forwards}
 .login-wall::after{content:"";position:absolute;inset:0;
-  background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(11,7,18,.75) 100%),
-             linear-gradient(180deg, rgba(18,10,28,.35), rgba(11,7,18,.55))}
-@keyframes wallFade{0%,4%{opacity:0}10%,16%{opacity:1}22%,100%{opacity:0}}
-.login-card{position:relative;z-index:1;width:380px;background:rgba(26,15,38,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,47,158,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
+  background:radial-gradient(80% 70% at 50% 45%, transparent 28%, rgba(22,9,14,.72) 100%),
+             linear-gradient(180deg, rgba(30,13,20,.30), rgba(22,9,14,.52))}
+@keyframes tileIn{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:scale(1)}}
+@keyframes wallBreathe{from{transform:scale(1)}to{transform:scale(1.05)}}
+.login-card{position:relative;z-index:1;width:380px;background:rgba(38,19,28,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,61,127,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
 .login-brand{text-align:center;margin-bottom:28px}
 .login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
 .login-mark em{color:var(--gold);font-style:normal}
@@ -685,7 +688,7 @@ img{display:block;max-width:100%}
 @property --gb-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
 
 /* 呼吸光晕：主按钮 2.4s 循环外发光 */
-@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,47,158,.28)}50%{box-shadow:0 6px 30px rgba(255,47,158,.55)}}
+@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,61,127,.28)}50%{box-shadow:0 6px 30px rgba(255,61,127,.55)}}
 .btn--gold{animation:goldPulse 2.4s ease-in-out infinite}
 .btn--gold:hover{animation:none}
 
@@ -714,14 +717,14 @@ img{display:block;max-width:100%}
 .input:focus,.textarea:focus,.select-full:focus{background-size:100% 2px}
 
 /* 最优磁力框竖条：桃粉→蜜桃橘渐变 */
-.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,47,158,.16),rgba(255,154,139,.06)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,61,127,.16),rgba(255,154,139,.06)),var(--bg-page)}
 
 /* 排行榜前三名 mini 皇冠 */
 .gallery .poster:nth-child(-n+3) .poster-code::before,.card .row-item:nth-child(-n+3) .row-code::before{content:"♛ ";}
 
 /* 演员头像桃粉描边亮线 */
-.actor-photo{outline:1px solid rgba(255,92,184),0);outline-offset:2px;transition:outline-color .3s,box-shadow .3s}
-.actor:hover .actor-photo{outline-color:rgba(255,92,184),.55)}
+.actor-photo{outline:1px solid rgba(255,107,158,0);outline-offset:2px;transition:outline-color .3s,box-shadow .3s}
+.actor:hover .actor-photo{outline-color:rgba(255,107,158,.55)}
 
 /* 登录卡背后漂移光斑 */
 .login-card{position:relative}
@@ -729,14 +732,14 @@ img{display:block;max-width:100%}
   content:"";position:absolute;width:180px;height:180px;border-radius:50%;pointer-events:none;z-index:-1;
   filter:blur(46px);
 }
-.login-card::before{background:rgba(255,92,184),.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
+.login-card::before{background:rgba(255,107,158,.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
 .login-card::after{background:rgba(255,154,139,.16);bottom:-60px;right:-50px;animation:blobDrift2 14s ease-in-out infinite alternate}
 @keyframes blobDrift1{from{transform:translate(0,0)}to{transform:translate(36px,22px)}}
 @keyframes blobDrift2{from{transform:translate(0,0)}to{transform:translate(-30px,-26px)}}
 
 /* 鼠标光晕容器（JS 注入的 aura 元素样式） */
 .aura{position:fixed;width:340px;height:340px;border-radius:50%;pointer-events:none;z-index:1;
-  background:radial-gradient(circle,rgba(255,92,184),.10),transparent 65%);
+  background:radial-gradient(circle,rgba(255,107,158,.10),transparent 65%);
   transform:translate(-50%,-50%);will-change:transform}
 
 /* 涟漪 */
@@ -780,7 +783,7 @@ img{display:block;max-width:100%}
 
 /* 海报 hover 凑近 + 体温内光 */
 .poster:hover .poster-frame img{transform:scale(1.12)}
-.poster:hover .poster-frame{box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,92,184),.35)}
+.poster:hover .poster-frame{box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,107,158,.35)}
 
 /* 封面加载「掀纱」：更慢更撩（0.9s + 过冲） */
 @keyframes focusIn{0%{opacity:0;filter:blur(10px);transform:scale(1.06)}70%{opacity:1;filter:blur(0);transform:scale(.995)}100%{transform:scale(1)}}
@@ -791,12 +794,12 @@ img{display:block;max-width:100%}
 .toast.show{transform:translateX(0) rotate(0)}
 
 /* 鼠标光晕双色呼吸（桃粉⇄肤金） */
-@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,92,184),.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
+@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,107,158,.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
 .aura{animation:auraShift 7s ease-in-out infinite}
 
 /* 红心爆击：唇印元素 */
 .burst-kiss{position:absolute;font-size:13px;pointer-events:none;z-index:5;line-height:1;
-  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,92,184),.6))}
+  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,107,158,.6))}
 
 /* 顶部心跳光带（两快一慢） */
 .pulse-band{position:fixed;top:0;left:0;right:0;height:2px;z-index:250;pointer-events:none;
