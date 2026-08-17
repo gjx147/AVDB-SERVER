@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 
@@ -7,7 +7,16 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [wall, setWall] = useState<string[]>([])
   const navigate = useNavigate()
+
+  // 订阅演员作品海报墙（免鉴权接口；失败静默回退纯色背景）
+  useEffect(() => {
+    fetch('/api/system/login-wall')
+      .then((r) => (r.ok ? r.json() : { wall: [] }))
+      .then((d) => { if (Array.isArray(d.wall) && d.wall.length) setWall(d.wall.slice(0, 10)) })
+      .catch(() => {})
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,6 +47,14 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      {wall.length > 0 && (
+        <div className="login-wall" aria-hidden="true">
+          {wall.map((u, i) => (
+            <img key={i} src={u} alt="" referrerPolicy="no-referrer"
+              style={{ animationDelay: `${(i * 44 / Math.min(wall.length, 10)).toFixed(1)}s` }} />
+          ))}
+        </div>
+      )}
       <div className="login-card">
         <div className="login-brand">
           <div className="login-mark">AV<em>DB</em></div>

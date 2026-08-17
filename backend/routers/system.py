@@ -2,12 +2,58 @@
 
 from __future__ import annotations
 
+import json
 import shutil
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from config import get_settings
 from deps import CurrentUser
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+@router.get("/login-wall")
+def login_wall(limit: int = Query(10, ge=1, le=30)):
+    """登录页海报墙：订阅演员作品的远程海报 URL（随机抽样）。
+
+    免鉴权 —— 登录页没有 token。只返回远程 URL（c0.jdbstatic），
+    不暴露本地文件路径/番号等元数据。
+    """
+    from sqlalchemy import func, select
+    from database import SessionLocal
+    from models import Subscription, Task, actor_movies
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            select(Task.thumbnail_urls, Task.poster_url)
+            .join(actor_movies, actor_movies.c.task_id == Task.id)
+            .join(Subscription, Subscription.actor_id == actor_movies.c.actor_id)
+            .where(
+                Subscription.sub_type == "actor",
+                Subscription.enabled == True,  # noqa: E712
+                Task.status == "visited",
+                Task.thumbnail_urls.isnot(None),
+            )
+            .order_by(func.random())
+            .limit(limit)
+        ).all()
+        urls: list[str] = []
+        for thumbs, poster in rows:
+            u = None
+            try:
+                arr = json.loads(thumbs or "[]")
+                if isinstance(arr, list) and arr:
+                    u = arr[0]
+            except Exception:
+                pass
+            u = u or poster
+            if u and u not in urls:
+                urls.append(u)
+        return {"wall": urls}
+    except Exception:
+        return {"wall": []}
+    finally:
+        db.close()
 
 
 @router.get("/disk")
