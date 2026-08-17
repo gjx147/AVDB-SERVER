@@ -236,6 +236,10 @@ export interface Settings {
   qbittorrent_password: string
   qbittorrent_save_path: string
   default_downloader: string
+  // CD2 下载文件整理（推送成功后 ≥200MB 视频重命名为番号，其余删除）
+  cd2_rename_enabled: boolean
+  cd2_download_folder: string
+  cd2_rename_delay_seconds: number
   // Emby 媒体库（订阅巡检时比对，避免重复入库）
   emby_url: string
   emby_token: string

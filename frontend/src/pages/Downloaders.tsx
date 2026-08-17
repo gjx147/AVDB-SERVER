@@ -34,7 +34,7 @@ export function Downloaders() {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  const test = async (kind: 'clouddrive' | 'qbittorrent') => {
+  const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
     if (!validate()) return
     try {
       // 先保存再测试（因为测试接口从 DB 读取配置）
@@ -42,7 +42,7 @@ export function Downloaders() {
       setTesting(kind)
       const sp = kind === 'clouddrive' ? s.clouddrive_save_path : kind === 'qbittorrent' ? s.qbittorrent_save_path : ''
       await api.downloaders.testConnection(kind, sp || undefined)
-      const label = kind === 'clouddrive' ? 'CloudDrive2' : 'qBittorrent'
+      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'cd2_rename' ? 'CD2 整理' : 'qBittorrent'
       toastOk(`${label} 连接成功`)
     } catch (e) {
       const msg = String((e as Error).message)
@@ -106,6 +106,40 @@ export function Downloaders() {
           <button className={s.default_downloader === 'qbittorrent' ? 'on' : ''} onClick={() => upd({ default_downloader: 'qbittorrent' })}>qBittorrent</button>
         </div>
         <div className="hint" style={{ marginTop: 10 }}>推送到下载器时，若未单独指定则使用此默认项</div>
+      </div>
+
+      {/* CD2 下载文件整理（推送成功后原地重命名 + 清理） */}
+      <div className="card" style={{ marginTop: 22 }}>
+        <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card-title">CD2 下载文件整理</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={String(s.cd2_rename_enabled) === 'true' || s.cd2_rename_enabled === true}
+              onChange={(e) => upd({ cd2_rename_enabled: e.target.checked })}
+            />
+            <span>启用</span>
+          </label>
+        </div>
+        <div className="hint" style={{ marginBottom: 12 }}>
+          推送 CloudDrive2 成功后延迟整理下载文件夹：≥200MB 的视频文件原地重命名为番号（如 ABC-123.mp4，多文件加 -2/-3），其余文件（小视频/剧照/txt 等）删除
+        </div>
+        <div className="field">
+          <label htmlFor="cd2-dl-folder">CD2 下载文件夹（整理范围）</label>
+          <input id="cd2-dl-folder" className="input" value={s.cd2_download_folder || ''} onChange={(e) => upd({ cd2_download_folder: e.target.value })} placeholder="/115Cloud/离线下载" />
+        </div>
+        <div className="field">
+          <label htmlFor="cd2-rename-delay">延迟触发秒数（等 CD2 下载完成）</label>
+          <input
+            id="cd2-rename-delay" type="number" min={0} className="input"
+            value={s.cd2_rename_delay_seconds ?? 300}
+            onChange={(e) => upd({ cd2_rename_delay_seconds: +e.target.value })}
+          />
+          <div className="hint">CD2 离线下载大文件慢，建议 300-600 秒；超时未下完会跳过（下次推送另一番号不会误伤）</div>
+        </div>
+        <button className="btn btn--ghost btn--sm" onClick={() => test('cd2_rename')} disabled={testing !== null}>
+          {testing === 'cd2_rename' ? '测试中…' : '测试（列下载文件夹）'}
+        </button>
       </div>
 
       <DownloaderLog />

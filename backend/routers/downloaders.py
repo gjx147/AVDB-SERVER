@@ -182,6 +182,15 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     db.commit()
     db.refresh(dl)
 
+    # CloudDrive2 推送成功 → 延迟整理下载文件（≥200MB 视频重命名为番号，其余删除）
+    # 开关 cd2_rename_enabled 默认关；异常隔离，绝不影响 push 的成功状态
+    if result["ok"] and downloader == "clouddrive":
+        try:
+            from services.cd2_rename import schedule_rename
+            schedule_rename(req.task_id, task.video_code if task else None)
+        except Exception as e:
+            logger.warning(f"CD2 整理钩子调度失败（不影响推送）: {e}")
+
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
@@ -212,7 +221,8 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     downloader = body.get("downloader", "")
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
-              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password"]:
+              "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password",
+              "cd2_download_folder"]:
         config[k] = _get_setting(db, k)
     if downloader == "qbittorrent":
         result = await asyncio.to_thread(_test_qbittorrent_sync, config)
@@ -237,6 +247,12 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
         except Exception as e:
             logger.error(f"测试连接 [clouddrive]: 异常 {e}")
             return {"ok": False, "message": f"连接失败: {e}"}
+    elif downloader == "cd2_rename":
+        # CD2 整理测试：列下载文件夹验证 CD2 连接 + 路径配置
+        from services.cd2_rename import test_rename
+        result = await test_rename(config)
+        logger.info(f"测试连接 [cd2_rename]: ok={result.get('ok')} msg={result.get('message','')}")
+        return result
     return {"ok": False, "message": f"未知下载器: {downloader}"}
 
 
