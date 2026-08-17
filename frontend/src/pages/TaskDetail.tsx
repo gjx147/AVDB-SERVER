@@ -383,7 +383,7 @@ export function TaskDetail() {
                 {/* 第 1 条：best_magnet（最优）单独强调显示 */}
                 {topMagnets.map((m, i) => (
                   <div key={i}>
-                    <div className="magnet-box" style={i === 0 ? { borderColor: 'var(--gold)', background: 'var(--gold-wash)' } : undefined}>
+                    <div className={`magnet-box${i === 0 ? ' magnet-box--best' : ''}`}>
                       {m.link}
                       {/* 优先级 / 大小标签 */}
                       <span style={{ marginLeft: 8, whiteSpace: 'nowrap' }}>
@@ -417,7 +417,7 @@ export function TaskDetail() {
               // 与详情页封面统一：poster_url 优先（横版裁剪主角），兜底 thumbnail_urls[0]
               const sRemote = s.poster_url || (s.thumbnail_urls ? (() => { try { return JSON.parse(s.thumbnail_urls)[0] as string } catch { return null } })() : null)
               return (
-              <div key={s.id} onClick={() => nav(`/task/${s.id}`)}
+              <div key={s.id} className="card-hoverable" onClick={() => nav(`/task/${s.id}`)}
                 style={{ cursor: 'pointer', transition: 'transform .2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>

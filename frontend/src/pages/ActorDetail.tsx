@@ -109,7 +109,7 @@ export function ActorDetail() {
 
       {/* 头部：头像 + 信息 */}
       <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 28, marginBottom: 32, alignItems: 'start' }}>
-        <div style={{
+        <div className="actor-avatar-zoom" style={{
           width: 160, height: 160, borderRadius: 'var(--r-md)', overflow: 'hidden', flex: 'none',
           background: 'var(--bg-page)', border: '1px solid var(--line-hair)',
         }}>
@@ -186,10 +186,7 @@ export function ActorDetail() {
                   <div className="poster-grad-top">
                     <span className="poster-code">{m.video_code || '—'}</span>
                     {m.media_in_library === true && (
-                      <span title="已在 Emby 媒体库" style={{
-                        position: 'absolute', top: 6, right: 6, background: 'rgba(76,175,80,.9)',
-                        color: '#fff', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
-                      }}>库</span>
+                      <span className="badge-lib" title="已在 Emby 媒体库">库</span>
                     )}
                   </div>
                   <div className="poster-info">
@@ -201,7 +198,7 @@ export function ActorDetail() {
           })}
         </div>
         {/* 分页 */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24 }}>
+        <div className="pagination-card" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24, padding: '10px 16px', width: 'fit-content', margin: '24px auto 0' }}>
           <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1, sort)}>上一页</button>
           <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 {total} 部</span>
           <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1, sort)}>下一页</button>

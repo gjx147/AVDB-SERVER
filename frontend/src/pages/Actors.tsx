@@ -138,15 +138,11 @@ export function Actors() {
               <div className="actor-count">{a.movie_count} 部作品{a.local_movie_count ? ` · 本地 ${a.local_movie_count}` : ''}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button
+                  className="btn btn--ghost btn--sm"
                   onClick={(e) => { e.stopPropagation(); crawlWorks(a) }}
                   disabled={!a.source_url}
                   title={a.source_url ? '爬取该演员的全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}
-                  style={{
-                    flex: 1, border: '1px solid var(--line-soft)', background: 'var(--bg-page)',
-                    color: 'var(--t-body)', borderRadius: 6, padding: '5px 8px', fontSize: 11,
-                    cursor: a.source_url ? 'pointer' : 'not-allowed', opacity: a.source_url ? 1 : 0.4,
-                    fontFamily: 'var(--ff-sans)', transition: 'all .2s',
-                  }}>补齐作品</button>
+                  style={{ flex: 1 }}>补齐作品</button>
               </div>
             </div>
           ))}
