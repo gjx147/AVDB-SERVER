@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import Counter
 
 from fastapi import APIRouter, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from deps import CurrentUser, DbSession
 from models import Task
@@ -33,17 +33,23 @@ def list_tasks_v2(
 ):
     """多维筛选 + 排序。
 
-    Bug 修复：
-    - 默认只显示 visited，但前端可传 status=pending/failed 看待处理/失败任务，
-      之前的写法「先 WHERE visited 再叠加 status」会矛盾返回空。改为：不传 status
-      时默认 visited，传了就尊重用户选择。
+    - 不传 status = 全部状态（含 pending/failed）——「全部状态」名副其实，
+      失败/待处理任务默认可见可勾选批量删。
+    - status=failed 兜底：auto_retry 会把提取失败的任务翻回 pending（带
+      error_message），故「失败」筛选同时包含 pending 且有错误信息的任务。
     - sort 支持前端发送的 date_desc / rating_desc / title_asc / favorite_desc。
     - 新增 list_source_id 筛选（前端下拉列表源）。
     """
-    if status:
-        stmt = select(Task).where(Task.status == status)
-    else:
-        stmt = select(Task).where(Task.status == "visited")
+    stmt = select(Task)
+    if status == "failed":
+        stmt = stmt.where(
+            or_(
+                Task.status == "failed",
+                and_(Task.status == "pending", Task.error_message.isnot(None), Task.error_message != ""),
+            )
+        )
+    elif status:
+        stmt = stmt.where(Task.status == status)
     if actor:
         stmt = stmt.where(Task.actors.like(f"%{actor}%"))
     if tag:
