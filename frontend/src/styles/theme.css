@@ -1,59 +1,58 @@
-/* ============================================================
-   AVDB 影片库 — 杂志画廊风设计系统（亮色 + 桃红）
-   移植自 ui-redesign-prototype.html，适配 React 应用
+﻿/* ============================================================
+   AVDB 褰辩墖搴?鈥?鏉傚織鐢诲粖椋庤璁＄郴缁燂紙浜壊 + 妗冪孩锛?   绉绘鑷?ui-redesign-prototype.html锛岄€傞厤 React 搴旂敤
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Noto+Serif+SC:wght@400;600;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root{
-  /* 色彩：暖奶油白 + 桃红 */
-  --bg-ink: #f6f1e9;
-  --bg-page: #faf6ef;
-  --bg-surface: #ffffff;
-  --bg-raised: #fffdf8;
-  --bg-overlay: rgba(255,253,248,.82);
+  /* 鑹叉澘锛氱化鏆紙娣卞閰掔孩 + 鐜孩棣欐閲戯級 */
+  --bg-ink: #171014;
+  --bg-page: #1f1419;
+  --bg-surface: #281a20;
+  --bg-raised: #302027;
+  --bg-overlay: rgba(40,26,32,.82);
 
-  --line-hair: rgba(60,42,20,.07);
-  --line-soft: rgba(60,42,20,.12);
-  --line-strong: rgba(60,42,20,.20);
+  --line-hair: rgba(255,180,200,.08);
+  --line-soft: rgba(255,180,200,.13);
+  --line-strong: rgba(255,180,200,.22);
 
-  /* 桃红主色 */
-  --gold: #e85d8a;
-  --gold-bright: #f4789f;
-  --gold-deep: #c43a6a;
-  --gold-wash: rgba(232,93,138,.10);
-  --gold-glow: rgba(232,93,138,.26);
+  /* 鐜孩涓昏壊锛堢化绮夋洿鑹筹級 */
+  --gold: #ff7a9c;
+  --gold-bright: #ff93b1;
+  --gold-deep: #f43f6e;
+  --gold-wash: rgba(255,122,156,.12);
+  --gold-glow: rgba(255,122,156,.28);
 
-  /* 语义色 */
-  --rose: #b8556a;
-  --green: #4a8a5a;
-  --amber: #b07a1e;
-  --red: #c0443a;
-  --blue: #3d6bb0;
-  --violet: #6b5aa8;
+  /* 璇箟鑹诧紙鏆楀簳鎻愪寒锛?*/
+  --rose: #e0698a;
+  --green: #3ddc97;
+  --amber: #ffb454;
+  --red: #ff5c7a;
+  --blue: #6ba3e8;
+  --violet: #9a86e0;
 
-  /* 文字：深墨暖灰 */
-  --t-display: #2a2014;
-  --t-body: #4a3f30;
-  --t-mute: #7a6d5a;
-  --t-faint: #a89a82;
+  /* 鏂囧瓧锛氭殩闆啋闆剧矇鈫掓殫鐜懓鐏?*/
+  --t-display: #f7ecef;
+  --t-body: #d9c4cb;
+  --t-mute: #a3808d;
+  --t-faint: #7c5f69;
 
-  /* 字体 */
+  /* 瀛椾綋 */
   --ff-serif: "Playfair Display", "Noto Serif SC", Georgia, serif;
   --ff-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
   --ff-mono: "JetBrains Mono", "Source Code Pro", monospace;
 
-  /* 圆角 */
+  /* 鍦嗚 */
   --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 22px;
 
-  /* 阴影 */
-  --shadow-card: 0 1px 2px rgba(80,55,20,.06), 0 6px 20px rgba(80,55,20,.09);
-  --shadow-float: 0 8px 16px rgba(80,55,20,.08), 0 24px 50px rgba(80,55,20,.14);
+  /* 闃村奖 */
+  --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 6px 20px rgba(0,0,0,.28), 0 0 0 1px rgba(255,180,200,.05);
+  --shadow-float: 0 8px 16px rgba(0,0,0,.3), 0 24px 50px rgba(0,0,0,.4), 0 0 0 1px rgba(255,180,200,.06);
 
-  /* 间距 */
+  /* 闂磋窛 */
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
 
-  /* 排版 */
+  /* 鎺掔増 */
   --fs-xs: 10px; --fs-sm: 12px; --fs-base: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 28px; --fs-2xl: 32px; --fs-display: 44px;
 
   --sidebar-w: 232px;
@@ -72,19 +71,20 @@ body{
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 40% at 18% 0%, rgba(232,93,138,.08), transparent 70%),
-    radial-gradient(50% 60% at 100% 100%, rgba(196,58,106,.05), transparent 60%),
+    radial-gradient(60% 42% at 18% 0%, rgba(244,63,110,.14), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(122,44,84,.16), transparent 62%),
+    radial-gradient(40% 40% at 55% 45%, rgba(255,180,84,.045), transparent 70%),
     var(--bg-page);
 }
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(60,42,20,.14);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(60,42,20,.26)}
+::-webkit-scrollbar-thumb{background:rgba(255,180,200,.16);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,180,200,.32)}
 a{color:var(--gold);text-decoration:none}
 a:hover{color:var(--gold-bright)}
 img{display:block;max-width:100%}
 
-/* ── 布局 ── */
+/* 鈹€鈹€ 甯冨眬 鈹€鈹€ */
 .app{display:flex;min-height:100vh}
 .sidebar{
   width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;
@@ -105,7 +105,7 @@ img{display:block;max-width:100%}
   text-decoration:none;
 }
 .nav-item .ic{width:16px;height:16px;flex:none;opacity:.8}
-.nav-item:hover{color:var(--t-body);background:rgba(60,42,20,.04)}
+.nav-item:hover{color:var(--t-body);background:rgba(255,180,200,.06)}
 .nav-item.on{color:var(--gold);background:var(--gold-wash);position:relative}
 .nav-item.on::after{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:2px;height:18px;background:var(--gold);border-radius:0 2px 2px 0}
 .nav-badge{margin-left:auto;font-size:10px;font-weight:600;font-family:var(--ff-mono);color:var(--t-faint)}
@@ -117,7 +117,7 @@ img{display:block;max-width:100%}
 @media(min-width:1600px){.main{display:flex;justify-content:center}.page{width:1600px}}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-/* ── 排版 ── */
+/* 鈹€鈹€ 鎺掔増 鈹€鈹€ */
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:36px}
 .eyebrow{font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:10px}
 .page-title{font-family:var(--ff-serif);font-weight:700;font-size:44px;line-height:1.05;letter-spacing:-.015em;color:var(--t-display)}
@@ -125,7 +125,7 @@ img{display:block;max-width:100%}
 .page-sub{margin-top:10px;font-size:14px;color:var(--t-mute);max-width:560px}
 .page-actions{display:flex;gap:10px;align-items:center;flex:none}
 
-/* ── 按钮 ── */
+/* 鈹€鈹€ 鎸夐挳 鈹€鈹€ */
 .btn{
   display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--r-md);
   font-family:var(--ff-sans);font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;
@@ -142,7 +142,7 @@ img{display:block;max-width:100%}
 .btn--icon{padding:9px;width:38px;justify-content:center}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none!important}
 
-/* ── 统计卡 ── */
+/* 鈹€鈹€ 缁熻鍗?鈹€鈹€ */
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:36px}
 .stat{position:relative;background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:24px 26px;overflow:hidden}
 .stat::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold-wash),transparent)}
@@ -152,7 +152,7 @@ img{display:block;max-width:100%}
 .stat-trend{margin-top:14px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:5px}
 .stat-trend.down{color:var(--red)}
 
-/* ── 面板 ── */
+/* 鈹€鈹€ 闈㈡澘 鈹€鈹€ */
 .dash-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
 .panel{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);overflow:hidden}
 .panel-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--line-hair)}
@@ -161,14 +161,14 @@ img{display:block;max-width:100%}
 .panel-body{padding:18px 24px}
 .panel-link{font-size:12px;color:var(--gold);font-weight:500;cursor:pointer}
 
-/* 柱状图 */
+/* 鏌辩姸鍥?*/
 .bar-chart{display:flex;align-items:flex-end;gap:8px;height:160px;padding-top:10px}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%}
 .bar{width:100%;max-width:34px;background:linear-gradient(180deg,var(--gold),var(--gold-deep));border-radius:4px 4px 0 0;transition:opacity .2s;cursor:pointer;min-height:2px}
 .bar:hover{opacity:.75}
 .bar-x{font-size:11px;color:var(--t-faint);font-family:var(--ff-mono)}
 
-/* 最近列表 */
+/* 鏈€杩戝垪琛?*/
 .recent-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line-hair);cursor:pointer}
 .recent-item:last-child{border-bottom:none}
 .recent-thumb{width:46px;height:64px;border-radius:6px;flex:none;background:var(--bg-page);overflow:hidden;object-fit:cover;object-position:right center}
@@ -178,7 +178,7 @@ img{display:block;max-width:100%}
 .recent-tags{display:flex;gap:5px;flex-wrap:wrap}
 .recent-time{font-size:11px;color:var(--t-faint);flex:none}
 
-/* ── 影片库画廊 ── */
+/* 鈹€鈹€ 褰辩墖搴撶敾寤?鈹€鈹€ */
 .gallery-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;margin-bottom:24px;background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg)}
 .search{flex:1;min-width:240px;display:flex;align-items:center;gap:9px;background:var(--bg-page);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:9px 14px;transition:border-color .2s}
 .search:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-wash)}
@@ -193,7 +193,7 @@ img{display:block;max-width:100%}
 .poster{position:relative;cursor:pointer}
 .poster-frame{position:relative;aspect-ratio:7/10;border-radius:var(--r-md);overflow:hidden;background:linear-gradient(135deg,var(--bg-raised),var(--bg-surface));box-shadow:var(--shadow-card);transition:transform .4s cubic-bezier(.23,1,.32,1),box-shadow .4s}
 .poster:hover .poster-frame{transform:translateY(-6px);box-shadow:var(--shadow-float),0 0 0 1px var(--gold-glow)}
-/* object-position:right center 与详情页封面一致：裁剪横版 cover 右半边主角封面段 */
+/* object-position:right center 涓庤鎯呴〉灏侀潰涓€鑷达細瑁佸壀妯増 cover 鍙冲崐杈逛富瑙掑皝闈㈡ */
 .poster-frame img{width:100%;height:100%;object-fit:cover;object-position:right center;transition:transform .6s cubic-bezier(.23,1,.32,1),opacity .3s;opacity:0}
 .poster-frame img.loaded{opacity:1}
 .poster:hover .poster-frame img{transform:scale(1.06)}
@@ -218,9 +218,9 @@ img{display:block;max-width:100%}
 .poster-caption .cap-code{font-family:var(--ff-serif);font-style:italic;font-size:14px;color:var(--t-display);font-weight:600}
 .poster-caption .cap-actor{font-size:11px;color:var(--t-mute);margin-top:2px}
 
-/* 列表视图 */
+/* 鍒楄〃瑙嗗浘 */
 .row-item{display:grid;grid-template-columns:64px 1fr auto auto auto;gap:16px;align-items:center;padding:14px 8px;border-bottom:1px solid var(--line-hair);cursor:pointer;transition:background .2s,box-shadow .2s}
-.row-item:hover{background:rgba(60,42,20,.06);box-shadow:inset 3px 0 0 var(--gold-wash)}
+.row-item:hover{background:rgba(255,180,200,.08);box-shadow:inset 3px 0 0 var(--gold-wash)}
 .row-item:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:4px}
 .row-thumb{width:48px;height:64px;border-radius:5px;overflow:hidden;background:var(--bg-page);object-fit:cover;object-position:right center}
 .row-code{font-family:var(--ff-mono);font-size:13px;color:var(--gold);font-weight:600}
@@ -232,19 +232,19 @@ img{display:block;max-width:100%}
 .chip-red{color:var(--red);background:rgba(192,68,58,.1)}
 .chip-rose{color:var(--rose);background:rgba(184,85,106,.1)}
 
-/* 批量栏 */
+/* 鎵归噺鏍?*/
 .batchbar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120%);background:var(--bg-raised);border:1px solid var(--line-strong);border-radius:var(--r-xl);padding:12px 20px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-float);z-index:350;transition:transform .35s cubic-bezier(.23,1,.32,1);flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)}
 .batchbar.show{transform:translateX(-50%) translateY(0)}
 .batchbar .sel-count{font-family:var(--ff-mono);font-size:13px;color:var(--gold);font-weight:600;white-space:nowrap}
 
-/* 分页 */
+/* 鍒嗛〉 */
 .pager{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:40px}
 .pager button{min-width:36px;height:36px;border:1px solid var(--line-soft);background:var(--bg-surface);color:var(--t-mute);border-radius:var(--r-sm);cursor:pointer;font-size:13px;font-family:var(--ff-mono);transition:all .2s}
 .pager button:hover{border-color:var(--gold);color:var(--gold)}
 .pager button.on{background:var(--gold);color:#fff;border-color:var(--gold)}
 .pager button:disabled{opacity:.4;cursor:not-allowed}
 
-/* ── 卡片/表单 ── */
+/* 鈹€鈹€ 鍗＄墖/琛ㄥ崟 鈹€鈹€ */
 .card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:22px}
 .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-title{font-family:var(--ff-serif);font-size:18px;color:var(--t-display);font-weight:600}
@@ -256,14 +256,14 @@ img{display:block;max-width:100%}
 .textarea{resize:vertical;min-height:80px}
 .hint{font-size:11px;color:var(--t-faint);margin-top:6px}
 
-/* ── 表格 ── */
+/* 鈹€鈹€ 琛ㄦ牸 鈹€鈹€ */
 .table{width:100%;border-collapse:collapse;font-size:13px}
 .table th{text-align:left;padding:12px 14px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--t-faint);font-weight:600;border-bottom:1px solid var(--line-soft)}
 .table td{padding:14px;border-bottom:1px solid var(--line-hair);color:var(--t-body)}
-.table tr:hover td{background:rgba(60,42,20,.02)}
+.table tr:hover td{background:rgba(255,180,200,.04)}
 .table .mono{font-family:var(--ff-mono);color:var(--gold)}
 
-/* ── 爬取控制台 ── */
+/* 鈹€鈹€ 鐖彇鎺у埗鍙?鈹€鈹€ */
 .console-grid{display:grid;grid-template-columns:320px 1fr;gap:22px;align-items:start}
 .crawl-state{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:24px;text-align:center}
 .crawl-ring{width:140px;height:140px;margin:0 auto 18px;position:relative}
@@ -302,23 +302,19 @@ img{display:block;max-width:100%}
 .step-label{font-size:11px;color:var(--t-mute);margin-top:8px}
 .step.active .step-label{color:var(--gold)}
 
-/* ── 详情 ── */
-/* ── 详情页 emby 风格背景层 ── */
+/* 鈹€鈹€ 璇︽儏 鈹€鈹€ */
+/* 鈹€鈹€ 璇︽儏椤?emby 椋庢牸鑳屾櫙灞?鈹€鈹€ */
 .detail-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;overflow:hidden}
-.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(246,241,233,.87)}
+.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(23,16,20,.80)}
 .detail-bg img{width:100%;height:100%;object-fit:cover;filter:blur(50px) brightness(.8) saturate(1.1);transform:scale(1.15)}
 
-/* 紧凑头部：左封面 + 右信息，消除顶部空白 */
+/* 绱у噾澶撮儴锛氬乏灏侀潰 + 鍙充俊鎭紝娑堥櫎椤堕儴绌虹櫧 */
 .detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:start}
 /*
- * JavDB 横版封面 (800×538, ratio 1.487) 为三段结构：
- *   左 0-47% : 场景拼接
- *   中 47-53%: 影片信息竖条幅
- *   右 53-100% (≈47%宽, 375×538, ratio ≈0.70): 主角封面 ← 详情页只显示这一段
- * 容器 ratio 7/10≈0.70 ≈ 主角封面 ratio；object-fit:cover 会按高度缩放，
- * 水平保留 0.70/1.487 = 47% 宽；object-position:right center 让保留段
- * 对齐到原图最右侧，恰好完整呈现主角封面区域。
- */
+ * JavDB 妯増灏侀潰 (800脳538, ratio 1.487) 涓轰笁娈电粨鏋勶細
+ *   宸?0-47% : 鍦烘櫙鎷兼帴
+ *   涓?47-53%: 褰辩墖淇℃伅绔栨潯骞? *   鍙?53-100% (鈮?7%瀹? 375脳538, ratio 鈮?.70): 涓昏灏侀潰 鈫?璇︽儏椤靛彧鏄剧ず杩欎竴娈? * 瀹瑰櫒 ratio 7/10鈮?.70 鈮?涓昏灏侀潰 ratio锛沷bject-fit:cover 浼氭寜楂樺害缂╂斁锛? * 姘村钩淇濈暀 0.70/1.487 = 47% 瀹斤紱object-position:right center 璁╀繚鐣欐
+ * 瀵归綈鍒板師鍥炬渶鍙充晶锛屾伆濂藉畬鏁村憟鐜颁富瑙掑皝闈㈠尯鍩熴€? */
 .detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:7/10;background:var(--bg-surface);box-shadow:var(--shadow-card)}
 .detail-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;image-rendering:auto}
 .detail-cover-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:12px}
@@ -336,7 +332,7 @@ img{display:block;max-width:100%}
 .tag:hover{background:var(--gold-glow)}
 .magnet-box{background:var(--bg-surface);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:14px 16px;font-family:var(--ff-mono);font-size:12px;color:var(--t-body);word-break:break-all;line-height:1.6}
 
-/* ── 演员 ── */
+/* 鈹€鈹€ 婕斿憳 鈹€鈹€ */
 .actor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:24px}
 .actor{cursor:pointer;text-align:center}
 .actor-photo{width:100%;aspect-ratio:1;border-radius:var(--r-md);overflow:hidden;background:var(--bg-page);box-shadow:var(--shadow-card);transition:transform .4s,box-shadow .4s;margin-bottom:14px;position:relative}
@@ -345,29 +341,29 @@ img{display:block;max-width:100%}
 .actor-name{font-family:var(--ff-serif);font-size:16px;color:var(--t-display);font-weight:600}
 .actor-count{font-size:11px;color:var(--t-faint);margin-top:3px;font-family:var(--ff-mono)}
 
-/* ── 排行 ── */
+/* 鈹€鈹€ 鎺掕 鈹€鈹€ */
 .rank-list{display:flex;flex-direction:column}
 .rank-row{display:grid;grid-template-columns:48px 60px 1fr auto;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line-hair)}
 .rank-pos{font-family:var(--ff-serif);font-size:32px;color:var(--t-faint);font-weight:700;text-align:center;font-style:italic}
 .rank-row.top3 .rank-pos{color:var(--gold)}
-.rank-row:hover{background:rgba(60,42,20,.02)}
+.rank-row:hover{background:rgba(255,180,200,.04)}
 .rank-score{font-family:var(--ff-mono);font-weight:600;color:var(--gold)}
 
-/* ── 设置 ── */
+/* 鈹€鈹€ 璁剧疆 鈹€鈹€ */
 .settings-layout{display:grid;grid-template-columns:200px 1fr;gap:32px}
 .settings-nav{display:flex;flex-direction:column;gap:2px}
 .settings-nav button{text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;color:var(--t-mute);font-size:13px;border-radius:var(--r-sm);transition:all .2s;font-family:var(--ff-sans)}
-.settings-nav button:hover{color:var(--t-body);background:rgba(60,42,20,.03)}
+.settings-nav button:hover{color:var(--t-body);background:rgba(255,180,200,.05)}
 .settings-nav button.on{color:var(--gold);background:var(--gold-wash)}
 
-/* ── Toast ── */
+/* 鈹€鈹€ Toast 鈹€鈹€ */
 .toast{position:fixed;top:24px;right:24px;z-index:300;background:var(--bg-raised);border:1px solid var(--gold-glow);border-radius:var(--r-md);padding:14px 20px;color:var(--t-display);box-shadow:var(--shadow-float);font-size:13px;transform:translateX(120%);transition:transform .35s cubic-bezier(.23,1,.32,1);display:flex;align-items:center;gap:10px}
 .toast.show{transform:translateX(0)}
 .toast .ic{color:var(--green)}
 .toast.err{border-color:rgba(192,68,58,.4)}
 .toast.err .ic{color:var(--red)}
 
-/* ── 加载/空态 ── */
+/* 鈹€鈹€ 鍔犺浇/绌烘€?鈹€鈹€ */
 .loading{padding:60px 0;text-align:center;color:var(--t-faint);font-size:13px}
 .loading::before{content:"";display:block;width:32px;height:32px;margin:0 auto 16px;border:3px solid var(--line-soft);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -378,12 +374,12 @@ img{display:block;max-width:100%}
 @keyframes shimmer{0%{background-position:200% 0}to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 
-/* 图片隐私模式 */
+/* 鍥剧墖闅愮妯″紡 */
 .img-mode-blur .poster-frame img,.img-mode-blur .actor-photo img,.img-mode-blur .detail-cover img,.img-mode-blur .recent-thumb,.img-mode-blur .row-thumb,.img-mode-blur .detail-body img,.img-mode-blur .cast-row img{filter:blur(20px);transition:filter .3s}
 .img-mode-blur .poster-frame:hover img,.img-mode-blur .actor-photo:hover img,.img-mode-blur .detail-cover:hover img,.img-mode-blur .detail-body img:hover{filter:blur(0)}
 .img-mode-hidden .poster-frame img,.img-mode-hidden .actor-photo img,.img-mode-hidden .detail-cover img,.img-mode-hidden .recent-thumb,.img-mode-hidden .row-thumb,.img-mode-hidden .detail-body img,.img-mode-hidden .cast-row img{visibility:hidden}
 
-/* 响应式 */
+/* 鍝嶅簲寮?*/
 @media(max-width:1200px){.detail-body{grid-template-columns:1fr}}
 @media(max-width:1100px){.dash-grid,.console-grid{grid-template-columns:1fr}}
 @media(max-width:768px){
@@ -394,7 +390,7 @@ img{display:block;max-width:100%}
   .main{margin-left:0}
   .page{padding:20px 16px}
   .page-title{font-size:28px}
-  /* 小屏：封面缩到顶部居中，信息在下方 */
+  /* 灏忓睆锛氬皝闈㈢缉鍒伴《閮ㄥ眳涓紝淇℃伅鍦ㄤ笅鏂?*/
   .detail-head{grid-template-columns:160px 1fr;gap:18px}
   .detail-title{font-size:22px;margin-bottom:12px}
   .detail-meta-grid{grid-template-columns:1fr;gap:10px 0}
@@ -404,161 +400,225 @@ img{display:block;max-width:100%}
   .console-grid{gap:16px}
   .crawl-ring{width:110px;height:110px}
   .term-body{max-height:260px}
-  /* 移动端汉堡菜单按钮 */
+  /* 绉诲姩绔眽鍫¤彍鍗曟寜閽?*/
   .mobile-menu-btn{display:block;position:fixed;top:12px;left:12px;z-index:200;width:36px;height:36px;border:none;background:var(--bg-surface);border-radius:var(--r-sm);cursor:pointer;box-shadow:var(--shadow-card)}
 }
 
-/* ═══════════════════════════════════════
-   可访问性 + 视觉修复（15 agents 审计）
-   ═══════════════════════════════════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?   鍙闂€?+ 瑙嗚淇锛?5 agents 瀹¤锛?   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 
-/* 全局焦点环 */
+/* 鍏ㄥ眬鐒︾偣鐜?*/
 *:focus-visible{outline:2px solid var(--gold-deep) !important;outline-offset:2px}
 
-/* 按钮 active 按压态 */
+/* 鎸夐挳 active 鎸夊帇鎬?*/
 .btn:active{transform:scale(.97);transition:transform .1s}
 .btn--gold:active{background:var(--gold-deep)}
 
-/* 近期列表 hover 修复 */
-.recent-item:hover{background:rgba(60,42,20,.03)}
+/* 杩戞湡鍒楄〃 hover 淇 */
+.recent-item:hover{background:rgba(255,180,200,.05)}
 
 /* select hover/focus */
 .select:focus,.select:hover{border-color:var(--gold)}
 
-/* 分段控件非激活 hover */
-.seg button:hover:not(.on){color:var(--t-body);background:rgba(60,42,20,.04)}
+/* 鍒嗘鎺т欢闈炴縺娲?hover */
+.seg button:hover:not(.on){color:var(--t-body);background:rgba(255,180,200,.06)}
 
-/* 可聚焦卡片元素 */
+/* 鍙仛鐒﹀崱鐗囧厓绱?*/
 .poster:focus-visible,.row-item:focus-visible,.actor:focus-visible,.recent-item:focus-visible{outline:2px solid var(--gold);outline-offset:2px;box-shadow:0 0 0 4px var(--gold-wash);border-radius:var(--r-md)}
 
-/* 详情页标题增强 */
+/* 璇︽儏椤垫爣棰樺寮?*/
 @media(min-width:769px){.detail-title{font-size:32px}.detail-title::after{content:"";display:block;width:40px;height:3px;margin-top:12px;background:var(--gold);border-radius:2px}}
 
-/* 极简毛玻璃效果 */
+/* 鏋佺畝姣涚幓鐠冩晥鏋?*/
 .detail-bg img{filter:blur(4px) brightness(.88) saturate(1.05);transform:scale(1.03)}
-.detail-bg::after{background:linear-gradient(180deg,rgba(246,241,233,.88) 0%,rgba(246,241,233,.95) 100%)}
+.detail-bg::after{background:linear-gradient(180deg,rgba(23,16,20,.62) 0%,rgba(23,16,20,.86) 100%)}
 .detail-bg{top:-2%;left:-2%;right:-2%;bottom:-2%}
 .detail-bg img{width:104%;height:104%}
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
 .detail-bg::after{z-index:2}
-/* 自适应文字：加柔和阴影保证在任意背景上可读 */
-.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(255,255,255,.15)}
+/* 鑷€傚簲鏂囧瓧锛氬姞鏌斿拰闃村奖淇濊瘉鍦ㄤ换鎰忚儗鏅笂鍙 */
+.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(0,0,0,.35)}
 .btn--gold{text-shadow:none}
 
-/* 图片隐私模式适配（毛玻璃版）*/
+/* 鍥剧墖闅愮妯″紡閫傞厤锛堟瘺鐜荤拑鐗堬級*/
 .img-mode-blur .detail-bg img{filter:blur(40px) brightness(.38) saturate(.5)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(246,241,233,.97)}
+.img-mode-hidden .detail-bg::after{background:rgba(23,16,20,.95)}
 
-/* 画廊交错入场 */
+/* 鐢诲粖浜ら敊鍏ュ満 */
 .poster{animation:posterIn .5s cubic-bezier(.23,1,.32,1) forwards}
 @keyframes posterIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 .poster:nth-child(1){animation-delay:.02s}.poster:nth-child(2){animation-delay:.06s}.poster:nth-child(3){animation-delay:.10s}.poster:nth-child(4){animation-delay:.14s}.poster:nth-child(5){animation-delay:.18s}.poster:nth-child(6){animation-delay:.22s}.poster:nth-child(n+7){animation-delay:.26s}
 
-/* 海报 hover 缩放提速 */
+/* 娴锋姤 hover 缂╂斁鎻愰€?*/
 .poster:hover .poster-frame img{transform:scale(1.06);transition:transform .28s cubic-bezier(.34,1.56,.64,1)}
 
-/* 导航指示器过渡 */
+/* 瀵艰埅鎸囩ず鍣ㄨ繃娓?*/
 .nav-item::after{content:"";position:absolute;left:0;top:50%;width:2px;height:0;transform:translateY(-50%);background:var(--gold);border-radius:0 2px 2px 0;transition:height .3s cubic-bezier(.23,1,.32,1)}
 .nav-item.on::after{height:18px}
 
-/* 字体加载优化提示 */
+/* 瀛椾綋鍔犺浇浼樺寲鎻愮ず */
 @font-face{font-family:'Playfair Display Fallback';src:local('Georgia');ascent-override:87%;descent-override:21%;line-gap-override:0%}
 
-/* 10px 字号提升 */
+/* 10px 瀛楀彿鎻愬崌 */
 .nav-label,.dm-label,.brand-tag{font-size:11px}
 .table th{font-size:12px}
 .btn--sm{font-size:12px}
 
-/* 图片隐私模式适配 emby 背景 */
+/* 鍥剧墖闅愮妯″紡閫傞厤 emby 鑳屾櫙 */
 .img-mode-blur .detail-bg img{filter:blur(60px) brightness(.3) saturate(.5)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(246,241,233,.97)}
+.img-mode-hidden .detail-bg::after{background:rgba(23,16,20,.95)}
 
-/* 移动端汉堡菜单 + 遮罩 */
+/* 绉诲姩绔眽鍫¤彍鍗?+ 閬僵 */
 .mobile-menu-btn{display:none}
 @media(max-width:768px){
   .mobile-menu-btn{display:flex;position:fixed;top:12px;left:12px;z-index:200;width:36px;height:36px;border:none;background:var(--bg-surface);border-radius:var(--r-sm);cursor:pointer;box-shadow:var(--shadow-card);align-items:center;justify-content:center;font-size:18px;color:var(--t-display)}
   .sidebar-overlay{position:fixed;inset:0;z-index:99;background:rgba(20,17,16,.5)}
 }
 
-/* 表格小屏横向滚动 */
+/* 琛ㄦ牸灏忓睆妯悜婊氬姩 */
 @media(max-width:640px){.card:has(.table){overflow-x:auto}}
 
-/* 超宽屏居中 */
+/* 瓒呭灞忓眳涓?*/
 @media(min-width:1600px){.main{display:flex;justify-content:center}.page{max-width:1400px}}
 
-/* ════════ UI 美化收尾（后写覆盖） ════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲 UI 缇庡寲鏀跺熬锛堝悗鍐欒鐩栵級 鈺愨晲鈺愨晲鈺愨晲鈺愨晲 */
 
-/* 按钮：更小圆角 + 幽灵按钮实底 + focus 环 */
+/* 鎸夐挳锛氭洿灏忓渾瑙?+ 骞界伒鎸夐挳瀹炲簳 + focus 鐜?*/
 .btn{border-radius:8px}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.btn--ghost{background:var(--bg-surface)}
-.btn--ghost:hover{box-shadow:0 2px 10px rgba(60,42,20,.08)}
-.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.15)}
+.btn--ghost{background:rgba(48,32,39,.6);backdrop-filter:blur(8px)}
+.btn--ghost:hover{box-shadow:0 2px 14px rgba(244,63,110,.22)}
+.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold));border-color:transparent}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(244,63,110,.38);transform:translateY(-1px)}
+.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
 
-/* 卡片：柔和浮起 + 标题金线 */
-.card{box-shadow:0 1px 2px rgba(60,42,20,.04),0 6px 20px rgba(60,42,20,.05)}
+/* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
+.card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(40,26,32,.78)}
 .card-title{position:relative;padding-bottom:10px}
 .card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.6}
 
-/* 下拉聚焦柔光环 */
+/* 涓嬫媺鑱氱劍鏌斿厜鐜?*/
 .select:focus,.select:hover{box-shadow:0 0 0 3px var(--gold-wash)}
 
-/* 元数据值加粗，提升信息层级 */
+/* 鍏冩暟鎹€煎姞绮楋紝鎻愬崌淇℃伅灞傜骇 */
 .dm-val{font-weight:500}
 
-/* 统计卡：hover 上浮 + 顶部金条生长 */
+/* 缁熻鍗★細hover 涓婃诞 + 椤堕儴閲戞潯鐢熼暱 */
 .stat{transition:transform .25s cubic-bezier(.23,1,.32,1),box-shadow .25s}
-.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(60,42,20,.09)}
+.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(0,0,0,.35),0 0 0 1px var(--gold-wash)}
 .stat::after{content:"";position:absolute;top:0;left:0;height:3px;width:0;background:var(--gold);border-radius:0 0 3px 0;transition:width .3s cubic-bezier(.23,1,.32,1)}
 .stat:hover::after{width:100%}
 
-/* 状态徽章：胶囊 + 左侧状态点 */
+/* 鐘舵€佸窘绔狅細鑳跺泭 + 宸︿晶鐘舵€佺偣 */
 .chip{border-radius:10px;padding:2px 10px 2px 8px}
 .chip::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
 
-/* 最近任务：hover 平移 + 缩略图微放大 */
+/* 鏈€杩戜换鍔★細hover 骞崇Щ + 缂╃暐鍥惧井鏀惧ぇ */
 .recent-item{transition:background .2s,padding-left .2s,border-radius .2s;border-radius:8px;border-bottom-color:transparent}
 .recent-item:hover{padding-left:6px}
 .recent-thumb{transition:transform .25s cubic-bezier(.23,1,.32,1)}
 .recent-item:hover .recent-thumb{transform:scale(1.05)}
 
-/* Toast：左侧状态色条 + 底部倒计时进度条 */
+/* Toast锛氬乏渚х姸鎬佽壊鏉?+ 搴曢儴鍊掕鏃惰繘搴︽潯 */
 .toast{border-left:3px solid var(--gold);overflow:hidden}
 .toast.err{border-left-color:var(--red)}
 .toast::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:100%;background:currentColor;opacity:.35;transform-origin:left;animation:toastBar 2.6s linear forwards}
 @keyframes toastBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 
-/* 空状态：衬线装饰图标 */
+/* ════════ 绯暮主题：组件翻新 + 动效系统 ════════ */
+
+/* 侧栏毛玻璃 */
+.sidebar{background:rgba(31,20,25,.82);backdrop-filter:blur(16px)}
+
+/* 按压回弹（所有可点元素） */
+.btn:active{transform:scale(.97)}
+.chip:active,.tag:active{transform:scale(.96)}
+.btn:active .ic{transform:scale(1.25)}
+
+/* 收藏红心两拍心跳（hover 预演 + active 重锤） */
+@keyframes heartBeat{0%{transform:scale(1)}25%{transform:scale(1.18)}45%{transform:scale(1.02)}65%{transform:scale(1.14)}100%{transform:scale(1)}}
+.btn:hover .ic{transition:transform .2s}
+.btn--gold .ic,.btn--ghost .ic{transform-origin:center}
+.btn:active .ic{animation:heartBeat .5s cubic-bezier(.23,1,.32,1)}
+
+/* 详情页分区阶梯入场 */
+.detail-head{animation:pageIn .5s cubic-bezier(.23,1,.32,1) backwards}
+.detail-body{animation:pageIn .55s .08s cubic-bezier(.23,1,.32,1) backwards}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* 图片对焦：loaded 时 blur+scale 收敛 */
+@keyframes focusIn{from{opacity:0;filter:blur(6px);transform:scale(1.05)}to{opacity:1;filter:blur(0);transform:scale(1)}}
+.poster-frame img.loaded,.recent-thumb,.row-thumb{animation:focusIn .55s ease}
+
+/* 金钮光扫 */
+.btn--gold{position:relative;overflow:hidden}
+.btn--gold::after{content:"";position:absolute;top:0;left:-80%;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);transition:left .5s ease}
+.btn--gold:hover::after{left:130%}
+
+/* 统计数字揭幕 + 柱状图生长 */
+.stat-num{animation:statReveal .6s cubic-bezier(.23,1,.32,1) backwards}
+@keyframes statReveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.bar{transform-origin:bottom;animation:barGrow .7s cubic-bezier(.23,1,.32,1) backwards}
+@keyframes barGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+
+/* 登录字标呼吸辉光 */
+.login-mark{animation:markGlow 2.4s ease-in-out infinite}
+@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(244,63,110,.25)}50%{text-shadow:0 0 34px rgba(244,63,110,.55)}}
+
+/* 画廊海报 hover：信息条上滑 + 金粉描边 */
+.poster-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
+.poster:hover .poster-frame::after{box-shadow:inset 0 0 0 1px rgba(255,122,156,.45)}
+.poster-info{transform:translateY(6px);opacity:.92;transition:transform .3s cubic-bezier(.23,1,.32,1),opacity .3s}
+.poster:hover .poster-info{transform:translateY(0);opacity:1}
+
+/* 排行榜前三名：番号金色发光 */
+.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(244,63,110,.5);font-weight:700}
+
+/* 演员头像玫红光晕 */
+.actor-photo{box-shadow:0 0 0 0 rgba(244,63,110,0);transition:box-shadow .3s,transform .3s}
+.actor:hover .actor-photo{box-shadow:0 0 24px rgba(244,63,110,.35)}
+.actor{transition:transform .25s cubic-bezier(.23,1,.32,1)}
+.actor:hover{transform:translateY(-3px)}
+
+/* 选中文字玫红底 */
+::selection{background:var(--gold-glow);color:var(--t-display)}
+
+/* 详情页最优磁力框：玫红渐变竖条 */
+.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(244,63,110,.14),rgba(244,63,110,.05)),var(--bg-page)}
+
+/* 页标题 em 金字发光 */
+.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(244,63,110,.35)}
+
+/* 绌虹姸鎬侊細琛嚎瑁呴グ鍥炬爣 */
 .empty .em-icon{font-family:var(--ff-serif);color:var(--gold-wash);opacity:1}
 
-/* 标签：hover 上浮 + 金影 */
+/* 鏍囩锛歨over 涓婃诞 + 閲戝奖 */
 .tag{transition:transform .2s,box-shadow .2s,background .2s}
 .tag:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(176,122,30,.18)}
 
-/* 最优磁力框：左侧金条 */
+/* 鏈€浼樼鍔涙锛氬乏渚ч噾鏉?*/
 .magnet-box--best{border-color:var(--gold);background:var(--gold-wash);border-left-width:3px}
 
-/* 相似影片卡 hover 浮影 */
+/* 鐩镐技褰辩墖鍗?hover 娴奖 */
 .card-hoverable{border-radius:var(--r-md);transition:transform .2s,box-shadow .25s}
-.card-hoverable:hover{box-shadow:0 8px 22px rgba(60,42,20,.14)}
+.card-hoverable:hover{box-shadow:0 8px 22px rgba(0,0,0,.4),0 0 0 1px var(--gold-wash)}
 
-/* 演员详情：在库胶囊角标 */
+/* 婕斿憳璇︽儏锛氬湪搴撹兌鍥婅鏍?*/
 .badge-lib{position:absolute;top:6px;right:6px;background:rgba(74,138,90,.92);color:#fff;font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(74,138,90,.3)}
 
-/* 演员头像 hover 微放大 */
+/* 婕斿憳澶村儚 hover 寰斁澶?*/
 .actor-avatar-zoom{transition:transform .3s cubic-bezier(.23,1,.32,1),box-shadow .3s}
-.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(60,42,20,.16)}
+.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(0,0,0,.35)}
 
-/* 分页条卡片底 */
-.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(60,42,20,.05)}
+/* 鍒嗛〉鏉″崱鐗囧簳 */
+.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(0,0,0,.2)}
 
-/* 滚动条再细一点、悬停更深 */
+/* 婊氬姩鏉″啀缁嗕竴鐐广€佹偓鍋滄洿娣?*/
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-thumb{border-radius:6px}
 
-/* 骨架屏 */
+/* 楠ㄦ灦灞?*/
 @keyframes skeletonPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .skeleton-card{aspect-ratio:7/10;border-radius:var(--r-md);background:linear-gradient(120deg,var(--bg-raised) 25%,var(--bg-page) 50%,var(--bg-raised) 75%);background-size:200% 100%;animation:skeletonPulse 1.6s ease-in-out infinite,skeletonSheen 1.8s linear infinite}
 .skeleton-card--square{aspect-ratio:1/1}
@@ -569,20 +629,20 @@ img{display:block;max-width:100%}
 .skeleton-line{height:10px;border-radius:5px;background:var(--bg-page);animation:skeletonPulse 1.6s ease-in-out infinite}
 @keyframes skeletonSheen{from{background-position:200% 0}to{background-position:-200% 0}}
 
-/* PageHead 下方细分隔线，增强结构感 */
+/* PageHead 涓嬫柟缁嗗垎闅旂嚎锛屽寮虹粨鏋勬劅 */
 .page-head{padding-bottom:18px;border-bottom:1px solid var(--line-hair)}
 
-/* 侧栏品牌区：衬线字标 + 金色小方块 */
+/* 渚ф爮鍝佺墝鍖猴細琛嚎瀛楁爣 + 閲戣壊灏忔柟鍧?*/
 .brand .brand-mark{font-family:var(--ff-serif)}
 .brand .brand-tag{letter-spacing:.22em}
 
-/* 登录页：居中卡片 + 品牌字标 */
+/* 鐧诲綍椤碉細灞呬腑鍗＄墖 + 鍝佺墝瀛楁爣 */
 .login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
-.login-card{width:380px;background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:44px 40px;box-shadow:0 10px 40px rgba(60,42,20,.10);animation:fade .4s ease}
+.login-card{width:380px;background:rgba(40,26,32,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(244,63,110,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
 .login-brand{text-align:center;margin-bottom:28px}
 .login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
 .login-mark em{color:var(--gold);font-style:normal}
 .login-tag{margin-top:6px;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--t-faint)}
 .login-error{margin-bottom:16px;padding:10px 14px;border-radius:var(--r-sm);background:rgba(192,68,58,.08);border:1px solid rgba(192,68,58,.25);color:var(--red);font-size:12px;text-align:center}
 .nav-item{transition:background .18s ease,color .18s ease;border-radius:8px;margin:1px 8px}
-.nav-item:hover{background:rgba(60,42,20,.045)}
+.nav-item:hover{background:rgba(255,180,200,.06)}
