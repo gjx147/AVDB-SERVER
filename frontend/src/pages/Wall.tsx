@@ -11,7 +11,11 @@ export function Wall() {
   const [error, setError] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [tall, setTall] = useState(false)  // 竖版封面：contain 完整显示（横版 cover 满屏）
   const touchX = useRef<number | null>(null)
+
+  // 切换作品时重置方向检测（等 onLoad 重新判定）
+  useEffect(() => { setTall(false) }, [index])
 
   const load = () => {
     setTasks(null); setError(null)
@@ -77,6 +81,8 @@ export function Wall() {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
         <div className="wfull">
           <img src={coverFileUrl(t.id)} alt={t.video_code || ''} referrerPolicy="no-referrer"
+            style={{ objectFit: tall ? 'contain' : 'cover' }}
+            onLoad={(e) => { const im = e.currentTarget; setTall(im.naturalHeight > im.naturalWidth) }}
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
         </div>
