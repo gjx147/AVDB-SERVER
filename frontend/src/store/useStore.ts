@@ -13,6 +13,11 @@ interface AppState {
   toastOk: (msg: string) => void
   toastErr: (msg: string) => void
 
+  /** 应用内确认弹窗（替代原生 confirm） */
+  confirmDialog: { open: boolean; title: string; message: string; danger: boolean; resolve: ((ok: boolean) => void) | null }
+  confirm: (title: string, message: string, danger?: boolean) => Promise<boolean>
+  resolveConfirm: (ok: boolean) => void
+
   /** 侧栏统计角标（从 dashboard 拉取后填充） */
   stats: { total: number; favorites: number; actors: number } | null
   setStats: (s: AppState['stats']) => void
@@ -32,6 +37,17 @@ export const useStore = create<AppState>((set) => ({
   toast: null,
   toastOk: (msg) => set({ toast: { msg, err: false, key: Date.now() } }),
   toastErr: (msg) => set({ toast: { msg, err: true, key: Date.now() } }),
+
+  confirmDialog: { open: false, title: '', message: '', danger: true, resolve: null },
+  confirm: (title, message, danger = true) =>
+    new Promise<boolean>((resolve) => {
+      set({ confirmDialog: { open: true, title, message, danger, resolve } })
+    }),
+  resolveConfirm: (ok) => {
+    const d = useStore.getState().confirmDialog
+    d.resolve?.(ok)
+    set({ confirmDialog: { open: false, title: '', message: '', danger: false, resolve: null } })
+  },
 
   stats: null,
   setStats: (s) => set({ stats: s }),

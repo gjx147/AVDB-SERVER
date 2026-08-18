@@ -51,7 +51,7 @@ export function Subscriptions() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const remove = async (s: Subscription) => {
-    if (!confirm(`删除订阅「${s.name}」？`)) return
+    if (!(await useStore.getState().confirm(`删除订阅「${s.name}」`, '删除后不再巡检该订阅，可重新创建。确定删除？'))) return
     try {
       await api.subscriptions.delete(s.id)
       setSubs((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev)

@@ -35,7 +35,7 @@ export function ListSources() {
     try { await api.crawl.extract({ list_source_id: s.id }); toastOk(`已开始提取 ${s.list_code}`) } catch (e) { toastErr(String((e as Error).message)) }
   }
   const remove = async (s: ListSourceWithStats) => {
-    if (!confirm(`确定删除列表源 ${s.list_code} 及其所有任务？`)) return
+    if (!(await useStore.getState().confirm(`删除列表源 ${s.list_code}`, '该列表源及其所有任务将被删除，不可恢复。确定继续？'))) return
     try { await api.listSources.remove(s.id); toastOk('已删除'); load() } catch (e) { toastErr(String((e as Error).message)) }
   }
 

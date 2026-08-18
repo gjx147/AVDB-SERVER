@@ -14,23 +14,26 @@ const PAGE = 48
 export function Library() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  // 全部筛选/页码状态从 URL 恢复（刷新/分享/返回不丢）
   const initialQ = searchParams.get('q') || ''
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [sources, setSources] = useState<ListSourceWithStats[]>([])
   const [q, setQ] = useState(initialQ)
-  const [status, setStatus] = useState('')
-  const [sourceId, setSourceId] = useState<number | ''>('')
-  const [view, setView] = useState<'grid' | 'row'>('grid')
-  const [sort, setSort] = useState('date_desc')
-  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [status, setStatus] = useState(searchParams.get('status') || '')
+  const [sourceId, setSourceId] = useState<number | ''>(searchParams.get('source') ? +(searchParams.get('source') as string) : '')
+  const [view, setView] = useState<'grid' | 'row'>(searchParams.get('view') === 'row' ? 'row' : 'grid')
+  const [sort, setSort] = useState(searchParams.get('sort') || 'date_desc')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(
+    searchParams.get('inlib') === 'in' ? 'in' : searchParams.get('inlib') === 'out' ? 'out' : 'all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(searchParams.get('page') ? Math.max(0, +(searchParams.get('page') as string)) : 0)
   const [total, setTotal] = useState(0)
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  const confirmBox = useStore((s) => s.confirm)
 
   // P1: 修复定时器泄漏 —— 用 ref 存储 interval，组件卸载时清理
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -121,15 +124,45 @@ export function Library() {
     if (cached) { setSources(cached); return }
     api.listSources.list().then((data) => { setSources(data); useStore.getState().setListSources(data) }).catch(() => {})
   }, [])
-  // P0-6/P0#3: 切换筛选条件时重置到第0页并清空选中。
-  // 关键：依赖筛选条件 [status, sourceId, sort] 而非 load（load 含 page 依赖，翻页时也会重建，
-  // 若依赖 load 会导致翻页触发此 effect 把 page 回弹到 0）。用 ref 读最新 load 避免闭包陷阱。
+
+  // ── URL 同步：筛选/页码/搜索词全部序列化进 searchParams ──
+  const filtersRef = useRef({ status, sourceId, sort, view, inLib })
+  useEffect(() => { filtersRef.current = { status, sourceId, sort, view, inLib } }, [status, sourceId, sort, view, inLib])
+  const syncUrl = (p: number) => {
+    const f = filtersRef.current
+    const trimmed = qRef.current.trim()
+    const next: Record<string, string> = {}
+    if (trimmed) next.q = trimmed
+    if (f.status) next.status = f.status
+    if (f.sourceId) next.source = String(f.sourceId)
+    if (f.sort !== 'date_desc') next.sort = f.sort
+    if (f.view !== 'grid') next.view = f.view
+    if (f.inLib !== 'all') next.inlib = f.inLib
+    if (p > 0) next.page = String(p)
+    setSearchParams(next, { replace: true })
+  }
+  const goPage = (p: number) => { setPage(p); load(p); syncUrl(p) }
+
+  // 切换筛选条件：重置到第0页 + 写 URL（首帧跳过——初始值已从 URL 恢复）
   const loadRef = useRef(load)
   useEffect(() => { loadRef.current = load }, [load])
+  const firstFilters = useRef(true)
   useEffect(() => {
-    setPage(0); setSelected(new Set()); loadRef.current(0)
+    if (firstFilters.current) { firstFilters.current = false; loadRef.current(page); return }
+    setPage(0); setSelected(new Set()); loadRef.current(0); syncUrl(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, sourceId, sort, inLib])
+  }, [status, sourceId, sort, inLib, view])
+
+  // 搜索防抖 300ms：停字自动搜索 + 写 URL（首帧跳过避免挂载双请求）
+  const firstQ = useRef(true)
+  useEffect(() => {
+    if (firstQ.current) { firstQ.current = false; return }
+    const t = setTimeout(() => {
+      setPage(0); setSelected(new Set()); loadRef.current(0); syncUrl(0)
+    }, 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q])
 
   const toggleSel = (id: number) => {
     setSelected((prev) => {
@@ -155,6 +188,10 @@ export function Library() {
   const batch = async (kind: 'delete' | 'retry' | 'favorite') => {
     const ids = [...selected]
     if (!ids.length) return
+    if (kind === 'delete') {
+      const ok = await confirmBox('批量删除', `将删除 ${ids.length} 个任务及其关联图片缓存，不可恢复。确定继续？`)
+      if (!ok) return
+    }
     try {
       if (kind === 'delete') await api.tasks.batchDelete(ids)
       if (kind === 'retry') await api.tasks.batchRetry(ids)
@@ -174,15 +211,8 @@ export function Library() {
       <div className="gallery-toolbar">
         <div className="search">
           <Icon.search />
-          <input placeholder="输入番号或关键词搜索…" value={q}
-            onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setPage(0); load(0)
-                // 同步 URL ?q=，刷新页面后保持搜索词
-                const trimmed = e.currentTarget.value.trim()
-                setSearchParams(trimmed ? { q: trimmed } : {}, { replace: true })
-              }
-            }} />
+          <input placeholder="输入番号或关键词，停字自动搜索…" value={q}
+            onChange={(e) => setQ(e.target.value)} aria-label="搜索影片库" />
         </div>
         <select className="select" value={sourceId} onChange={(e) => setSourceId(e.target.value ? +e.target.value : '')} aria-label="筛选列表源">
           <option value="">全部列表源</option>
@@ -250,11 +280,11 @@ export function Library() {
       {/* ── Pager ── */}
       {total > PAGE && (
         <div className="pager">
-          <button disabled={page === 0} onClick={() => { setPage(page - 1); load(page - 1) }}>上一页</button>
+          <button disabled={page === 0} onClick={() => goPage(page - 1)}>上一页</button>
           <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 13, color: 'var(--t-mute)', padding: '0 14px' }}>
             {page * PAGE + 1}-{Math.min((page + 1) * PAGE, total)} / 共 {total} 条
           </span>
-          <button disabled={(page + 1) * PAGE >= total} onClick={() => { setPage(page + 1); load(page + 1) }}>下一页</button>
+          <button disabled={(page + 1) * PAGE >= total} onClick={() => goPage(page + 1)}>下一页</button>
         </div>
       )}
 

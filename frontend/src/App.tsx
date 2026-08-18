@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Routes, Route, useLocation, useNavigationType, Navigate } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { Toast } from './components/Toast'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { Loading } from './components/States'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useStore } from './store/useStore'
@@ -31,10 +32,30 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const navType = useNavigationType()
   const setStats = useStore((s) => s.setStats)
   const imgMode = useStore((s) => s.imgMode)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // 列表页滚动位置记忆：POP（返回/前进）时恢复，新导航回顶
+  const scrollMap = useRef(new Map<string, number>())
+  useEffect(() => {
+    const key = pathname + search
+    const onScroll = () => scrollMap.current.set(key, window.scrollY)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [pathname, search])
+  useEffect(() => {
+    setMobileMenuOpen(false)
+    if (navType === 'POP') {
+      const y = scrollMap.current.get(pathname + search)
+      // 等页面渲染后再恢复，避免被组件内 scrollTo 覆盖
+      requestAnimationFrame(() => window.scrollTo(0, y || 0))
+    } else {
+      window.scrollTo(0, 0)
+    }
+  }, [pathname, search, navType])
 
   useEffect(() => {
     if (localStorage.getItem('apiToken')) {
@@ -43,8 +64,6 @@ export default function App() {
       }).catch(() => {})
     }
   }, [setStats])
-
-  useEffect(() => { window.scrollTo(0, 0); setMobileMenuOpen(false) }, [pathname])
 
   // 登录页不显示侧栏
   if (pathname === '/login') {
@@ -90,6 +109,7 @@ export default function App() {
         </ErrorBoundary>
       </main>
       <Toast />
+      <ConfirmDialog />
     </div>
   )
 }

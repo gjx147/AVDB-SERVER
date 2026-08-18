@@ -47,10 +47,14 @@ export function Settings() {
   const restore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (!f) return
+    if (!(await useStore.getState().confirm('恢复数据库', `将用「${f.name}」覆盖现有数据库，现有数据将丢失。确定继续？`))) {
+      e.target.value = ''
+      return
+    }
     try { await api.settings.restore(f); toastOk('数据库已恢复，请刷新页面') } catch (er) { toastErr(String((er as Error).message)) }
   }
   const cleanFailed = async () => {
-    if (!confirm('确定清理所有失败任务？')) return
+    if (!(await useStore.getState().confirm('清理失败任务', '将删除所有失败状态的任务记录，确定继续？'))) return
     try { await api.settings.cleanFailed(); toastOk('已清理') } catch (e) { toastErr(String((e as Error).message)) }
   }
 

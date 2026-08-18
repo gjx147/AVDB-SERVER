@@ -7,6 +7,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [leaving, setLeaving] = useState(false)
   const [wall, setWall] = useState<string[]>([])
   const navigate = useNavigate()
 
@@ -43,7 +44,9 @@ export default function Login() {
       }
       const data = await res.json()
       localStorage.setItem('apiToken', data.access_token)
-      navigate('/')
+      // 仪式感退场：登录卡上浮消散 + 海报墙提亮，再进入主界面
+      setLeaving(true)
+      setTimeout(() => navigate('/'), 480)
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
@@ -52,7 +55,7 @@ export default function Login() {
   }
 
   return (
-    <div className="login-page">
+    <div className={`login-page${leaving ? ' leaving' : ''}`}>
       {wall.length > 0 && (
         <div className="login-wall" aria-hidden="true">
           {wall.map((u, i) => (

@@ -25,6 +25,11 @@ export function TaskDetail() {
   const [imgVersion, setImgVersion] = useState(0)
   const [dlDownloader, setDlDownloader] = useState('')  // '' = 使用默认
   const reqSeqRef = useRef(0)  // 请求序号防竞态（快速切换任务时丢弃过期响应）
+  // 操作反馈状态
+  const confirmBox = useStore((s) => s.confirm)
+  const [favBeat, setFavBeat] = useState(false)            // 收藏成功时封面心跳
+  const [copiedMagnet, setCopiedMagnet] = useState<string | null>(null)  // 复制 ✓ 回弹
+  const [sentMagnet, setSentMagnet] = useState<string | null>(null)      // 推送成功磁力卡高光
 
   const load = () => {
     if (!id) return
@@ -119,21 +124,55 @@ export function TaskDetail() {
   const actors = task.actors ? task.actors.split(',').map((a) => a.trim()).filter(Boolean) : []
 
   const fav = async () => {
+    if (!task) return
+    // 乐观更新：心形立即翻转 + 封面心跳，失败回滚
+    const prev = task.is_favorite
+    const next = prev ? 0 : 1
+    setTask({ ...task, is_favorite: next })
+    if (next) setFavBeat(true)
     try {
-      task.is_favorite ? await api.tasks.unfavorite(task.id) : await api.tasks.favorite(task.id)
-      toastOk(task.is_favorite ? '已取消收藏' : '心动了，收进私藏')
+      prev ? await api.tasks.unfavorite(task.id) : await api.tasks.favorite(task.id)
+      toastOk(prev ? '已取消收藏' : '心动了，收进私藏')
       load()
-    } catch (e) { toastErr(String((e as Error).message)) }
+    } catch (e) {
+      setTask((t) => (t ? { ...t, is_favorite: prev } : t))
+      toastErr(String((e as Error).message))
+    }
   }
   const extract = async () => {
     try { await api.tasks.extract(task.id); toastOk('正在把她带回家…') } catch (e) { toastErr(String((e as Error).message)) }
   }
   const copyMagnet = (m: string) => {
-    navigator.clipboard.writeText(m).then(() => toastOk('磁力已复制')).catch(() => toastErr('复制失败'))
+    const done = () => {
+      setCopiedMagnet(m)
+      toastOk('磁力已复制')
+      setTimeout(() => setCopiedMagnet((c) => (c === m ? null : c)), 1500)
+    }
+    // HTTP 环境（NAS 自托管）无 navigator.clipboard，用 execCommand 兜底
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(m).then(done).catch(() => fallbackCopy(m, done))
+    } else {
+      fallbackCopy(m, done)
+    }
+  }
+  const fallbackCopy = (m: string, done: () => void) => {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = m
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      done()
+    } catch {
+      toastErr('复制失败，请长按手动选择复制')
+    }
   }
   const remove = async () => {
     if (!task) return
-    if (!confirm(`确定删除 ${task.video_code || '该任务'}？关联数据一并清理，不可恢复。`)) return
+    if (!(await confirmBox(`删除 ${task.video_code || '该任务'}`, '关联数据（图片缓存、磁力记录）一并清理，不可恢复。确定删除？'))) return
     try {
       await api.tasks.delete(task.id)
       toastOk('已删除')
@@ -144,6 +183,8 @@ export function TaskDetail() {
     try {
       await api.downloaders.download(magnet, dlDownloader || undefined, undefined, task.id)
       toastOk(`已占为己有${dlDownloader ? ' · ' + dlDownloader : ''}`)
+      setSentMagnet(magnet)
+      setTimeout(() => setSentMagnet((s) => (s === magnet ? null : s)), 900)
       load()  // 刷新下载状态
     } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -185,7 +226,7 @@ export function TaskDetail() {
 
       {/* 紧凑头部：左海报（gallery-2 index 1）+ 右信息 */}
       <div className="detail-head" style={{ position: 'relative', zIndex: 1 }}>
-        <div className="detail-cover">
+        <div className={`detail-cover${favBeat ? ' beat' : ''}`} onAnimationEnd={() => setFavBeat(false)}>
           <img
             src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
             alt={`${task.video_code || '作品'} 海报`}
@@ -398,7 +439,7 @@ export function TaskDetail() {
                 {/* 第 1 条：best_magnet（最优）单独强调显示 */}
                 {topMagnets.map((m, i) => (
                   <div key={i}>
-                    <div className={`magnet-box${i === 0 ? ' magnet-box--best' : ''}`}>
+                    <div className={`magnet-box${i === 0 ? ' magnet-box--best' : ''}${sentMagnet === m.link ? ' sent-glow' : ''}`}>
                       {m.link}
                       {/* 优先级 / 大小标签 */}
                       <span style={{ marginLeft: 8, whiteSpace: 'nowrap' }}>
@@ -412,7 +453,9 @@ export function TaskDetail() {
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                      <button className="btn btn--ghost btn--sm" onClick={() => copyMagnet(m.link)}><Icon.copy />复制</button>
+                      <button className="btn btn--ghost btn--sm" onClick={() => copyMagnet(m.link)}>
+                        {copiedMagnet === m.link ? <><Icon.check />已复制</> : <><Icon.copy />复制</>}
+                      </button>
                       {dlOpen && <button className="btn btn--gold btn--sm" onClick={() => download(m.link)}>占为己有</button>}
                     </div>
                   </div>

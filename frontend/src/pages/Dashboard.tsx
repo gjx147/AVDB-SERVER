@@ -13,28 +13,50 @@ export function Dashboard() {
   const [monthly, setMonthly] = useState<MonthlyStat[]>([])
   const [disk, setDisk] = useState<DiskInfo | null>(null)
   const [analytics, setAnalytics] = useState<{ top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; rating_dist: { bucket: string; count: number }[] } | null>(null)
+  // 次级区块软错误（失败 ≠ 空数据，给行内重试）
+  const [softErr, setSoftErr] = useState<{ recent?: boolean; monthly?: boolean; analytics?: boolean }>({})
+  // 磁盘条生长动画 + 百分比 count-up
+  const diskOk = !!(disk && disk.data && !disk.data.error)
+  const [barOn, setBarOn] = useState(false)
+  const [pctShown, setPctShown] = useState(0)
 
   const load = () => {
-    setStats(null); setError(null)
+    setStats(null); setError(null); setSoftErr({})
     api.dashboard.stats().then(setStats).catch((e) => setError(String((e as Error).message)))
-    api.dashboard.recent(12).then(setRecent).catch(() => {})
-    api.dashboard.monthly().then(setMonthly).catch(() => {})
+    api.dashboard.recent(12).then(setRecent).catch(() => setSoftErr((s) => ({ ...s, recent: true })))
+    api.dashboard.monthly().then(setMonthly).catch(() => setSoftErr((s) => ({ ...s, monthly: true })))
     api.system.disk().then(setDisk).catch(() => {})
-    api.v2.analytics().then(setAnalytics).catch(() => {})
+    api.v2.analytics().then(setAnalytics).catch(() => setSoftErr((s) => ({ ...s, analytics: true })))
   }
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!diskOk || !disk?.data) return
+    setBarOn(false)
+    setPctShown(0)
+    const raf1 = requestAnimationFrame(() => setBarOn(true))
+    const target = disk.data.free_percent
+    const start = performance.now()
+    let raf2 = 0
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - start) / 800)
+      setPctShown(Math.round(target * (1 - Math.pow(1 - k, 3))))
+      if (k < 1) raf2 = requestAnimationFrame(tick)
+    }
+    raf2 = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+  }, [diskOk, disk?.data?.free_percent])
+
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={load} /></div>
   if (!stats) return <div className="page"><Loading /></div>
   const maxCount = Math.max(...monthly.map((m) => m.count), 1)
-  const diskOk = !!(disk && disk.data && !disk.data.error)
 
   return (
     <div className="page">
       <PageHead eyebrow="Overview" title={<>仪表<em>盘</em></>}
         sub="灯已调暗——今晚，想先看谁？">
-        <button className="btn btn--ghost btn--sm" onClick={() => location.reload()}><Icon.refresh />刷新</button>
+        <button className="btn btn--ghost btn--sm" onClick={load}><Icon.refresh />刷新</button>
       </PageHead>
 
       <div className="stat-row">
@@ -51,13 +73,13 @@ export function Dashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t-body)' }}>磁盘空间</span>
               <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: disk!.data!.free_percent < 10 ? 'var(--red)' : 'var(--t-mute)' }}>
-                {disk!.data!.free_gb} GB 可用 ({disk!.data!.free_percent}%)
+                {disk!.data!.free_gb} GB 可用 ({pctShown}%)
               </span>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-surface)', overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 4,
-                width: `${100 - disk!.data!.free_percent}%`,
+                width: barOn ? `${100 - disk!.data!.free_percent}%` : '0%',
                 background: disk!.data!.free_percent < 10 ? 'var(--red)' : disk!.data!.free_percent < 25 ? 'var(--gold)' : 'var(--green, #4caf50)',
                 transition: 'width .4s',
               }} />
@@ -76,7 +98,8 @@ export function Dashboard() {
             <Link to="/crawl" className="panel-link">查看爬取控制台 →</Link>
           </div>
           <div className="panel-body">
-            {monthly.length === 0 ? <Empty title="暂无数据" /> : (
+            {softErr.monthly ? <InlineErr onRetry={load} /> :
+              monthly.length === 0 ? <Empty title="暂无数据" /> : (
               <div className="bar-chart bar-chart--sm">
                 {monthly.slice().reverse().map((m) => (
                   <div className="bar-col" key={m.month} data-num={`${m.month} · ${m.count}部`} title={`${m.month}: ${m.count} 部`}>
@@ -97,12 +120,15 @@ export function Dashboard() {
           <Link to="/library" className="panel-link">全部 →</Link>
         </div>
         <div className="panel-body">
-          {recent.length === 0 ? <Empty title="暂无已完成任务" /> : <RecentCarousel tasks={recent} />}
+          {softErr.recent ? <InlineErr onRetry={load} /> :
+            recent.length === 0 ? <Empty title="暂无已完成任务" /> : <RecentCarousel tasks={recent} />}
         </div>
       </div>
 
       {/* F14: 分析维度 —— Top 演员 / 标签 / 评分分布 */}
-      {analytics && (
+      {softErr.analytics ? (
+        <div style={{ marginTop: 24 }}><InlineErr onRetry={load} /></div>
+      ) : analytics && (
         <div className="dash-grid" style={{ marginTop: 24 }}>
           <div className="panel">
             <div className="panel-head"><div className="panel-title">Top <em>演员</em></div></div>
@@ -150,6 +176,16 @@ function Stat({ num, unit, label, trend, down }: { num: number; unit: string; la
       <div className="stat-num">{(num ?? 0).toLocaleString()} <small>{unit}</small></div>
       <div className="stat-label">{label}</div>
       <div className={`stat-trend${down ? ' down' : ''}`}>{trend}</div>
+    </div>
+  )
+}
+
+/** 次级区块加载失败：行内提示 + 重试 */
+function InlineErr({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--red)', padding: '14px 2px' }}>
+      <span>该区块加载失败</span>
+      <button className="btn btn--ghost btn--sm" onClick={onRetry}><Icon.refresh />重试</button>
     </div>
   )
 }

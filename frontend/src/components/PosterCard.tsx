@@ -64,9 +64,9 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
   }
 
   return (
-    <div className="poster" onClick={open} onKeyDown={handleKeyDown} tabIndex={0} role="button"
+    <div className={`poster${selected ? ' selected' : ''}`} onClick={open} onKeyDown={handleKeyDown} tabIndex={0} role="button"
       aria-label={`查看 ${task.video_code || '未命名'} 的详情`} style={{ cursor: 'pointer' }}>
-      <div className="poster-frame" style={selected ? { boxShadow: '0 0 0 3px var(--gold), 0 8px 24px rgba(232,93,138,.25)' } : undefined}>
+      <div className="poster-frame">
         {/* 优先本地缓存高清封面，无缓存时 fallback 到远程封面 */}
         <img
           src={imgSrc}
@@ -81,17 +81,10 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           <span className="poster-code">{task.video_code || '—'}</span>
           <div style={{ display: 'flex', gap: 6 }}>
             {selectable && (
-              <div onClick={toggle} role="checkbox" aria-checked={selected} tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as any) } }}
-                style={{
-                  width: 26, height: 26, borderRadius: 6, cursor: 'pointer',
-                  border: selected ? 'none' : '2.5px solid rgba(255,255,255,.85)',
-                  background: selected ? 'var(--gold)' : 'rgba(0,0,0,.35)',
-                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 15, fontWeight: 700,
-                  boxShadow: selected ? '0 0 8px rgba(232,93,138,.4)' : 'none',
-                  transition: 'all .2s',
-                }}>{selected ? '✓' : ''}</div>
+              <div className={`poster-check${selected ? ' on' : ''}`} onClick={toggle} role="checkbox" aria-checked={selected} tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as unknown as React.MouseEvent) } }}>
+                {selected ? '✓' : ''}
+              </div>
             )}
             {task.is_favorite ? <div className="badge-fav">♥</div> : null}
           </div>

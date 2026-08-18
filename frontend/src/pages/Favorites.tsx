@@ -37,7 +37,7 @@ export function Favorites() {
     catch (e) { toastErr(String((e as Error).message)) }
   }
   const delCol = async (id: number) => {
-    if (!confirm('删除分组？（不会删除影片本身）')) return
+    if (!(await useStore.getState().confirm('删除分组', '删除分组？（不会删除影片本身）'))) return
     try {
       await api.collections.remove(id)
       if (activeCol === id) {
