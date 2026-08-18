@@ -3,35 +3,51 @@ import { useNavigate } from 'react-router-dom'
 import { coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
 
-/** 仪表盘「最近完成」大图轮播 —— 原生 scroll-snap 横滑 + 箭头/圆点 + 自动轮播（hover 暂停） */
+const GAP = 14 // 与 CSS .rc-track 的 gap 保持一致
+
+/** 仪表盘「最近完成」多卡胶片轮播 —— 完整海报 contain 显示 + 逐卡 scroll-snap + 自动轮播（hover 暂停） */
 export function RecentCarousel({ tasks }: { tasks: Task[] }) {
   const nav = useNavigate()
   const trackRef = useRef<HTMLDivElement>(null)
-  const [index, setIndex] = useState(0)
+  const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
   const n = tasks.length
 
-  // onScroll 反算当前索引：滑动/滚轮/箭头/自动播放统一生效
+  // 一张卡片的滚动步长（卡宽 + 间距）
+  const step = () => {
+    const el = trackRef.current
+    const card = el?.firstElementChild as HTMLElement | null
+    return card ? card.offsetWidth + GAP : el?.clientWidth || 1
+  }
+
+  // 滚动进度：滑动/滚轮/箭头/自动播放统一生效
   const handleScroll = () => {
     const el = trackRef.current
-    if (!el || !el.clientWidth) return
-    const i = Math.round(el.scrollLeft / el.clientWidth)
-    if (i !== index && i >= 0 && i < n) setIndex(i)
+    if (!el) return
+    const max = el.scrollWidth - el.clientWidth
+    setProgress(max > 0 ? Math.min(1, el.scrollLeft / max) : 0)
   }
 
   const go = (i: number) => {
     const el = trackRef.current
-    if (!el || !el.clientWidth) return
-    const target = (((i % n) + n) % n) * el.clientWidth
-    el.scrollTo({ left: target, behavior: 'smooth' })
+    if (!el) return
+    const max = Math.max(0, el.scrollWidth - el.clientWidth)
+    const left = Math.min(Math.max(0, i * step()), max)
+    el.scrollTo({ left, behavior: 'smooth' })
   }
 
-  // 自动轮播 5s；hover 暂停；手动切换后重置计时
+  // 自动轮播：5s 前进一张，到头回到第一张；hover 暂停
   useEffect(() => {
     if (paused || n < 2) return
-    const t = setInterval(() => go(index + 1 >= n ? 0 : index + 1), 5000)
+    const t = setInterval(() => {
+      const el = trackRef.current
+      if (!el) return
+      const max = el.scrollWidth - el.clientWidth
+      const atEnd = el.scrollLeft >= max - 2
+      go(atEnd ? 0 : Math.round(el.scrollLeft / step()) + 1)
+    }, 5000)
     return () => clearInterval(t)
-  }, [paused, index, n])
+  }, [paused, n])
 
   if (n === 0) return null
 
@@ -41,20 +57,17 @@ export function RecentCarousel({ tasks }: { tasks: Task[] }) {
         {tasks.map((t) => {
           const remote = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })()
           return (
-            <div key={t.id} className="rc-slide" onClick={() => nav(`/task/${t.id}`)}
+            <div key={t.id} className="rc-card" onClick={() => nav(`/task/${t.id}`)}
               role="button" tabIndex={0} aria-label={`查看 ${t.video_code || '作品'} 详情`}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
-              <img src={coverFileUrl(t.id)} alt={t.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
-                onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
-              <div className="rc-shade" />
-              <div className="rc-info">
+              <div className="rc-imgbox">
+                <img src={coverFileUrl(t.id)} alt={t.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
+                  onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
+                {t.is_favorite ? <span className="rc-fav">♥</span> : null}
+              </div>
+              <div className="rc-cap">
                 <div className="rc-code">{t.video_code || '—'}</div>
                 <div className="rc-title">{t.title || '未命名'}</div>
-                <div className="rc-tags">
-                  {t.is_favorite ? <span className="chip chip-rose">收藏</span> : null}
-                  <span className="chip chip-green">已入库</span>
-                  <span className="rc-more">查看详情 →</span>
-                </div>
               </div>
             </div>
           )
@@ -62,15 +75,14 @@ export function RecentCarousel({ tasks }: { tasks: Task[] }) {
       </div>
 
       {n > 1 && (<>
-        <button className="rc-nav rc-nav--prev" aria-label="上一张" onClick={() => go(index - 1)}>‹</button>
-        <button className="rc-nav rc-nav--next" aria-label="下一张" onClick={() => go(index + 1)}>›</button>
-        <div className="rc-dots">
-          {tasks.map((t, i) => (
-            <button key={t.id} className={`rc-dot${i === index ? ' on' : ''}`} aria-label={`第 ${i + 1} 张`}
-              onClick={() => go(i)} />
-          ))}
-        </div>
+        <button className="rc-nav rc-nav--prev" aria-label="上一张"
+          onClick={() => go(Math.round((trackRef.current?.scrollLeft || 0) / step()) - 1)}>‹</button>
+        <button className="rc-nav rc-nav--next" aria-label="下一张"
+          onClick={() => go(Math.round((trackRef.current?.scrollLeft || 0) / step()) + 1)}>›</button>
       </>)}
+      <div className="rc-progress" aria-hidden="true">
+        <div className="rc-progress-fill" style={{ width: `${Math.max(4, progress * 100)}%` }} />
+      </div>
     </div>
   )
 }
