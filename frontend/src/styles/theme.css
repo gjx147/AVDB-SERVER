@@ -224,19 +224,7 @@ body::before{
 .dash-top-grid .card,
 .dash-top-grid .panel,
 .recent-panel,
-.dash-grid .panel,
-.dash-side .panel{background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-
-/* 仪表盘双栏：主内容 + 首页侧边栏（影片库轮播） */
-.dash-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:22px;align-items:start}
-.dash-main{min-width:0}
-.dash-side{position:sticky;top:24px}
-/* 侧栏窄容器：轮播每屏 2 卡（覆盖视口断点） */
-.dash-side .rc-card{flex-basis:calc((100% - 14px)/2)}
-@media(max-width:1100px){
-  .dash-layout{grid-template-columns:1fr}
-  .dash-side{position:static}
-}
+.dash-grid .panel{background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 
 /* 柱状图 */
 .bar-chart{display:flex;align-items:flex-end;gap:8px;height:160px;padding-top:10px}
@@ -768,3 +756,50 @@ html.reveal .poster.rv{opacity:1}
 @keyframes loginLeave{to{opacity:0;transform:translateY(-26px) scale(1.04)}}
 .login-page.leaving .login-wall img{filter:saturate(1.5) brightness(1.02);transition:filter .45s}
 .login-page.leaving .pulse-band{animation:none}
+
+/* ════════ 首页 · 影视墙（影片库作品全屏海报墙 + 分页轮播） ════════ */
+.wall-page{position:relative;height:100vh;overflow:hidden;background:var(--bg-ink)}
+.wall-track{display:flex;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none}
+.wall-track::-webkit-scrollbar{display:none}
+.wall-slide{flex:0 0 100%;height:100%;scroll-snap-align:start;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));grid-auto-rows:minmax(160px,1fr);gap:4px;padding:4px}
+.wall-cell{position:relative;overflow:hidden;cursor:pointer;border-radius:6px;background:var(--bg-page)}
+.wall-cell img{width:100%;height:100%;object-fit:cover;object-position:right center;
+  filter:saturate(1.18) brightness(.72);opacity:0;
+  animation:wallIn .8s ease forwards,kenburns 22s var(--d,0s) ease-in-out infinite alternate;
+  transition:filter .35s}
+.wall-cell:hover img,.wall-cell:focus-visible img{filter:saturate(1.35) brightness(.95)}
+.wall-cell:hover img{transform:scale(1.05)}
+.wall-cell:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+@keyframes wallIn{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:scale(1)}}
+/* 番号悬浮条（hover 显示） */
+.wall-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 8px 6px;font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#fff;letter-spacing:.03em;text-align:center;
+  background:linear-gradient(0deg,rgba(20,6,12,.72),transparent);opacity:0;transition:opacity .25s;pointer-events:none}
+.wall-cell:hover .wall-cap,.wall-cell:focus-visible .wall-cap{opacity:1}
+.wall-fav{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:rgba(255,20,147,.88);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(255,20,147,.4)}
+/* 粉雾遮罩（聚向中央，与登录墙同语言） */
+.wall-page::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(255,200,215,.30) 100%),
+             linear-gradient(180deg, rgba(255,20,147,.10), rgba(255,200,215,.18))}
+/* 顶部浮动标识 */
+.wall-head{position:absolute;top:16px;left:20px;z-index:3;display:flex;align-items:baseline;gap:12px;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:var(--shadow-card)}
+.wall-title{font-family:var(--ff-serif);font-size:17px;font-weight:700;color:var(--t-display)}
+.wall-title em{font-style:italic;color:var(--gold);font-weight:400;font-size:14px}
+.wall-sub{font-size:11px;color:var(--t-mute);font-family:var(--ff-mono)}
+/* 箭头 + 圆点（复用玻璃语言） */
+.wall-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--t-display);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;z-index:3;padding:0 0 2px;box-shadow:var(--shadow-card)}
+.wall-nav:hover{background:rgba(255,255,255,.85)}
+.wall-nav:active{transform:translateY(-50%) scale(.94)}
+.wall-nav--prev{left:16px}
+.wall-nav--next{right:16px}
+.wall-dots{position:absolute;left:0;right:0;bottom:16px;display:flex;gap:8px;justify-content:center;z-index:3}
+.wall-dot{width:10px;height:10px;border-radius:999px;border:none;padding:0;background:rgba(255,255,255,.5);cursor:pointer;transition:all .25s cubic-bezier(.23,1,.32,1);box-shadow:0 1px 4px rgba(61,21,38,.25)}
+.wall-dot:hover{background:rgba(255,255,255,.8)}
+.wall-dot.on{background:#fff;width:26px}
+.wall-loading{display:flex;align-items:center;justify-content:center;min-height:60vh}
+@media(pointer:coarse){.wall-nav{display:none}}
+@media(max-width:768px){
+  .wall-slide{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));grid-auto-rows:minmax(120px,1fr)}
+  .wall-head{left:12px;top:12px;padding:6px 12px}
+  .wall-title{font-size:15px}
+}
