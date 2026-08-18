@@ -644,7 +644,8 @@ html.reveal .poster.rv{opacity:1}
   .poster-frame::before,.stat::before,.pulse-band,.aura{display:none}
   .btn--gold{animation:none}
 }
-.mobile-menu-btn{display:none}
+/* 桌面隐藏汉堡按钮（min-width 媒体块，避免被顺序覆盖） */
+@media(min-width:769px){.mobile-menu-btn{display:none}}
 
 /* ══ 减动效（reduced-motion）：动画播一次即停 ══ */
 @media (prefers-reduced-motion:reduce){
