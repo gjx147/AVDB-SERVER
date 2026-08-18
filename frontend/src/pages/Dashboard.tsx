@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { Link } from 'react-router-dom'
+import { api } from '../api/client'
 import type { DashboardStats, Task, MonthlyStat, DiskInfo } from '../api/types'
+import { RecentCarousel } from '../components/RecentCarousel'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 
 export function Dashboard() {
-  const nav = useNavigate()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recent, setRecent] = useState<Task[]>([])
@@ -97,26 +97,7 @@ export function Dashboard() {
           <Link to="/library" className="panel-link">全部 →</Link>
         </div>
         <div className="panel-body">
-          {recent.length === 0 ? <Empty title="暂无已完成任务" /> : (
-            <div className="recent-grid">
-              {recent.map((t) => (
-                <div className="recent-item" key={t.id} onClick={() => nav(`/task/${t.id}`)}
-                  tabIndex={0} role="button" aria-label={`查看 ${t.video_code || '作品'} 详情`}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
-                  <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
-                    onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
-                  <div className="recent-meta">
-                    <div className="recent-code">{t.video_code || '—'}</div>
-                    <div className="recent-title">{t.title || '未命名'}</div>
-                    <div className="recent-tags">
-                      {t.is_favorite ? <span className="chip chip-rose">收藏</span> : null}
-                      <span className="chip chip-green">已入库</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {recent.length === 0 ? <Empty title="暂无已完成任务" /> : <RecentCarousel tasks={recent} />}
         </div>
       </div>
 
