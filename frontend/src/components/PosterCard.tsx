@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
+import { Icon } from './Icons'
 
 const statusMap = {
   visited: ['bs-visited', '已入库'],
@@ -9,11 +10,11 @@ const statusMap = {
   failed: ['bs-failed', '失败'],
 } as const
 
-const dlStatusMap: Record<string, { icon: string; cls: string; label: string }> = {
-  completed: { icon: '📥', cls: 'dl-completed', label: '已下载' },
-  downloading: { icon: '⏳', cls: 'dl-downloading', label: '下载中' },
-  pushed: { icon: '📤', cls: 'dl-pushed', label: '已推送' },
-  failed: { icon: '❌', cls: 'dl-failed', label: '下载失败' },
+const dlStatusMap: Record<string, { icon: ReactNode; cls: string; label: string }> = {
+  completed: { icon: <Icon.check />, cls: 'dl-completed', label: '已下载' },
+  downloading: { icon: <Icon.clock />, cls: 'dl-downloading', label: '下载中' },
+  pushed: { icon: <Icon.upload />, cls: 'dl-pushed', label: '已推送' },
+  failed: { icon: <Icon.x />, cls: 'dl-failed', label: '下载失败' },
 }
 
 interface Props {

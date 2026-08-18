@@ -140,9 +140,9 @@ export function Crawl() {
 
         <div className="terminal">
           <div className="term-head">
-            <div className="term-dot" style={{ background: '#ff5f56' }} />
-            <div className="term-dot" style={{ background: '#ffbd2e' }} />
-            <div className="term-dot" style={{ background: '#27c93f' }} />
+            <div className="term-dot" style={{ background: '#ff4d6d' }} />
+            <div className="term-dot" style={{ background: '#ffb454' }} />
+            <div className="term-dot" style={{ background: '#3ddc97' }} />
             <div className="term-title">scraper.py — 实时日志</div>
             <div className="term-live">{running ? '运行中' : '已停止'}</div>
           </div>

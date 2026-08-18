@@ -367,17 +367,22 @@ export function TaskDetail() {
                 <button className="btn btn--ghost btn--sm" onClick={() => setDlOpen(!dlOpen)}>推送下载</button>
               )}
             </div>
-            {task.download_status && (
-              <div style={{ marginBottom: 10, padding: '6px 12px', borderRadius: 'var(--r-sm)',
-                background: task.download_status === 'completed' ? 'rgba(76,175,80,.1)' :
-                  task.download_status === 'failed' ? 'rgba(244,67,54,.08)' : 'var(--gold-wash)',
-                fontSize: 12, color: 'var(--t-body)' }}>
-                {task.download_status === 'completed' ? '✅ 已下载完成' :
-                 task.download_status === 'downloading' ? '⏳ 正在下载中' :
-                 task.download_status === 'failed' ? '❌ 下载失败' :
-                 '📤 已推送到下载器'}
-              </div>
-            )}
+            {task.download_status && (() => {
+              const dl = task.download_status
+              const dlMap: Record<string, { icon: React.ReactNode; bg: string; color: string; label: string }> = {
+                completed: { icon: <Icon.check />, bg: 'var(--green-wash)', color: 'var(--green)', label: '已下载完成' },
+                downloading: { icon: <Icon.clock />, bg: 'var(--amber-wash)', color: 'var(--amber)', label: '正在下载中' },
+                failed: { icon: <Icon.x />, bg: 'var(--red-wash)', color: 'var(--red)', label: '下载失败' },
+                pushed: { icon: <Icon.upload />, bg: 'var(--blue-wash)', color: 'var(--blue)', label: '已推送到下载器' },
+              }
+              const s = dlMap[dl] || dlMap.pushed
+              return (
+                <div style={{ marginBottom: 10, padding: '6px 12px', borderRadius: 'var(--r-sm)',
+                  background: s.bg, fontSize: 12, color: s.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {s.icon}{s.label}
+                </div>
+              )
+            })()}
             {dlOpen && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--t-mute)' }}>下载器:</span>
