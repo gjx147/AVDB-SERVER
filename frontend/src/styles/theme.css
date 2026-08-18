@@ -6,8 +6,8 @@
 
 :root{
   /* 色板：欲焰（更鲜艳 · Deep Pink + Electric） */
-  --bg-ink: #ffb3cc;
-  --bg-page: #ffc9da;
+  --bg-ink: #fff0f5;
+  --bg-page: #ffe4ee;
   --bg-surface: #ffffff;
   --bg-raised: #fff9fb;
   --bg-overlay: rgba(255,249,251,.88);
@@ -198,7 +198,7 @@ img{display:block;max-width:100%}
 .recent-time{font-size:11px;color:var(--t-faint);flex:none}
 .recent-panel{margin-bottom:22px}
 .recent-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px}
-.recent-grid .recent-item{border:1px solid var(--line-hair);border-radius:var(--r-md);padding:12px;background:var(--bg-page);transition:border-color .2s,box-shadow .25s,transform .25s}
+.recent-grid .recent-item{border:1px solid var(--line-hair);border-radius:var(--r-md);padding:12px;background:transparent;transition:border-color .2s,box-shadow .25s,transform .25s}
 .recent-grid .recent-item:hover,.recent-grid .recent-item:focus-visible{border-color:var(--gold);box-shadow:var(--shadow-card);transform:translateY(-2px);outline:none}
 .recent-grid .recent-thumb{width:58px;height:80px;border-radius:7px}
 
@@ -874,4 +874,11 @@ html.reveal .poster.rv{opacity:1}
   .poster-frame::before,.stat::before,.pulse-band,.aura{display:none}
   .btn--gold{animation:none}
 }
+
+/* 仪表盘模块：半透明玻璃底（亮色桃粉背景上透出晕光） */
+.stat-row .stat,
+.dash-top-grid .card,
+.dash-top-grid .panel,
+.recent-panel,
+.dash-grid .panel{background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 
