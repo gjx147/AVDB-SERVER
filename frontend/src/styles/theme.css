@@ -315,9 +315,10 @@ body::before{
 .poster-caption{margin-top:12px;padding:0 2px}
 .poster-caption .cap-code{font-family:var(--ff-serif);font-style:italic;font-size:14px;color:var(--t-display);font-weight:600}
 .poster-caption .cap-actor{font-size:11px;color:var(--t-mute);margin-top:2px}
-/* 排行榜前三名：金字发光 + mini 皇冠（领奖台卡片 + 行视图前三行） */
-.podium .poster .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,20,147,.5);font-weight:700}
-.podium .poster .poster-code::before{content:"♛ "}
+/* 排行榜前三名：番号金字发光（行视图前三行；画廊角标已替代顶部番号） */
+.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,20,147,.5);font-weight:700}
+/* 带角标/皇冠的海报：顶部番号让位（卡片下方 caption 仍显示番号） */
+.poster-frame:has(.rank-badge) .poster-code,.poster-frame:has(.crown-badge) .poster-code{display:none}
 
 /* ══ 排行榜角标 + 领奖台 ══ */
 .rank-badge{position:absolute;top:8px;left:8px;z-index:3;min-width:26px;height:26px;padding:0 8px;border-radius:8px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:var(--t-display);font-family:var(--ff-mono);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(61,21,38,.22);pointer-events:none;animation:popIn .35s cubic-bezier(.34,1.56,.64,1) backwards;animation-delay:.15s}
@@ -326,9 +327,34 @@ body::before{
 .rank-badge.rb-3{background:linear-gradient(135deg,#f0b48c,#c77b4a);color:#fff}
 /* 行视图内联版角标 */
 .rank-badge--inline{position:static;display:inline-flex;vertical-align:-6px;margin-right:6px;animation:none;min-width:22px;height:22px;font-size:11px;padding:0 6px}
+
+/* 前三名皇冠徽章：♛ 皇冠 + 金/银/铜数字底座（带飘带） */
+.crown-badge{position:absolute;top:6px;left:8px;z-index:4;display:flex;flex-direction:column;align-items:center;pointer-events:none;animation:popIn .4s cubic-bezier(.34,1.56,.64,1) backwards,crownFloat 3.2s 1s ease-in-out infinite alternate;animation-delay:.15s,1.4s}
+.crown-crown{font-size:24px;line-height:1;transform:translateY(2px);z-index:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.cb-1 .crown-crown{color:#ffd76e;text-shadow:0 0 12px rgba(255,190,0,.9),0 0 26px rgba(255,190,0,.5)}
+.cb-2 .crown-crown{color:#e3e7f0;text-shadow:0 0 12px rgba(170,182,205,.85)}
+.cb-3 .crown-crown{color:#f0a97a;text-shadow:0 0 12px rgba(205,125,65,.85)}
+.crown-num{position:relative;min-width:28px;height:28px;padding:0 9px;border-radius:999px;font-family:var(--ff-mono);font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 3px 9px rgba(0,0,0,.35);margin-top:-3px;border:2px solid rgba(255,255,255,.85)}
+.cb-1 .crown-num{background:linear-gradient(135deg,#ffb300,#ff8f00)}
+.cb-2 .crown-num{background:linear-gradient(135deg,#a8b0c0,#79828f)}
+.cb-3 .crown-num{background:linear-gradient(135deg,#d08a5a,#a9663a)}
+/* 数字底座两侧小飘带 */
+.crown-num::before,.crown-num::after{content:"";position:absolute;top:3px;width:16px;height:13px;clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%);opacity:.95;box-shadow:0 2px 4px rgba(0,0,0,.25)}
+.crown-num::before{left:-13px;transform:rotate(-16deg) skewY(-6deg)}
+.crown-num::after{right:-13px;transform:rotate(16deg) skewY(6deg)}
+.cb-1 .crown-num::before,.cb-1 .crown-num::after{background:linear-gradient(135deg,#ff8f00,#e65100)}
+.cb-2 .crown-num::before,.cb-2 .crown-num::after{background:linear-gradient(135deg,#8b95a5,#6b7482)}
+.cb-3 .crown-num::before,.cb-3 .crown-num::after{background:linear-gradient(135deg,#b5744a,#8f5430)}
+@keyframes crownFloat{from{transform:translateY(0)}to{transform:translateY(-3px)}}
+
 /* 领奖台：前三名放大三列 */
 .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-bottom:28px}
 .podium .rank-badge{min-width:34px;height:34px;font-size:17px;border-radius:10px;top:10px;left:10px;padding:0 10px;box-shadow:0 4px 14px rgba(61,21,38,.28)}
+.podium .crown-crown{font-size:34px}
+.podium .crown-num{min-width:36px;height:36px;font-size:18px;padding:0 11px;margin-top:-5px}
+.podium .crown-num::before,.podium .crown-num::after{width:21px;height:17px}
+.podium .crown-num::before{left:-17px}
+.podium .crown-num::after{right:-17px}
 .podium .poster-code{font-size:13px}
 .podium .poster-caption .cap-code{font-size:17px}
 .podium .actor-photo .rank-badge{min-width:34px;height:34px;font-size:17px;border-radius:10px;top:10px;left:10px;padding:0 10px}

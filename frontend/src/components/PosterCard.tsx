@@ -79,7 +79,14 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           onError={handleImgError}
         />
         {rank != null && rank > 0 && (
-          <span className={`rank-badge${rank <= 3 ? ` rb-${rank}` : ''}`}>{rank}</span>
+          rank <= 3 ? (
+            <span className={`crown-badge cb-${rank}`}>
+              <span className="crown-crown">♛</span>
+              <span className="crown-num">{rank}</span>
+            </span>
+          ) : (
+            <span className="rank-badge">{rank}</span>
+          )
         )}
         <div className="poster-grad-top">
           <span className="poster-code">{task.video_code || '—'}</span>

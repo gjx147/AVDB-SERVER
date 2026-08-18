@@ -233,7 +233,10 @@ export function Rankings() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRank(r) } }}
                     style={{ cursor: 'pointer' }}>
                     <div className="actor-photo">
-                      <span className={`rank-badge${t._rank_position <= 3 ? ` rb-${t._rank_position}` : ''}`}>{t._rank_position}</span>
+                      <span className={`crown-badge cb-${t._rank_position}`}>
+                        <span className="crown-crown">♛</span>
+                        <span className="crown-num">{t._rank_position}</span>
+                      </span>
                       {t.poster_url
                         ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
                             onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
