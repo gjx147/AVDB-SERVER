@@ -46,6 +46,9 @@ export function Wall() {
 
   const t = tasks[index]
   const remote = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })()
+  // 简介：synopsis 优先，无则标签兜底
+  const synopsis = (t.synopsis || t.description || '').trim() ||
+    (t.tags ? t.tags.split(',').map((x) => x.trim()).filter(Boolean).join(' · ') : '')
 
   return (
     <div className="wall-page" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
@@ -56,7 +59,7 @@ export function Wall() {
         if (Math.abs(dx) > 50) go(dx < 0 ? index + 1 : index - 1)
         touchX.current = null
       }}>
-      {/* 全屏模糊背景（当前封面，切换交叉淡入） */}
+      {/* 全屏模糊背景（图片加载期/失败时的氛围兜底） */}
       <div className="wbg" aria-hidden="true">
         <img key={index} src={coverFileUrl(t.id)} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0' }} />
@@ -68,24 +71,25 @@ export function Wall() {
         <span className="wall-sub">{n} 部作品 · 自动轮播</span>
       </div>
 
-      {/* 当前大图（key 切换触发入场特效） */}
-      <div className="wstage" key={index}>
-        <div className="wslide" onClick={() => nav(`/task/${t.id}`)}
-          role="button" tabIndex={0} aria-label={`查看 ${t.video_code || '作品'} 详情`}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
-          <div className="wimg">
-            <img src={coverFileUrl(t.id)} alt={t.video_code || ''} referrerPolicy="no-referrer"
-              onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
-            {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
-          </div>
-          <div className="wslide-cap">
-            <span className="wslide-code">{t.video_code || '—'}</span>
-            <span className="wslide-title">{t.title || '未命名'}</span>
-            <span className="wslide-meta">
-              {t.rating ? `♥ ${t.rating}` : ''}
-              {t.release_date ? ` · ${t.release_date.slice(0, 4)}` : ''}
-            </span>
-            <span className="wslide-more">查看详情 →</span>
+      {/* 满屏封面 + 左下角简介（key 切换触发入场特效） */}
+      <div className="wstage" key={index} onClick={() => nav(`/task/${t.id}`)}
+        role="button" tabIndex={0} aria-label={`查看 ${t.video_code || '作品'} 详情`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
+        <div className="wfull">
+          <img src={coverFileUrl(t.id)} alt={t.video_code || ''} referrerPolicy="no-referrer"
+            onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
+          {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
+        </div>
+        {/* 左下角信息层：深色渐变遮罩保证可读 */}
+        <div className="winfo">
+          <div className="winfo-code">{t.video_code || '—'}</div>
+          <div className="winfo-title">{t.title || '未命名'}</div>
+          {synopsis && <div className="winfo-syn">{synopsis}</div>}
+          <div className="winfo-meta">
+            {t.rating ? <span className="winfo-score">♥ {t.rating}</span> : null}
+            {t.release_date && <span>{t.release_date.slice(0, 4)}</span>}
+            {t.actors && <span>{t.actors.split(',')[0].trim()}</span>}
+            <span className="winfo-more">查看详情 →</span>
           </div>
         </div>
       </div>
