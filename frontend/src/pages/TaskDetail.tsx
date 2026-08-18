@@ -432,7 +432,7 @@ export function TaskDetail() {
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>
                 <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''} referrerPolicy="no-referrer"
-                  style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'right center', borderRadius: 'var(--r-md)' }}
+                  style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'center center', borderRadius: 'var(--r-md)' }}
                   onError={(e) => { if (sRemote && e.currentTarget.src !== sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>
                 {s.rating && <div style={{ fontSize: 10, color: 'var(--gold)' }}>♥ {s.rating}</div>}

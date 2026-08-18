@@ -5,24 +5,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Noto+Serif+SC:wght@400;600;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root{
-  /* 色板：欲粉（亮 · 桃粉奶油底 + 饱和桃红） */
-  --bg-ink: #fff5f8;
-  --bg-page: #ffeef4;
+  /* 色板：欲焰（更鲜艳 · Deep Pink + Electric） */
+  --bg-ink: #fff0f5;
+  --bg-page: #ffe4ee;
   --bg-surface: #ffffff;
   --bg-raised: #fff9fb;
   --bg-overlay: rgba(255,249,251,.88);
   --skin: #ffd9c2;
+  --electric: #ff00ff;
 
-  --line-hair: rgba(255,107,150,.10);
-  --line-soft: rgba(255,107,150,.18);
-  --line-strong: rgba(255,107,150,.30);
+  --line-hair: rgba(255,20,147,.12);
+  --line-soft: rgba(255,20,147,.20);
+  --line-strong: rgba(255,20,147,.32);
 
-  /* 桃红主色（亮底饱和桃粉） */
-  --gold: #ff4f8f;
-  --gold-bright: #ff7fb3;
-  --gold-deep: #e63370;
-  --gold-wash: rgba(255,79,143,.08);
-  --gold-glow: rgba(255,79,143,.30);
+  /* 欲焰主色（Deep Pink × Hot Pink × Crimson） */
+  --gold: #ff1493;
+  --gold-bright: #ff69b4;
+  --gold-deep: #dc143c;
+  --gold-wash: rgba(255,20,147,.10);
+  --gold-glow: rgba(255,20,147,.36);
   --peach: #ff8a72;
 
   /* 语义色（亮底加深） */
@@ -48,8 +49,8 @@
   --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 22px;
 
   /* 闃村奖 */
-  --shadow-card: 0 1px 2px rgba(217,78,117,.06), 0 6px 20px rgba(217,78,117,.10), 0 0 0 1px rgba(255,107,150,.08);
-  --shadow-float: 0 8px 16px rgba(217,78,117,.10), 0 24px 50px rgba(217,78,117,.16), 0 0 0 1px rgba(255,107,150,.10);
+  --shadow-card: 0 1px 2px rgba(220,20,60,.06), 0 6px 20px rgba(220,20,60,.10), 0 0 0 1px rgba(255,20,147,.08);
+  --shadow-float: 0 8px 16px rgba(220,20,60,.10), 0 24px 50px rgba(220,20,60,.16), 0 0 0 1px rgba(255,20,147,.10);
 
   /* 闂磋窛 */
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
@@ -73,7 +74,7 @@ body{
 /* 烛光呼吸 + 漂移（亮底：暖肤光晕） */
 body::after{
   content:"";position:fixed;inset:-8%;z-index:-1;pointer-events:none;
-  background:radial-gradient(46% 38% at 32% 24%, rgba(255,79,143,.06), transparent 70%);
+  background:radial-gradient(46% 38% at 32% 24%, rgba(255,20,147,.06), transparent 70%);
   animation:candleDrift 22s ease-in-out infinite alternate, candleBreath 6s ease-in-out infinite;
 }
 @keyframes candleDrift{from{transform:translate(0,0)}to{transform:translate(48px,30px)}}
@@ -84,15 +85,15 @@ body::after{
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 42% at 18% 0%, rgba(255,79,143,.14), transparent 70%),
-    radial-gradient(52% 62% at 100% 100%, rgba(255,138,114,.12), transparent 62%),
-    radial-gradient(40% 40% at 55% 45%, rgba(255,217,194,.18), transparent 70%),
+    radial-gradient(60% 42% at 18% 0%, rgba(255,20,147,.32), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(220,20,60,.25), transparent 62%),
+    radial-gradient(40% 40% at 55% 45%, rgba(255,0,255,.08), transparent 70%),
     var(--bg-page);
 }
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(255,79,143,.22);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,79,143,.32)}
+::-webkit-scrollbar-thumb{background:rgba(255,20,147,.22);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,20,147,.32)}
 a{color:var(--gold);text-decoration:none}
 a:hover{color:var(--gold-bright)}
 img{display:block;max-width:100%}
@@ -223,7 +224,7 @@ img{display:block;max-width:100%}
 .bs-visited{background:rgba(74,138,90,.9);color:#fff}
 .bs-pending{background:rgba(176,122,30,.9);color:#fff}
 .bs-failed{background:rgba(192,68,58,.9);color:#fff}
-.poster-info{position:absolute;left:0;right:0;bottom:0;padding:36px 14px 14px;background:linear-gradient(0deg,rgba(14,12,11,.92) 0%,rgba(14,12,11,.45) 55%,transparent 100%)}
+.poster-info{position:absolute;left:0;right:0;bottom:0;padding:36px 14px 14px;background:linear-gradient(0deg,rgba(10,5,8,.75) 0%,rgba(10,5,8,.25) 55%,transparent 100%)}
 .poster-title{font-size:12px;line-height:1.45;color:#e8ddca;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
 .poster-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:10px;color:#a89a82;font-family:var(--ff-mono)}
 .poster-meta .sep{opacity:.5}
@@ -450,7 +451,7 @@ img{display:block;max-width:100%}
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
 .detail-bg::after{z-index:2}
 /* 鑷€傚簲鏂囧瓧锛氬姞鏌斿拰闃村奖淇濊瘉鍦ㄤ换鎰忚儗鏅笂鍙 */
-.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(217,78,117,.12)}
+.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(220,20,60,.12)}
 .btn--gold{text-shadow:none}
 
 /* 鍥剧墖闅愮妯″紡閫傞厤锛堟瘺鐜荤拑鐗堬級*/
@@ -499,15 +500,15 @@ img{display:block;max-width:100%}
 .btn{border-radius:8px}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .btn--ghost{background:rgba(255,238,244,.75);backdrop-filter:blur(8px)}
-.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,107,150,.22)}
-.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,107,150,.32)}
-.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,107,150,.42);transform:translateY(-1px)}
-.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(217,78,117,.08)}
+.btn--ghost:hover{box-shadow:0 2px 14px rgba(255,20,147,.22)}
+.btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,20,147,.32)}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,20,147,.42);transform:translateY(-1px)}
+.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(220,20,60,.08)}
 
 /* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
 .card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(255,255,255,.88)}
 .card-title{position:relative;padding-bottom:10px}
-.card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.6}
+.card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.9}
 
 /* 涓嬫媺鑱氱劍鏌斿厜鐜?*/
 .select:focus,.select:hover{box-shadow:0 0 0 3px var(--gold-wash)}
@@ -517,7 +518,7 @@ img{display:block;max-width:100%}
 
 /* 缁熻鍗★細hover 涓婃诞 + 椤堕儴閲戞潯鐢熼暱 */
 .stat{transition:transform .25s cubic-bezier(.23,1,.32,1),box-shadow .25s}
-.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(217,78,117,.12),0 0 0 1px var(--gold-wash)}
+.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(220,20,60,.12),0 0 0 1px var(--gold-wash)}
 .stat::after{content:"";position:absolute;top:0;left:0;height:3px;width:0;background:var(--gold);border-radius:0 0 3px 0;transition:width .3s cubic-bezier(.23,1,.32,1)}
 .stat:hover::after{width:100%}
 
@@ -575,7 +576,7 @@ img{display:block;max-width:100%}
 
 /* 登录字标呼吸辉光 */
 .login-mark{animation:markGlow 2.4s ease-in-out infinite}
-@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,107,150,.25)}50%{text-shadow:0 0 34px rgba(255,107,150,.55)}}
+@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,20,147,.25)}50%{text-shadow:0 0 34px rgba(255,20,147,.55)}}
 
 /* 画廊海报 hover：信息条上滑 + 金粉描边 */
 .poster-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
@@ -584,11 +585,11 @@ img{display:block;max-width:100%}
 .poster:hover .poster-info{transform:translateY(0);opacity:1}
 
 /* 排行榜前三名：番号金色发光 */
-.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,107,150,.5);font-weight:700}
+.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,20,147,.5);font-weight:700}
 
 /* 演员头像玫红光晕 */
-.actor-photo{box-shadow:0 0 0 0 rgba(255,107,150,0);transition:box-shadow .3s,transform .3s}
-.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,107,150,.35)}
+.actor-photo{box-shadow:0 0 0 0 rgba(255,20,147,0);transition:box-shadow .3s,transform .3s}
+.actor:hover .actor-photo{box-shadow:0 0 24px rgba(255,20,147,.35)}
 .actor{transition:transform .25s cubic-bezier(.23,1,.32,1)}
 .actor:hover{transform:translateY(-3px)}
 
@@ -596,10 +597,10 @@ img{display:block;max-width:100%}
 ::selection{background:var(--gold-glow);color:var(--t-display)}
 
 /* 详情页最优磁力框：玫红渐变竖条 */
-.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,107,150,.14),rgba(255,107,150,.05)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--gold-deep);background:linear-gradient(135deg,rgba(255,20,147,.14),rgba(255,20,147,.05)),var(--bg-page)}
 
 /* 页标题 em 金字发光 */
-.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,107,150,.35)}
+.page-title em,.panel-title em{font-style:italic;color:var(--gold);text-shadow:0 0 16px rgba(255,20,147,.35)}
 
 /* 绌虹姸鎬侊細琛嚎瑁呴グ鍥炬爣 */
 .empty .em-icon{font-family:var(--ff-serif);color:var(--gold-wash);opacity:1}
@@ -613,17 +614,17 @@ img{display:block;max-width:100%}
 
 /* 鐩镐技褰辩墖鍗?hover 娴奖 */
 .card-hoverable{border-radius:var(--r-md);transition:transform .2s,box-shadow .25s}
-.card-hoverable:hover{box-shadow:0 8px 22px rgba(217,78,117,.12),0 0 0 1px var(--gold-wash)}
+.card-hoverable:hover{box-shadow:0 8px 22px rgba(220,20,60,.12),0 0 0 1px var(--gold-wash)}
 
 /* 婕斿憳璇︽儏锛氬湪搴撹兌鍥婅鏍?*/
 .badge-lib{position:absolute;top:6px;right:6px;background:rgba(74,138,90,.92);color:#fff;font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(74,138,90,.3)}
 
 /* 婕斿憳澶村儚 hover 寰斁澶?*/
 .actor-avatar-zoom{transition:transform .3s cubic-bezier(.23,1,.32,1),box-shadow .3s}
-.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(217,78,117,.12)}
+.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(220,20,60,.12)}
 
 /* 鍒嗛〉鏉″崱鐗囧簳 */
-.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(217,78,117,.06)}
+.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(220,20,60,.06)}
 
 /* 婊氬姩鏉″啀缁嗕竴鐐广€佹偓鍋滄洿娣?*/
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -663,7 +664,7 @@ img{display:block;max-width:100%}
   background-size:200% 100%}
 .login-wall::after{content:"";position:absolute;inset:0;
   background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(255,200,215,.35) 100%),
-             linear-gradient(180deg, rgba(255,79,143,.12), rgba(255,200,215,.25))}
+             linear-gradient(180deg, rgba(255,20,147,.12), rgba(255,200,215,.25))}
 @keyframes tileIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:scale(1)}}
 @keyframes kenburns{from{transform:scale(1) translate(0,0)}to{transform:scale(1.14) translate(2%,-2%)}}
 /* 卡聚焦光斑色移（桃粉→蜜桃） */
@@ -671,7 +672,7 @@ img{display:block;max-width:100%}
 /* 登录错误 shake */
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
 .login-error{animation:shake .4s ease}
-.login-card{position:relative;z-index:1;width:380px;background:rgba(255,249,251,.90);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,107,150,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
+.login-card{position:relative;z-index:1;width:380px;background:rgba(255,249,251,.90);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,20,147,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
 .login-brand{text-align:center;margin-bottom:28px}
 .login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
 .login-mark em{color:var(--gold);font-style:normal}
@@ -697,7 +698,7 @@ img{display:block;max-width:100%}
 @property --gb-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
 
 /* 呼吸光晕：主按钮 2.4s 循环外发光 */
-@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,107,150,.28)}50%{box-shadow:0 6px 30px rgba(255,107,150,.55)}}
+@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,20,147,.28)}50%{box-shadow:0 6px 30px rgba(255,20,147,.55)}}
 .btn--gold{animation:goldPulse 2.4s ease-in-out infinite}
 .btn--gold:hover{animation:none}
 
@@ -726,7 +727,7 @@ img{display:block;max-width:100%}
 .input:focus,.textarea:focus,.select-full:focus{background-size:100% 2px}
 
 /* 最优磁力框竖条：桃粉→蜜桃橘渐变 */
-.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,107,150,.16),rgba(255,154,139,.06)),var(--bg-page)}
+.magnet-box--best{border-left:3px solid var(--peach);background:linear-gradient(135deg,rgba(255,20,147,.16),rgba(255,154,139,.06)),var(--bg-page)}
 
 /* 排行榜前三名 mini 皇冠 */
 .gallery .poster:nth-child(-n+3) .poster-code::before,.card .row-item:nth-child(-n+3) .row-code::before{content:"♛ ";}
@@ -815,13 +816,13 @@ img{display:block;max-width:100%}
 .pulse-band{position:fixed;top:0;left:0;right:0;height:2px;z-index:250;pointer-events:none;
   background:linear-gradient(90deg,transparent,var(--gold),var(--skin),var(--gold),transparent);
   opacity:0;animation:heartLine 1.8s ease-in-out infinite}
-@keyframes heartLine{0%,100%{opacity:0}8%{opacity:.55}16%{opacity:.12}24%{opacity:.6}42%{opacity:0}}
+@keyframes heartLine{0%,100%{opacity:0}8%{opacity:.85}16%{opacity:.12}24%{opacity:.9}42%{opacity:0}}
 
 /* ════════ 细节打磨（第五轮批3/批4） ════════ */
 
 /* 元数据胶囊化：dm-item 变精致小胶囊组 */
 .detail-meta-grid{gap:10px 14px}
-.dm-item{padding:8px 14px;background:rgba(255,79,143,.06);border:1px solid var(--line-soft);border-radius:999px;transition:border-color .2s,background .2s}
+.dm-item{padding:8px 14px;background:rgba(255,20,147,.06);border:1px solid var(--line-soft);border-radius:999px;transition:border-color .2s,background .2s}
 .dm-item:hover{border-color:var(--line-soft);background:rgba(255,200,215,.08)}
 .dm-label{font-size:9px;letter-spacing:.18em}
 .dm-val{font-size:13px;font-weight:500;color:var(--t-display)}
