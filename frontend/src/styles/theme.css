@@ -224,7 +224,19 @@ body::before{
 .dash-top-grid .card,
 .dash-top-grid .panel,
 .recent-panel,
-.dash-grid .panel{background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.dash-grid .panel,
+.dash-side .panel{background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+
+/* 仪表盘双栏：主内容 + 首页侧边栏（影片库轮播） */
+.dash-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:22px;align-items:start}
+.dash-main{min-width:0}
+.dash-side{position:sticky;top:24px}
+/* 侧栏窄容器：轮播每屏 2 卡（覆盖视口断点） */
+.dash-side .rc-card{flex-basis:calc((100% - 14px)/2)}
+@media(max-width:1100px){
+  .dash-layout{grid-template-columns:1fr}
+  .dash-side{position:static}
+}
 
 /* 柱状图 */
 .bar-chart{display:flex;align-items:flex-end;gap:8px;height:160px;padding-top:10px}

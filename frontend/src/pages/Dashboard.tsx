@@ -10,11 +10,12 @@ export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recent, setRecent] = useState<Task[]>([])
+  const [libTasks, setLibTasks] = useState<Task[]>([])
   const [monthly, setMonthly] = useState<MonthlyStat[]>([])
   const [disk, setDisk] = useState<DiskInfo | null>(null)
   const [analytics, setAnalytics] = useState<{ top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; rating_dist: { bucket: string; count: number }[] } | null>(null)
   // 次级区块软错误（失败 ≠ 空数据，给行内重试）
-  const [softErr, setSoftErr] = useState<{ recent?: boolean; monthly?: boolean; analytics?: boolean }>({})
+  const [softErr, setSoftErr] = useState<{ recent?: boolean; lib?: boolean; monthly?: boolean; analytics?: boolean }>({})
   // 磁盘条生长动画 + 百分比 count-up
   const diskOk = !!(disk && disk.data && !disk.data.error)
   const [barOn, setBarOn] = useState(false)
@@ -24,6 +25,7 @@ export function Dashboard() {
     setStats(null); setError(null); setSoftErr({})
     api.dashboard.stats().then(setStats).catch((e) => setError(String((e as Error).message)))
     api.dashboard.recent(12).then(setRecent).catch(() => setSoftErr((s) => ({ ...s, recent: true })))
+    api.v2.tasks({ sort: 'date_desc', limit: 12 }).then((r) => setLibTasks(r.tasks)).catch(() => setSoftErr((s) => ({ ...s, lib: true })))
     api.dashboard.monthly().then(setMonthly).catch(() => setSoftErr((s) => ({ ...s, monthly: true })))
     api.system.disk().then(setDisk).catch(() => {})
     api.v2.analytics().then(setAnalytics).catch(() => setSoftErr((s) => ({ ...s, analytics: true })))
@@ -58,6 +60,9 @@ export function Dashboard() {
         sub="灯已调暗——今晚，想先看谁？">
         <button className="btn btn--ghost btn--sm" onClick={load}><Icon.refresh />刷新</button>
       </PageHead>
+
+      <div className="dash-layout">
+      <div className="dash-main">
 
       <div className="stat-row">
         <Stat num={stats.total_tasks} unit="部" label="总作品" trend={`已入库 ${stats.visited_tasks}`} />
@@ -166,6 +171,24 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      </div>{/* dash-main 结束 */}
+
+      {/* 首页侧边栏：影片库作品轮播（与最近完成同款组件） */}
+      <aside className="dash-side">
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">影片<em> 库</em></div>
+            <Link to="/library" className="panel-link">全部 →</Link>
+          </div>
+          <div className="panel-body">
+            {softErr.lib ? <InlineErr onRetry={load} /> :
+              libTasks.length === 0 ? <Empty title="影片库还是空的" sub="扫描列表源或按番号创建任务。" /> :
+              <RecentCarousel tasks={libTasks} />}
+          </div>
+        </div>
+      </aside>
+      </div>{/* dash-layout 结束 */}
     </div>
   )
 }
