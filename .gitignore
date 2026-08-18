@@ -1,3 +1,6 @@
+# Agent memory (local only, not for public repo)
+CLAUDE.md
+
 # Python
 __pycache__/
 *.py[cod]

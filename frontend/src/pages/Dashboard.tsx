@@ -17,7 +17,7 @@ export function Dashboard() {
   const load = () => {
     setStats(null); setError(null)
     api.dashboard.stats().then(setStats).catch((e) => setError(String((e as Error).message)))
-    api.dashboard.recent(8).then(setRecent).catch(() => {})
+    api.dashboard.recent(12).then(setRecent).catch(() => {})
     api.dashboard.monthly().then(setMonthly).catch(() => {})
     api.system.disk().then(setDisk).catch(() => {})
     api.v2.analytics().then(setAnalytics).catch(() => {})
@@ -28,6 +28,7 @@ export function Dashboard() {
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={load} /></div>
   if (!stats) return <div className="page"><Loading /></div>
   const maxCount = Math.max(...monthly.map((m) => m.count), 1)
+  const diskOk = !!(disk && disk.data && !disk.data.error)
 
   return (
     <div className="page">
@@ -43,32 +44,32 @@ export function Dashboard() {
         <Stat num={stats.failed_tasks} unit="条" label="失败任务" trend={stats.db_size_mb ? `数据库 ${stats.db_size_mb} MB` : '—'} down />
       </div>
 
-      {/* 磁盘空间卡片 */}
-      {disk && disk.data && !disk.data.error && (
-        <div className="card" style={{ marginBottom: 24, padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t-body)' }}>磁盘空间</span>
-            <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: disk.data.free_percent < 10 ? 'var(--red)' : 'var(--t-mute)' }}>
-              {disk.data.free_gb} GB 可用 ({disk.data.free_percent}%)
-            </span>
+      {/* 磁盘空间 + 近12月采集量 并排 */}
+      <div className={`dash-top-grid${diskOk ? '' : ' dash-top-grid--solo'}`}>
+        {diskOk && (
+          <div className="card" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t-body)' }}>磁盘空间</span>
+              <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: disk!.data!.free_percent < 10 ? 'var(--red)' : 'var(--t-mute)' }}>
+                {disk!.data!.free_gb} GB 可用 ({disk!.data!.free_percent}%)
+              </span>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-surface)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 4,
+                width: `${100 - disk!.data!.free_percent}%`,
+                background: disk!.data!.free_percent < 10 ? 'var(--red)' : disk!.data!.free_percent < 25 ? 'var(--gold)' : 'var(--green, #4caf50)',
+                transition: 'width .4s',
+              }} />
+            </div>
+            <div style={{ display: 'flex', gap: 20, marginTop: 8, fontSize: 11, color: 'var(--t-faint)', fontFamily: 'var(--ff-mono)' }}>
+              <span>图片缓存 {disk!.images_size_mb} MB ({disk!.images_count} 张)</span>
+              <span>数据库 {disk!.db_size_mb} MB</span>
+              <span>已用 {disk!.data!.used_gb} / {disk!.data!.total_gb} GB</span>
+            </div>
           </div>
-          <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-surface)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 4,
-              width: `${100 - disk.data.free_percent}%`,
-              background: disk.data.free_percent < 10 ? 'var(--red)' : disk.data.free_percent < 25 ? 'var(--gold)' : 'var(--green, #4caf50)',
-              transition: 'width .4s',
-            }} />
-          </div>
-          <div style={{ display: 'flex', gap: 20, marginTop: 8, fontSize: 11, color: 'var(--t-faint)', fontFamily: 'var(--ff-mono)' }}>
-            <span>图片缓存 {disk.images_size_mb} MB ({disk.images_count} 张)</span>
-            <span>数据库 {disk.db_size_mb} MB</span>
-            <span>已用 {disk.data.used_gb} / {disk.data.total_gb} GB</span>
-          </div>
-        </div>
-      )}
+        )}
 
-      <div className="dash-grid">
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">近 12 月<em> 采集量</em></div>
@@ -76,7 +77,7 @@ export function Dashboard() {
           </div>
           <div className="panel-body">
             {monthly.length === 0 ? <Empty title="暂无数据" /> : (
-              <div className="bar-chart">
+              <div className="bar-chart bar-chart--sm">
                 {monthly.slice().reverse().map((m) => (
                   <div className="bar-col" key={m.month} data-num={`${m.month} · ${m.count}部`} title={`${m.month}: ${m.count} 部`}>
                     <div className="bar" style={{ height: `${(m.count / maxCount) * 100}%` }} />
@@ -87,30 +88,35 @@ export function Dashboard() {
             )}
           </div>
         </div>
+      </div>
 
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">最近<em> 完成</em></div>
-            <Link to="/library" className="panel-link">全部 →</Link>
-          </div>
-          <div className="panel-body">
-            {recent.length === 0 ? <Empty title="暂无已完成任务" /> : recent.map((t) => (
-              <div className="recent-item" key={t.id} onClick={() => nav(`/task/${t.id}`)}
-                tabIndex={0} role="button" aria-label={`查看 ${t.video_code || '作品'} 详情`}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
-                <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
-                  onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
-                <div className="recent-meta">
-                  <div className="recent-code">{t.video_code || '—'}</div>
-                  <div className="recent-title">{t.title || '未命名'}</div>
-                  <div className="recent-tags">
-                    {t.is_favorite ? <span className="chip chip-rose">收藏</span> : null}
-                    <span className="chip chip-green">已入库</span>
+      {/* 最近完成 放大全宽 */}
+      <div className="panel recent-panel">
+        <div className="panel-head">
+          <div className="panel-title">最近<em> 完成</em></div>
+          <Link to="/library" className="panel-link">全部 →</Link>
+        </div>
+        <div className="panel-body">
+          {recent.length === 0 ? <Empty title="暂无已完成任务" /> : (
+            <div className="recent-grid">
+              {recent.map((t) => (
+                <div className="recent-item" key={t.id} onClick={() => nav(`/task/${t.id}`)}
+                  tabIndex={0} role="button" aria-label={`查看 ${t.video_code || '作品'} 详情`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
+                  <img className="recent-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
+                    onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
+                  <div className="recent-meta">
+                    <div className="recent-code">{t.video_code || '—'}</div>
+                    <div className="recent-title">{t.title || '未命名'}</div>
+                    <div className="recent-tags">
+                      {t.is_favorite ? <span className="chip chip-rose">收藏</span> : null}
+                      <span className="chip chip-green">已入库</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
