@@ -172,6 +172,10 @@ export function Rankings() {
     if (filterStatus === 'pending' && t._is_in_library) return false
     return true
   })
+  // 领奖台：无搜索无筛选时，前三名单独放大展示；主画廊从第 4 名起平铺
+  const showPodium = view === 'grid' && !searchQ.trim() && filterStatus === 'all' && inLib === 'all' && filtered.length > 3
+  const podiumTasks = showPodium ? filtered.slice(0, 3) : []
+  const restTasks = showPodium ? filtered.slice(3) : filtered
 
   return (
     <div className="page">
@@ -217,8 +221,33 @@ export function Rankings() {
       ) : view === 'grid' ? (
         isActorTab ? (
           // 演员月榜：用演员库的 .actor-grid 样式（1:1 正方形头像 + 名字图下）
+          <>
+          {podiumTasks.length > 0 && (
+            <div className="podium">
+              {podiumTasks.map((t) => {
+                const r = list!.find((x) => x.id === t._ranking_id)!
+                return (
+                  <div className="actor" key={t._ranking_id} tabIndex={0} role="button"
+                    aria-label={`查看演员 ${t.video_code || ''}`}
+                    onClick={() => openRank(r)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRank(r) } }}
+                    style={{ cursor: 'pointer' }}>
+                    <div className="actor-photo">
+                      <span className={`rank-badge${t._rank_position <= 3 ? ` rb-${t._rank_position}` : ''}`}>{t._rank_position}</span>
+                      {t.poster_url
+                        ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
+                            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                        : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
+                    </div>
+                    <div className="actor-name">{t.video_code || '—'}</div>
+                    <div className="actor-count">第 {t._rank_position} 位 · {t._views} 次浏览</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <div className="actor-grid">
-            {filtered.map((t) => {
+            {restTasks.map((t) => {
               const r = list!.find((x) => x.id === t._ranking_id)!
               return (
                 <div className="actor" key={t._ranking_id} tabIndex={0} role="button"
@@ -227,6 +256,7 @@ export function Rankings() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRank(r) } }}
                   style={{ cursor: 'pointer' }}>
                   <div className="actor-photo">
+                    {t._rank_position <= 10 && <span className="rank-badge">{t._rank_position}</span>}
                     {t.poster_url
                       ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
                           onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
@@ -238,14 +268,25 @@ export function Rankings() {
               )
             })}
           </div>
+          </>
         ) : (
-          // 影片榜：保持原 PosterCard 竖版海报
+          // 影片榜：前三领奖台放大 + 主画廊平铺（Top10 挂角标）
+          <>
+          {podiumTasks.length > 0 && (
+            <div className="podium">
+              {podiumTasks.map((t) => {
+                const r = list!.find((x) => x.id === t._ranking_id)!
+                return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position} onClick={() => openRank(r)} />
+              })}
+            </div>
+          )}
           <div className="gallery">
-            {filtered.map((t) => {
+            {restTasks.map((t) => {
               const r = list!.find((x) => x.id === t._ranking_id)!
-              return <PosterCard key={t._ranking_id} task={t} onClick={() => openRank(r)} />
+              return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position <= 10 ? t._rank_position : undefined} onClick={() => openRank(r)} />
             })}
           </div>
+          </>
         )
       ) : (
         <div className="card">
@@ -260,7 +301,12 @@ export function Rankings() {
                   alt={`${t.video_code || '作品'} 封面`}
                   onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div>
-                  <div className="row-code">#{t._rank_position} {t.video_code || '—'}</div>
+                  <div className="row-code">
+                    {t._rank_position <= 3 ? (
+                      <span className={`rank-badge rank-badge--inline rb-${t._rank_position}`}>{t._rank_position}</span>
+                    ) : <span>#{t._rank_position} </span>}
+                    {t.video_code || '—'}
+                  </div>
                   <div className="row-title">{t.title || '未命名'}</div>
                 </div>
                 <div className="row-tags">

@@ -24,10 +24,11 @@ interface Props {
   onToggle?: () => void
   onClick?: () => void  // 可选：自定义点击行为（Rankings 用）
   centerImage?: boolean  // 可选：图片居中裁剪（演员方形头像用，默认 right center 影片封面）
+  rank?: number  // 可选：排行榜名次（≤3 金银铜角标并放大，≤10 白玻璃角标）
 }
 
 /** 影片库海报卡 —— 点击整卡进入详情页；左上角复选框用于批量选择 */
-export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage }: Props) {
+export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank }: Props) {
   const nav = useNavigate()
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
@@ -77,6 +78,9 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           onLoad={(e) => { e.currentTarget.classList.add('loaded') }}
           onError={handleImgError}
         />
+        {rank != null && rank > 0 && (
+          <span className={`rank-badge${rank <= 3 ? ` rb-${rank}` : ''}`}>{rank}</span>
+        )}
         <div className="poster-grad-top">
           <span className="poster-code">{task.video_code || '—'}</span>
           <div style={{ display: 'flex', gap: 6 }}>

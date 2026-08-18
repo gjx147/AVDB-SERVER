@@ -315,9 +315,27 @@ body::before{
 .poster-caption{margin-top:12px;padding:0 2px}
 .poster-caption .cap-code{font-family:var(--ff-serif);font-style:italic;font-size:14px;color:var(--t-display);font-weight:600}
 .poster-caption .cap-actor{font-size:11px;color:var(--t-mute);margin-top:2px}
-/* 排行榜前三名：金字发光 + mini 皇冠 */
-.gallery .poster:nth-child(-n+3) .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,20,147,.5);font-weight:700}
-.gallery .poster:nth-child(-n+3) .poster-code::before,.card .row-item:nth-child(-n+3) .row-code::before{content:"♛ "}
+/* 排行榜前三名：金字发光 + mini 皇冠（领奖台卡片 + 行视图前三行） */
+.podium .poster .poster-code,.card .row-item:nth-child(-n+3) .row-code{color:var(--gold);text-shadow:0 0 14px rgba(255,20,147,.5);font-weight:700}
+.podium .poster .poster-code::before{content:"♛ "}
+
+/* ══ 排行榜角标 + 领奖台 ══ */
+.rank-badge{position:absolute;top:8px;left:8px;z-index:3;min-width:26px;height:26px;padding:0 8px;border-radius:8px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:var(--t-display);font-family:var(--ff-mono);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(61,21,38,.22);pointer-events:none;animation:popIn .35s cubic-bezier(.34,1.56,.64,1) backwards;animation-delay:.15s}
+.rank-badge.rb-1{background:linear-gradient(135deg,#ffd76e,#ffb300);color:#5e2c3e}
+.rank-badge.rb-2{background:linear-gradient(135deg,#eceff4,#b9bfd1);color:#3d1526}
+.rank-badge.rb-3{background:linear-gradient(135deg,#f0b48c,#c77b4a);color:#fff}
+/* 行视图内联版角标 */
+.rank-badge--inline{position:static;display:inline-flex;vertical-align:-6px;margin-right:6px;animation:none;min-width:22px;height:22px;font-size:11px;padding:0 6px}
+/* 领奖台：前三名放大三列 */
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-bottom:28px}
+.podium .rank-badge{min-width:34px;height:34px;font-size:17px;border-radius:10px;top:10px;left:10px;padding:0 10px;box-shadow:0 4px 14px rgba(61,21,38,.28)}
+.podium .poster-code{font-size:13px}
+.podium .poster-caption .cap-code{font-size:17px}
+.podium .actor-photo .rank-badge{min-width:34px;height:34px;font-size:17px;border-radius:10px;top:10px;left:10px;padding:0 10px}
+.podium .actor-name{font-size:19px}
+.podium .actor-count{font-size:12px}
+@media(max-width:900px){.podium{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.podium{grid-template-columns:1fr}}
 
 /* ══ 列表（行）视图 ══ */
 .row-item{display:grid;grid-template-columns:64px 1fr auto auto auto;gap:16px;align-items:center;padding:14px 8px;border-bottom:1px solid var(--line-hair);cursor:pointer;transition:background .2s,box-shadow .2s}
