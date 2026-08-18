@@ -190,7 +190,7 @@ export function ActorDetail() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${m.id}`) } }}>
                 <div className="poster-frame">
                   <img src={coverFileUrl(m.id)} alt={m.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center' }}
                     onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.2' }}
                     onLoad={(e) => { e.currentTarget.classList.add('loaded') }} />
                   <div className="poster-grad-top">

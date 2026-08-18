@@ -190,7 +190,7 @@ export function Subscriptions() {
                   alt=""
                   referrerPolicy="no-referrer"
                   onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
-                  style={{ flex: 'none', width: 44, height: 60, borderRadius: 6, objectFit: 'cover', background: 'var(--bg-page)' }}
+                  style={{ flex: 'none', width: 44, height: 60, borderRadius: 6, objectFit: 'cover', objectPosition: 'right center', background: 'var(--bg-page)' }}
                 />
                 <div className="recent-meta">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
