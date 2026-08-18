@@ -106,9 +106,9 @@ async def lifespan(app: FastAPI):
         # 注册自动重试（从 DB settings 读 auto_retry_enabled）
         from services.auto_retry import register_job as register_retry
         register_retry(interval=int(os.environ.get("AUTO_RETRY_INTERVAL_S", "300")))
-        # 注册排行榜自动爬取（从 DB settings 读 ranking_auto_crawl）
+        # 注册排行榜自动爬取（每天定点 5:00；从 DB settings 读 ranking_auto_crawl，日→月→周→演员月榜串行）
         from services.ranking_auto_crawl import register_job as register_ranking
-        register_ranking(interval_hours=int(os.environ.get("RANKING_AUTO_INTERVAL_H", "24")))
+        register_ranking()
         logger.info("调度任务注册完成")
     except Exception as e:
         logger.warning(f"调度中心启动失败: {e}")
