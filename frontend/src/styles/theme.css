@@ -5,39 +5,39 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Noto+Serif+SC:wght@400;600;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root{
-  /* 鑹叉澘锛氱化鏆紙娣卞閰掔孩 + 鐜孩棣欐閲戯級 */
-  --bg-ink: #2e1622;
-  --bg-page: #381c29;
-  --bg-surface: #452231;
-  --bg-raised: #52293b;
-  --bg-overlay: rgba(66,34,48,.80);
+  /* 色板：欲粉（亮 · 桃粉奶油底 + 饱和桃红） */
+  --bg-ink: #fff5f8;
+  --bg-page: #ffeef4;
+  --bg-surface: #ffffff;
+  --bg-raised: #fff9fb;
+  --bg-overlay: rgba(255,249,251,.88);
   --skin: #ffd9c2;
 
-  --line-hair: rgba(255,200,215,.11);
-  --line-soft: rgba(255,200,215,.17);
-  --line-strong: rgba(255,200,215,.27);
+  --line-hair: rgba(255,107,150,.10);
+  --line-soft: rgba(255,107,150,.18);
+  --line-strong: rgba(255,107,150,.30);
 
-  /* 鐜孩涓昏壊锛堢化绮夋洿鑹筹級 */
-  --gold: #ff8fb3;
-  --gold-bright: #ffc6d8;
-  --gold-deep: #ff6b96;
-  --gold-wash: rgba(255,143,179,.15);
-  --gold-glow: rgba(255,143,179,.44);
+  /* 桃红主色（亮底饱和桃粉） */
+  --gold: #ff4f8f;
+  --gold-bright: #ff7fb3;
+  --gold-deep: #e63370;
+  --gold-wash: rgba(255,79,143,.08);
+  --gold-glow: rgba(255,79,143,.30);
   --peach: #ff8a72;
 
-  /* 璇箟鑹诧紙鏆楀簳鎻愪寒锛?*/
-  --rose: #e0698a;
-  --green: #3ddc97;
-  --amber: #ffb454;
-  --red: #ff5c7a;
-  --blue: #6ba3e8;
-  --violet: #9a86e0;
+  /* 语义色（亮底加深） */
+  --rose: #d94e75;
+  --green: #1e9e68;
+  --amber: #d97706;
+  --red: #e03e55;
+  --blue: #3d6bb0;
+  --violet: #6b5aa8;
 
-  /* 鏂囧瓧锛氭殩闆啋闆剧矇鈫掓殫鐜懓鐏?*/
-  --t-display: #f7ecef;
-  --t-body: #d9c4cb;
-  --t-mute: #a3808d;
-  --t-faint: #7c5f69;
+  /* 文字：深桃褐 */
+  --t-display: #3d1526;
+  --t-body: #5e2c3e;
+  --t-mute: #8f5a6d;
+  --t-faint: #b88a99;
 
   /* 瀛椾綋 */
   --ff-serif: "Playfair Display", "Noto Serif SC", Georgia, serif;
@@ -48,8 +48,8 @@
   --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 22px;
 
   /* 闃村奖 */
-  --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 6px 20px rgba(0,0,0,.28), 0 0 0 1px rgba(255,180,200,.05);
-  --shadow-float: 0 8px 16px rgba(0,0,0,.3), 0 24px 50px rgba(0,0,0,.4), 0 0 0 1px rgba(255,180,200,.06);
+  --shadow-card: 0 1px 2px rgba(217,78,117,.06), 0 6px 20px rgba(217,78,117,.10), 0 0 0 1px rgba(255,107,150,.08);
+  --shadow-float: 0 8px 16px rgba(217,78,117,.10), 0 24px 50px rgba(217,78,117,.16), 0 0 0 1px rgba(255,107,150,.10);
 
   /* 闂磋窛 */
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
@@ -70,29 +70,29 @@ body{
   background:var(--bg-ink);
   -webkit-font-smoothing:antialiased;
 }
-/* 烛光呼吸 + 漂移：一层暖肤光在房里缓缓摇曳 */
+/* 烛光呼吸 + 漂移（亮底：暖肤光晕） */
 body::after{
   content:"";position:fixed;inset:-8%;z-index:-1;pointer-events:none;
-  background:radial-gradient(46% 38% at 32% 24%, rgba(255,217,194,.05), transparent 70%);
+  background:radial-gradient(46% 38% at 32% 24%, rgba(255,79,143,.06), transparent 70%);
   animation:candleDrift 22s ease-in-out infinite alternate, candleBreath 6s ease-in-out infinite;
 }
 @keyframes candleDrift{from{transform:translate(0,0)}to{transform:translate(48px,30px)}}
 @keyframes candleBreath{0%,100%{opacity:.65}50%{opacity:1}}
-/* 暗角：视线聚向中央 */
+/* 暗角（亮底：柔粉边缘，聚向中央） */
 .app::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2;
-  background:radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.30) 100%)}
+  background:radial-gradient(ellipse at center, transparent 58%, rgba(255,200,215,.30) 100%)}
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(60% 42% at 18% 0%, rgba(255,143,179,.18), transparent 70%),
-    radial-gradient(52% 62% at 100% 100%, rgba(245,120,165,.20), transparent 62%),
-    radial-gradient(40% 40% at 55% 45%, rgba(255,217,194,.06), transparent 70%),
+    radial-gradient(60% 42% at 18% 0%, rgba(255,79,143,.14), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(255,138,114,.12), transparent 62%),
+    radial-gradient(40% 40% at 55% 45%, rgba(255,217,194,.18), transparent 70%),
     var(--bg-page);
 }
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(255,180,200,.16);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,180,200,.32)}
+::-webkit-scrollbar-thumb{background:rgba(255,79,143,.22);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,79,143,.32)}
 a{color:var(--gold);text-decoration:none}
 a:hover{color:var(--gold-bright)}
 img{display:block;max-width:100%}
@@ -319,8 +319,8 @@ img{display:block;max-width:100%}
 /* 鈹€鈹€ 璇︽儏 鈹€鈹€ */
 /* 鈹€鈹€ 璇︽儏椤?emby 椋庢牸鑳屾櫙灞?鈹€鈹€ */
 .detail-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;overflow:hidden}
-.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(52,25,38,.80)}
-.detail-bg img{width:100%;height:100%;object-fit:cover;filter:blur(50px) brightness(.8) saturate(1.1);transform:scale(1.15)}
+.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(255,249,251,.90)}
+.detail-bg img{width:100%;height:100%;object-fit:cover;filter:blur(50px) brightness(1.1) saturate(1.3);transform:scale(1.15)}
 
 /* 绱у噾澶撮儴锛氬乏灏侀潰 + 鍙充俊鎭紝娑堥櫎椤堕儴绌虹櫧 */
 .detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:start}
@@ -443,20 +443,20 @@ img{display:block;max-width:100%}
 @media(min-width:769px){.detail-title{font-size:32px}.detail-title::after{content:"";display:block;width:40px;height:3px;margin-top:12px;background:var(--gold);border-radius:2px}}
 
 /* 鏋佺畝姣涚幓鐠冩晥鏋?*/
-.detail-bg img{filter:blur(4px) sepia(.22) saturate(1.35) brightness(.8);transform:scale(1.03)}
-.detail-bg::after{background:linear-gradient(180deg,rgba(52,25,38,.48) 0%,rgba(52,25,38,.78) 100%)}
+.detail-bg img{filter:blur(4px) sepia(.15) saturate(1.4) brightness(1.05);transform:scale(1.03)}
+.detail-bg::after{background:linear-gradient(180deg,rgba(255,255,255,.60) 0%,rgba(255,255,255,.86) 100%)}
 .detail-bg{top:-2%;left:-2%;right:-2%;bottom:-2%}
 .detail-bg img{width:104%;height:104%}
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
 .detail-bg::after{z-index:2}
 /* 鑷€傚簲鏂囧瓧锛氬姞鏌斿拰闃村奖淇濊瘉鍦ㄤ换鎰忚儗鏅笂鍙 */
-.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(0,0,0,.35)}
+.detail-title,.detail-code,.dm-val,.detail-body,.tag,.btn,.magnet-box{text-shadow:0 1px 4px rgba(217,78,117,.12)}
 .btn--gold{text-shadow:none}
 
 /* 鍥剧墖闅愮妯″紡閫傞厤锛堟瘺鐜荤拑鐗堬級*/
-.img-mode-blur .detail-bg img{filter:blur(40px) brightness(.38) saturate(.5)}
+.img-mode-blur .detail-bg img{filter:blur(40px) brightness(1.0) saturate(.8)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(52,25,38,.95)}
+.img-mode-hidden .detail-bg::after{background:rgba(255,245,248,.97)}
 
 /* 鐢诲粖浜ら敊鍏ュ満 */
 .poster{animation:posterIn .5s cubic-bezier(.23,1,.32,1) forwards}
@@ -479,9 +479,9 @@ img{display:block;max-width:100%}
 .btn--sm{font-size:12px}
 
 /* 鍥剧墖闅愮妯″紡閫傞厤 emby 鑳屾櫙 */
-.img-mode-blur .detail-bg img{filter:blur(60px) brightness(.3) saturate(.5)}
+.img-mode-blur .detail-bg img{filter:blur(60px) brightness(.9) saturate(.7)}
 .img-mode-hidden .detail-bg img{visibility:hidden}
-.img-mode-hidden .detail-bg::after{background:rgba(52,25,38,.95)}
+.img-mode-hidden .detail-bg::after{background:rgba(255,245,248,.97)}
 
 /* 绉诲姩绔眽鍫¤彍鍗?+ 閬僵 */
 .mobile-menu-btn{display:none}
@@ -498,14 +498,14 @@ img{display:block;max-width:100%}
 /* 鎸夐挳锛氭洿灏忓渾瑙?+ 骞界伒鎸夐挳瀹炲簳 + focus 鐜?*/
 .btn{border-radius:8px}
 .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.btn--ghost{background:rgba(76,40,55,.6);backdrop-filter:blur(8px)}
+.btn--ghost{background:rgba(255,238,244,.75);backdrop-filter:blur(8px)}
 .btn--ghost:hover{box-shadow:0 2px 14px rgba(255,107,150,.22)}
 .btn--gold{background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));border-color:transparent;box-shadow:0 4px 18px rgba(255,107,150,.32)}
 .btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,107,150,.42);transform:translateY(-1px)}
-.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
+.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(217,78,117,.08)}
 
 /* 鍗＄墖锛氭煍鍜屾诞璧?+ 鏍囬閲戠嚎 */
-.card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(66,34,48,.78)}
+.card{box-shadow:var(--shadow-card);backdrop-filter:blur(14px);background:rgba(255,255,255,.88)}
 .card-title{position:relative;padding-bottom:10px}
 .card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.6}
 
@@ -517,7 +517,7 @@ img{display:block;max-width:100%}
 
 /* 缁熻鍗★細hover 涓婃诞 + 椤堕儴閲戞潯鐢熼暱 */
 .stat{transition:transform .25s cubic-bezier(.23,1,.32,1),box-shadow .25s}
-.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(0,0,0,.35),0 0 0 1px var(--gold-wash)}
+.stat:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(217,78,117,.12),0 0 0 1px var(--gold-wash)}
 .stat::after{content:"";position:absolute;top:0;left:0;height:3px;width:0;background:var(--gold);border-radius:0 0 3px 0;transition:width .3s cubic-bezier(.23,1,.32,1)}
 .stat:hover::after{width:100%}
 
@@ -540,7 +540,7 @@ img{display:block;max-width:100%}
 /* ════════ 绯暮主题：组件翻新 + 动效系统 ════════ */
 
 /* 侧栏毛玻璃 */
-.sidebar{background:rgba(58,29,42,.82);backdrop-filter:blur(16px)}
+.sidebar{background:rgba(255,249,251,.90);backdrop-filter:blur(16px)}
 
 /* 按压回弹（所有可点元素） */
 .btn:active{transform:scale(.97)}
@@ -613,17 +613,17 @@ img{display:block;max-width:100%}
 
 /* 鐩镐技褰辩墖鍗?hover 娴奖 */
 .card-hoverable{border-radius:var(--r-md);transition:transform .2s,box-shadow .25s}
-.card-hoverable:hover{box-shadow:0 8px 22px rgba(0,0,0,.4),0 0 0 1px var(--gold-wash)}
+.card-hoverable:hover{box-shadow:0 8px 22px rgba(217,78,117,.12),0 0 0 1px var(--gold-wash)}
 
 /* 婕斿憳璇︽儏锛氬湪搴撹兌鍥婅鏍?*/
 .badge-lib{position:absolute;top:6px;right:6px;background:rgba(74,138,90,.92);color:#fff;font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(74,138,90,.3)}
 
 /* 婕斿憳澶村儚 hover 寰斁澶?*/
 .actor-avatar-zoom{transition:transform .3s cubic-bezier(.23,1,.32,1),box-shadow .3s}
-.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(217,78,117,.12)}
 
 /* 鍒嗛〉鏉″崱鐗囧簳 */
-.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(217,78,117,.06)}
 
 /* 婊氬姩鏉″啀缁嗕竴鐐广€佹偓鍋滄洿娣?*/
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -653,7 +653,7 @@ img{display:block;max-width:100%}
   grid-template-columns:repeat(auto-fill,minmax(230px,1fr));grid-auto-rows:minmax(170px,1fr);
   gap:6px;padding:6px}
 .login-wall img{width:100%;height:100%;object-fit:cover;min-height:150px;
-  filter:saturate(1.18) brightness(.58);
+  filter:saturate(1.22) brightness(.75);
   opacity:0;
   animation:tileIn .9s ease forwards,
             kenburns 22s ease-in-out var(--d,0s) infinite alternate,
@@ -662,8 +662,8 @@ img{display:block;max-width:100%}
   background:linear-gradient(120deg,var(--bg-surface) 25%,var(--bg-raised) 50%,var(--bg-surface) 75%);
   background-size:200% 100%}
 .login-wall::after{content:"";position:absolute;inset:0;
-  background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(44,22,32,.55) 100%),
-             linear-gradient(180deg, rgba(58,29,42,.20), rgba(44,22,32,.38))}
+  background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(255,200,215,.35) 100%),
+             linear-gradient(180deg, rgba(255,79,143,.12), rgba(255,200,215,.25))}
 @keyframes tileIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:scale(1)}}
 @keyframes kenburns{from{transform:scale(1) translate(0,0)}to{transform:scale(1.14) translate(2%,-2%)}}
 /* 卡聚焦光斑色移（桃粉→蜜桃） */
@@ -671,7 +671,7 @@ img{display:block;max-width:100%}
 /* 登录错误 shake */
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
 .login-error{animation:shake .4s ease}
-.login-card{position:relative;z-index:1;width:380px;background:rgba(66,34,48,.8);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,107,150,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
+.login-card{position:relative;z-index:1;width:380px;background:rgba(255,249,251,.90);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,107,150,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
 .login-brand{text-align:center;margin-bottom:28px}
 .login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em}
 .login-mark em{color:var(--gold);font-style:normal}
@@ -821,7 +821,7 @@ img{display:block;max-width:100%}
 
 /* 元数据胶囊化：dm-item 变精致小胶囊组 */
 .detail-meta-grid{gap:10px 14px}
-.dm-item{padding:8px 14px;background:rgba(255,200,215,.05);border:1px solid var(--line-hair);border-radius:999px;transition:border-color .2s,background .2s}
+.dm-item{padding:8px 14px;background:rgba(255,79,143,.06);border:1px solid var(--line-soft);border-radius:999px;transition:border-color .2s,background .2s}
 .dm-item:hover{border-color:var(--line-soft);background:rgba(255,200,215,.08)}
 .dm-label{font-size:9px;letter-spacing:.18em}
 .dm-val{font-size:13px;font-weight:500;color:var(--t-display)}
