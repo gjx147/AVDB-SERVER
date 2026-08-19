@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import type { NewRelease } from '../api/types'
+import type { NewRelease, Actor } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
@@ -29,6 +29,7 @@ export function Subscriptions() {
   const nav = useNavigate()
   const [subs, setSubs] = useState<Subscription[] | null>(null)
   const [releases, setReleases] = useState<NewRelease[] | null>(null)
+  const [avatars, setAvatars] = useState<Map<number, string>>(new Map())  // actor_id → avatar_url
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const toastOk = useStore((s) => s.toastOk)
@@ -40,6 +41,12 @@ export function Subscriptions() {
       setSubs((r as Subscription[]) || [])
     }).catch((e) => { setError(String((e as Error).message)); setSubs([]) })
     api.newReleases.list({ limit: 100 }).then((r) => setReleases(r.items || [])).catch(() => setReleases([]))
+    // 演员订阅头像映射（一次拉全量演员，建 actor_id → avatar_url）
+    api.actors.list(0, 500, true).then((list: Actor[]) => {
+      const m = new Map<number, string>()
+      for (const a of list) if (a.avatar_url) m.set(a.id, a.avatar_url)
+      setAvatars(m)
+    }).catch(() => {})
   }
   useEffect(() => { load() }, [])
 
@@ -107,58 +114,46 @@ export function Subscriptions() {
         </button>
       </PageHead>
 
-      {/* 订阅列表 */}
+      {/* 订阅列表：卡片式（演员订阅显示头像） */}
       {error ? <ErrorEmpty message={error} onRetry={load} /> :
        subs === null ? <Loading /> : subs.length === 0 ? (
         <Empty icon="◌" title="暂无订阅" sub="前往演员库，点击演员卡片的「订阅」按钮即可添加。" />
       ) : (
-        <div className="card">
+        <div className="sub-grid">
           {subs.map((s) => {
             const clickable = s.sub_type === 'actor' && s.actor_id
+            const avatar = s.actor_id != null ? avatars.get(s.actor_id) : undefined
             return (
-            <div key={s.id} className="recent-item" style={{
-              alignItems: 'center',
-              cursor: clickable ? 'pointer' : 'default',
-            }}
+            <div key={s.id} className={`sub-card${s.enabled ? '' : ' off'}`}
               onClick={() => clickable && nav(`/actor/${s.actor_id}`)}
               role={clickable ? 'button' : undefined}
               tabIndex={clickable ? 0 : undefined}
+              aria-label={clickable ? `查看演员 ${s.name}` : s.name}
               onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/actor/${s.actor_id}`) } } : undefined}>
-              <div style={{
-                flex: 'none', width: 44, height: 44, borderRadius: 10,
-                background: s.enabled ? 'var(--gold-wash)' : 'var(--bg-page)',
-                color: s.enabled ? 'var(--gold)' : 'var(--t-faint)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, fontWeight: 700,
-              }}>{TYPE_LABEL[s.sub_type]?.[0] || '?'}</div>
-              <div className="recent-meta">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="recent-code">{s.name}</span>
-                  <span style={{
-                    fontSize: 10, padding: '1px 7px', borderRadius: 4, fontWeight: 600,
-                    background: s.sub_type === 'actor' ? 'rgba(74,138,90,.1)' : 'rgba(176,122,30,.1)',
-                    color: s.sub_type === 'actor' ? 'var(--green)' : 'var(--amber)',
-                  }}>{TYPE_LABEL[s.sub_type] || s.sub_type}</span>
-                  {s.auto_add && <span style={{ fontSize: 10, color: 'var(--t-faint)' }}>自动下载</span>}
-                </div>
-                <div className="recent-title" style={{ WebkitLineClamp: 1 }}>
-                  每 {s.check_interval_hours}h 检查 · {fmtTime(s.last_checked_at)}
-                </div>
-                {s.last_result && (
-                  <div style={{ fontSize: 11, color: 'var(--t-faint)', marginTop: 2 }}>
-                    {s.last_result.length > 80 ? s.last_result.slice(0, 80) + '…' : s.last_result}
-                  </div>
-                )}
+              <div className="sub-photo">
+                {avatar ? (
+                  <img src={avatar} alt={s.name} referrerPolicy="no-referrer" loading="lazy"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                ) : null}
+                <div className="sub-ph">{avatar ? '' : TYPE_LABEL[s.sub_type]?.[0] || '?'}</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggle(s) }}
-                  className={`btn btn--sm ${s.enabled ? 'btn--ghost' : 'btn--gold'}`}
-                  style={{ fontSize: 11 }}>{s.enabled ? '停用' : '启用'}</button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); remove(s) }}
-                  className="btn btn--sm btn--ghost"
-                  style={{ fontSize: 11, color: 'var(--red)' }}>删除</button>
+              <div className="sub-body">
+                <div className="sub-name">{s.name}</div>
+                <div className="sub-meta">
+                  <span className="chip chip-rose">{TYPE_LABEL[s.sub_type] || s.sub_type}</span>
+                  {s.auto_add && <span className="chip chip-amber">自动下载</span>}
+                </div>
+                <div className="sub-check">每 {s.check_interval_hours}h 检查 · {fmtTime(s.last_checked_at)}</div>
+                <div className="sub-actions">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggle(s) }}
+                    className={`btn btn--sm ${s.enabled ? 'btn--ghost' : 'btn--gold'}`}
+                    style={{ fontSize: 11, flex: 1 }}>{s.enabled ? '停用' : '启用'}</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); remove(s) }}
+                    className="btn btn--sm btn--ghost"
+                    style={{ fontSize: 11, color: 'var(--red)' }}>删除</button>
+                </div>
               </div>
             </div>
             )

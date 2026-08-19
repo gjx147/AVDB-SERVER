@@ -335,7 +335,7 @@ export function TaskDetail() {
       </div>
 
       <div className="detail-body" style={{ position: 'relative', zIndex: 1 }}>
-        <div>
+        <div className="detail-main">
 
           {/* 预览图画廊 —— 显示所有缩略图（本地优先，远程 fallback） */}
           {thumbs.length > 0 && (

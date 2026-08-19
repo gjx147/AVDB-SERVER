@@ -121,13 +121,13 @@
 [data-theme=boudoir] .tag{background:rgba(255,79,163,.14)}
 [data-theme=boudoir] .app::after{background:radial-gradient(ellipse at center,transparent 58%,rgba(8,3,6,.55) 100%)}
 [data-theme=boudoir] .fade-bottom::after{background:linear-gradient(180deg,transparent,var(--bg-ink))}
-/* 详情页：白纱换黑纱，背景更沉；信息区玻璃换暗玻璃 */
-[data-theme=boudoir] .detail-bg img{filter:blur(12px) sepia(.1) saturate(1.4) brightness(.5)}
-[data-theme=boudoir] .detail-bg::after{background:linear-gradient(180deg,rgba(18,8,14,.74) 0%,rgba(18,8,14,.96) 100%)}
-[data-theme=boudoir] .detail-info{background:rgba(28,12,22,.72)}
-[data-mode=mood] .detail-bg img{filter:blur(12px) sepia(.1) saturate(1.4) brightness(.5)}
-[data-mode=mood] .detail-bg::after{background:linear-gradient(180deg,rgba(18,6,12,.74) 0%,rgba(18,6,12,.96) 100%)}
-[data-mode=mood] .detail-info{background:rgba(30,10,18,.72)}
+/* 详情页：毛玻璃——背景基本可见（轻模糊），暗玻璃卡承载文字 */
+[data-theme=boudoir] .detail-bg img{filter:blur(4px) sepia(.08) saturate(1.3) brightness(.8)}
+[data-theme=boudoir] .detail-bg::after{background:linear-gradient(180deg,rgba(14,6,11,.34) 0%,rgba(14,6,11,.68) 100%)}
+[data-theme=boudoir] .detail-info,[data-theme=boudoir] .detail-main{background:rgba(26,11,20,.6);border-color:rgba(255,143,179,.18)}
+[data-mode=mood] .detail-bg img{filter:blur(4px) sepia(.08) saturate(1.3) brightness(.8)}
+[data-mode=mood] .detail-bg::after{background:linear-gradient(180deg,rgba(12,5,9,.34) 0%,rgba(12,5,9,.68) 100%)}
+[data-mode=mood] .detail-info,[data-mode=mood] .detail-main{background:rgba(24,8,15,.6);border-color:rgba(255,143,179,.18)}
 [data-theme=boudoir] .detail-title,[data-theme=boudoir] .detail-code,[data-theme=boudoir] .dm-val,
 [data-theme=boudoir] .detail-body,[data-theme=boudoir] .tag,[data-theme=boudoir] .magnet-box{
   text-shadow:0 1px 6px rgba(0,0,0,.55)}
@@ -438,10 +438,39 @@ html.melt .app::after{background:radial-gradient(ellipse at center,rgba(255,150,
   .caress-dot{display:none}
   .gallery:has(.poster:hover) .poster:not(:hover){filter:none}
   html.climax .main,html[data-breath] .main{animation:none}
-  .detail-info{padding:14px 14px;border-radius:var(--r-md)}  /* 玻璃卡移动端收紧 */
+  .detail-info,.detail-main{padding:14px 14px;border-radius:var(--r-md)}  /* 玻璃卡移动端收紧 */
 }
 @media (prefers-reduced-motion: reduce){
   .caress-dot,.poster .redlight-rim{display:none}
   .pulse-anchor::after{animation:none;opacity:.3}
   html.climax .main,html[data-breath] .main{animation:none}
 }
+
+
+/* ══ v4.2 订阅页卡片式（演员头像卡）══ */
+.sub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(186px,1fr));gap:22px}
+.sub-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);
+  overflow:hidden;cursor:pointer;position:relative;
+  transition:transform .3s var(--e-silk),box-shadow .3s,border-color .3s;
+  animation:pageIn .45s cubic-bezier(.23,1,.32,1) backwards}
+.sub-card:hover{transform:translateY(-4px);border-color:var(--gold);box-shadow:var(--shadow-float)}
+.sub-card.off{opacity:.55;filter:saturate(.6)}
+.sub-card.off:hover{opacity:.8;filter:saturate(.8)}
+/* 头像：3/4 取景（沿用锁骨构图焦点） */
+.sub-photo{aspect-ratio:3/4;background:linear-gradient(160deg,var(--bg-raised),var(--bg-page));position:relative;overflow:hidden}
+.sub-photo img{width:100%;height:100%;object-fit:cover;object-position:50% 22%}
+.sub-photo::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(200deg,transparent 55%,rgba(61,21,38,.24) 100%),
+    radial-gradient(70% 46% at 50% 18%,transparent 52%,rgba(255,20,147,.10) 100%)}
+/* 无头像占位（榜单/组合订阅） */
+.sub-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-display);font-size:52px;font-style:italic;color:var(--t-faint)}
+.sub-photo:has(img) .sub-ph{display:none}
+.sub-body{padding:12px 14px 14px}
+.sub-name{font-family:var(--ff-serif);font-size:16px;font-weight:600;color:var(--t-display);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub-meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.sub-check{font-size:11px;color:var(--t-mute);margin-top:7px;font-family:var(--ff-mono)}
+.sub-actions{display:flex;gap:6px;margin-top:11px}
+[data-theme=boudoir] .sub-card,[data-mode=mood] .sub-card{background:rgba(38,18,30,.66)}
+@media(max-width:640px){.sub-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}}
