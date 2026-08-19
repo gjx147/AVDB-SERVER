@@ -147,9 +147,11 @@ export function greetingKey(): WhisperKey {
 
 /* ── v4.1 侧边栏双文案：normal（正常）↔ whisper（情话），切换按钮在侧栏底部 ── */
 const NAV_WHISPER: Record<string, string> = {
+  /* 分区名 */
   '浏览': '流连',
   '采集': '狩猎',
   '系统': '闺房',
+  /* 导航项与页面标题（中文） */
   '首页': '今夜的她',
   '仪表盘': '心跳记录',
   '影片库': '群芳谱',
@@ -162,6 +164,22 @@ const NAV_WHISPER: Record<string, string> = {
   '下载历史': '收入囊中',
   '下载器': '接她回家',
   '设置': '闺房布置',
+  '系统设置': '闺房布置',
+  '下载器配置': '接她回家',
+  '列表源管理': '猎场',
+  /* 页面眉题主词（英文） */
+  'Overview': '心跳记录',
+  'Library': '群芳谱',
+  'Favorites': '心尖上',
+  'Actors': '佳人们',
+  'Rankings': '群芳榜',
+  'Sources': '猎场',
+  'Crawl': '潜入暗房',
+  'Crawl Console': '潜入暗房',
+  'Subscriptions': '挂念的人',
+  'Downloads': '收入囊中',
+  'Downloaders': '接她回家',
+  'Settings': '闺房布置',
 }
 
 export function navLabel(normal: string): string {
@@ -172,4 +190,15 @@ export function navLabel(normal: string): string {
 export function useNavMode() {
   const mode = useStore((s) => s.navMode)
   return (normal: string) => (mode === 'whisper' ? (NAV_WHISPER[normal] ?? normal) : normal)
+}
+
+/** 眉题映射：先整串匹配，再取首段匹配并保留余下部分（"Library · 4 部" → "群芳谱 · 4 部"） */
+export function navEyebrow(eyebrow: string): string {
+  if (useStore.getState().navMode !== 'whisper') return eyebrow
+  const whole = NAV_WHISPER[eyebrow]
+  if (whole) return whole
+  const m = eyebrow.match(/^(\S+)(.*)$/)
+  if (!m) return eyebrow
+  const head = NAV_WHISPER[m[1]]
+  return head ? head + m[2] : eyebrow
 }

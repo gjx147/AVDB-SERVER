@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
-import { useWhisper } from '../i18n/whisper'
+import { isValidElement, type ReactNode } from 'react'
+import { useWhisper, navEyebrow, useNavMode } from '../i18n/whisper'
+import { useStore } from '../store/useStore'
 
 export function Loading({ label }: { label?: string }) {
   const w = useWhisper()
@@ -31,14 +32,35 @@ export function ErrorEmpty({ message, onRetry }: { message?: string; onRetry?: (
   )
 }
 
+/** 提取 ReactNode 的纯文本（title 为 <>影片<em>库</em></> 时得"影片库"） */
+function nodeText(n: ReactNode): string {
+  if (n == null || typeof n === 'boolean') return ''
+  if (typeof n === 'string' || typeof n === 'number') return String(n)
+  if (Array.isArray(n)) return n.map(nodeText).join('')
+  if (isValidElement(n)) return nodeText((n.props as { children?: ReactNode }).children)
+  return ''
+}
+
 export function PageHead({
   eyebrow, title, sub, children,
 }: { eyebrow: string; title: ReactNode; sub?: string; children?: ReactNode }) {
+  const navMode = useStore((s) => s.navMode)
+  const nl = useNavMode()
+  // 情话模式：页面标题与眉题联动切换（映射词拆末字做金色强调，保持视觉一致）
+  let titleNode = title
+  let eyebrowNode = eyebrow
+  if (navMode === 'whisper') {
+    const mapped = nl(nodeText(title))
+    if (mapped !== nodeText(title) && mapped.length >= 2) {
+      titleNode = <>{mapped.slice(0, -1)}<em>{mapped.slice(-1)}</em></>
+    }
+    eyebrowNode = navEyebrow(eyebrow)
+  }
   return (
     <div className="page-head">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h1 className="page-title">{title}</h1>
+        <div className="eyebrow">{eyebrowNode}</div>
+        <h1 className="page-title">{titleNode}</h1>
         {sub && <p className="page-sub">{sub}</p>}
       </div>
       {children && <div className="page-actions">{children}</div>}
