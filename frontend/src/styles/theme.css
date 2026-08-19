@@ -758,7 +758,8 @@ html.reveal .poster.rv{opacity:1}
 .login-page.leaving .pulse-band{animation:none}
 
 /* ════════ 首页 · 影视墙（单张大横图轮播 + 全屏氛围背景） ════════ */
-.wall-page{position:relative;height:100vh;overflow:hidden;background:var(--bg-ink)}
+/* dvh：手机浏览器地址栏收展时保持满屏，底部控件不被遮挡 */
+.wall-page{position:relative;height:100vh;height:100dvh;overflow:hidden;background:var(--bg-ink)}
 /* 全屏模糊背景：当前封面 blur + 交叉淡入 */
 .wbg{position:absolute;inset:0;z-index:0;overflow:hidden}
 .wbg img{width:100%;height:100%;object-fit:cover;filter:blur(64px) saturate(1.5) brightness(.55);transform:scale(1.25);animation:wbgIn 1.1s ease}
@@ -802,14 +803,28 @@ html.reveal .poster.rv{opacity:1}
 .wslide-count{font-family:var(--ff-mono);font-size:11px;color:var(--t-mute);white-space:nowrap}
 .wall-loading{display:flex;align-items:center;justify-content:center;min-height:60vh}
 @media(pointer:coarse){.wall-nav{display:none}}
+/* 手机适配：顶部标识避让汉堡按钮 / 简介层紧凑 / 动画省电 */
 @media(max-width:768px){
-  .winfo{padding:90px 20px 26px;max-width:100%}
-  .winfo-code{font-size:17px}
-  .winfo-title{font-size:20px}
-  .winfo-syn{font-size:12px;-webkit-line-clamp:3}
-  .winfo-title{margin:6px 0 8px}
-  .wslide-fav{top:56px;right:12px;width:24px;height:24px;font-size:12px}
-  .wslide-prog-track{width:110px}
-  .wall-head{left:12px;top:12px;padding:6px 12px}
-  .wall-title{font-size:15px}
+  .wall-head{left:56px;top:12px;right:12px;padding:5px 12px;max-width:calc(100vw - 72px);gap:8px}
+  .wall-title{font-size:14px}
+  .wall-title em{font-size:12px}
+  .wall-sub{display:none}
+  /* 入场动画去模糊/缩放，省 GPU */
+  .wstage{animation:wInM .45s ease}
+  .winfo{padding:80px 16px 20px;max-width:100%}
+  .winfo-code{font-size:15px}
+  .winfo-title{font-size:19px;margin:5px 0 8px;line-height:1.4}
+  .winfo-syn{font-size:12px;line-height:1.7;-webkit-line-clamp:3;margin-bottom:10px}
+  .winfo-meta{gap:10px;font-size:11px}
+  .winfo-more{font-size:11px;padding:4px 11px}
+  .wslide-fav{top:54px;right:12px;width:24px;height:24px;font-size:12px}
+  .wslide-prog{bottom:14px;padding:6px 12px;gap:9px}
+  .wslide-prog-track{width:96px}
+  .wslide-count{font-size:10px}
+}
+@keyframes wInM{from{opacity:0;transform:scale(1.02)}to{opacity:1;transform:scale(1)}}
+/* 平板：简介区略收窄 */
+@media(min-width:769px) and (max-width:1024px){
+  .winfo{max-width:600px;padding:110px 32px 32px}
+  .winfo-title{font-size:24px}
 }
