@@ -32,11 +32,11 @@
   --blue: #3d6bb0;   --blue-wash: rgba(61,107,176,.12);
   --violet: #6b5aa8;
 
-  /* 文字：深桃褐 */
+  /* 文字：深桃褐（mute/faint 为浅粉底上调深的对比度，保证小字可读） */
   --t-display: #3d1526;
   --t-body: #5e2c3e;
-  --t-mute: #8f5a6d;
-  --t-faint: #b88a99;
+  --t-mute: #7c4a5c;
+  --t-faint: #9c7282;
 
   /* 字体 */
   --ff-serif: "Playfair Display", "Noto Serif SC", Georgia, serif;
@@ -87,8 +87,8 @@
   --line-strong: rgba(255,143,179,.30);
   --t-display: #f6e3ee;
   --t-body: #d9b8ca;
-  --t-mute: #a87b93;
-  --t-faint: #7d5568;
+  --t-mute: #c09cb2;
+  --t-faint: #8f6a80;
   --gold: #ff4fa3;
   --gold-bright: #ff7fb8;
   --gold-wash: rgba(255,79,163,.12);
@@ -119,8 +119,8 @@
   --line-strong: rgba(255,20,147,.34);
   --t-display: #f7d6e2;
   --t-body: #e8b8c9;
-  --t-mute: #b587a0;
-  --t-faint: #8a5f74;
+  --t-mute: #c8a3b5;
+  --t-faint: #966f86;
   --gold-glow: rgba(255,20,147,.5);
   color-scheme: dark;
 }

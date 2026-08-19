@@ -26,30 +26,30 @@
 .wstage.is-tall .winfo-syn{font-size:12px;line-height:1.7;-webkit-line-clamp:3}
 .winfo-code{font-family:var(--ff-mono);font-size:22px;font-weight:700;color:var(--gold-bright);letter-spacing:.04em;text-shadow:0 0 16px rgba(255,105,180,.65),0 2px 6px rgba(0,0,0,.8)}
 .winfo-title{font-family:var(--ff-serif);font-size:30px;font-weight:700;color:#fff;line-height:1.35;margin:8px 0 12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 2px 8px rgba(0,0,0,.7)}
-.winfo-syn{font-size:14px;line-height:1.85;color:rgba(255,255,255,.88);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 4px rgba(0,0,0,.65);margin-bottom:14px}
-.winfo-meta{display:flex;align-items:center;gap:14px;font-family:var(--ff-mono);font-size:12px;color:rgba(255,255,255,.78);flex-wrap:wrap;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.winfo-syn{font-size:14px;line-height:1.85;color:rgba(255,255,255,.95);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 4px rgba(0,0,0,.75);margin-bottom:14px}
+.winfo-meta{display:flex;align-items:center;gap:14px;font-family:var(--ff-mono);font-size:12px;color:rgba(255,255,255,.92);flex-wrap:wrap;text-shadow:0 1px 4px rgba(0,0,0,.75)}
 .winfo-score{color:var(--gold-bright);font-weight:700}
 .winfo-more{color:#fff;font-family:var(--ff-sans);font-size:12px;letter-spacing:.04em;padding:5px 14px;border-radius:999px;background:rgba(255,20,147,.82);box-shadow:0 4px 14px rgba(255,20,147,.4)}
 /* 粉雾遮罩（聚向中央） */
 .wall-page::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
   background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(255,200,215,.30) 100%),
              linear-gradient(180deg, rgba(255,20,147,.10), rgba(255,200,215,.18))}
-/* 顶部浮动标识 */
-.wall-head{position:absolute;top:16px;left:20px;z-index:3;display:flex;align-items:baseline;gap:12px;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:var(--shadow-card)}
-.wall-title{font-family:var(--ff-serif);font-size:17px;font-weight:700;color:var(--t-display)}
-.wall-title em{font-style:italic;color:var(--gold);font-weight:400;font-size:14px}
-.wall-sub{font-size:11px;color:var(--t-mute);font-family:var(--ff-mono)}
-/* 箭头（玻璃） */
-.wall-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--t-display);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;z-index:3;padding:0 0 2px;box-shadow:var(--shadow-card)}
-.wall-nav:hover{background:rgba(255,255,255,.85)}
+/* 顶部浮动标识：玻璃底不透明度提高，任何封面下文字可读 */
+.wall-head{position:absolute;top:16px;left:20px;z-index:3;display:flex;align-items:baseline;gap:12px;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-card)}
+.wall-title{font-family:var(--ff-serif);font-size:17px;font-weight:700;color:var(--t-display);text-shadow:0 1px 0 rgba(255,255,255,.5)}
+.wall-title em{font-style:italic;color:var(--gold-deep);font-weight:400;font-size:14px}
+.wall-sub{font-size:11px;color:var(--t-body);font-family:var(--ff-mono)}
+/* 箭头（玻璃）：底不透明度提高 */
+.wall-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--t-display);font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;z-index:3;padding:0 0 2px;box-shadow:var(--shadow-card)}
+.wall-nav:hover{background:rgba(255,255,255,.92)}
 .wall-nav:active{transform:translateY(-50%) scale(.94)}
 .wall-nav--prev{left:16px}
 .wall-nav--next{right:16px}
-/* 底部进度 + 计数 */
-.wslide-prog{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:3;display:flex;align-items:center;gap:12px;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:var(--shadow-card)}
+/* 底部进度 + 计数：玻璃底提高 + 文字加对比 */
+.wslide-prog{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:3;display:flex;align-items:center;gap:12px;padding:8px 16px;border-radius:999px;background:rgba(255,250,253,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-card)}
 .wslide-prog-track{width:180px;height:4px;border-radius:2px;background:var(--gold-wash);overflow:hidden}
 .wslide-prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--gold),var(--gold-bright));transition:width .4s cubic-bezier(.23,1,.32,1)}
-.wslide-count{font-family:var(--ff-mono);font-size:11px;color:var(--t-mute);white-space:nowrap}
+.wslide-count{font-family:var(--ff-mono);font-size:11px;color:var(--t-body);white-space:nowrap}
 .wall-loading{display:flex;align-items:center;justify-content:center;min-height:60vh}
 @media(pointer:coarse){.wall-nav{display:none}}
 /* 手机适配：顶部标识避让汉堡按钮 / 简介层紧凑 / 动画省电 */

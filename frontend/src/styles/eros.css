@@ -104,8 +104,16 @@
 [data-theme=boudoir] .login-wall::after{background:radial-gradient(80% 70% at 50% 45%,transparent 26%,rgba(10,4,8,.72) 100%),
   linear-gradient(180deg,rgba(20,10,16,.35),rgba(10,4,8,.5))}
 [data-theme=boudoir] .wall-head,[data-theme=boudoir] .wall-nav,[data-theme=boudoir] .wslide-prog{
-  background:rgba(26,12,20,.62);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+  background:rgba(26,12,20,.82);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
 [data-theme=boudoir] .wall-nav{color:#f6e3ee}
+[data-theme=boudoir] .wall-title{text-shadow:none}
+[data-theme=boudoir] .wall-title em{color:var(--gold-bright)}
+/* 密室模式（亮色主题下开密室）：玻璃元素同样换暗底 */
+[data-mode=mood] .wall-head,[data-mode=mood] .wall-nav,[data-mode=mood] .wslide-prog{
+  background:rgba(26,10,18,.82);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-mode=mood] .wall-nav{color:#f6e3ee}
+[data-mode=mood] .wall-title{text-shadow:none}
+[data-mode=mood] .wall-title em{color:var(--gold-bright)}
 [data-theme=boudoir] .rc-nav{background:rgba(40,18,30,.6);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
 [data-theme=boudoir] .rank-badge{background:rgba(30,14,22,.94);color:#f6e3ee}
 [data-theme=boudoir] .poster-frame{background:linear-gradient(135deg,#241019,#160a10)}

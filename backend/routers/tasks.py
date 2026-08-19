@@ -205,6 +205,17 @@ def toggle_favorite(task_id: int, db: DbSession, _user: CurrentUser):
     return {"ok": True, "is_favorite": task.is_favorite}
 
 
+@router.delete("/{task_id}/favorite")
+def unfavorite(task_id: int, db: DbSession, _user: CurrentUser):
+    """取消收藏（幂等）。前端取消收藏走 DELETE；POST 保留 toggle 兼容旧调用。"""
+    task = db.get(Task, task_id)
+    if not task: raise HTTPException(status_code=404, detail="任务不存在")
+    task.is_favorite = False
+    task.favorite_at = None
+    db.commit()
+    return {"ok": True, "is_favorite": False}
+
+
 @router.patch("/{task_id}/view-status")
 def set_view_status(task_id: int, status: str, db: DbSession, _user: CurrentUser):
     valid = {"viewed", "browsed", "want", ""}
