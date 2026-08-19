@@ -77,4 +77,4 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD cd /app && alembic upgrade head && cd backend && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+CMD cd /app && alembic upgrade heads && cd backend && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
