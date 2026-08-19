@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { Icon } from './Icons'
-import { useWhisper, greetingKey } from '../i18n/whisper'
+import { useWhisper, greetingKey, useNavMode } from '../i18n/whisper'
 
 interface NavItem {
   to: string
@@ -39,7 +39,10 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
   const stats = useStore((s) => s.stats)
   const moodMode = useStore((s) => s.moodMode)
   const toggleMood = useStore((s) => s.toggleMood)
+  const navMode = useStore((s) => s.navMode)
+  const toggleNavMode = useStore((s) => s.toggleNavMode)
   const w = useWhisper()
+  const nl = useNavMode()
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
@@ -49,7 +52,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
       <nav className="nav" aria-label="主导航">
         {nav.map((sec) => (
           <div className="nav-section" key={sec.section}>
-            <div className="nav-label">{sec.section}</div>
+            <div className="nav-label">{nl(sec.section)}</div>
             {sec.items.map((it) => (
               <NavLink
                 key={it.to}
@@ -58,7 +61,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
                 className={({ isActive }) => `nav-item${isActive ? ' on' : ''}`}
               >
                 {it.icon}
-                {it.label}
+                {nl(it.label)}
                 {it.statKey && stats ? (
                   <span className="nav-badge">{stats[it.statKey]}</span>
                 ) : null}
@@ -68,6 +71,12 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
         ))}
       </nav>
       <div className="sidebar-foot">
+        {/* v4.1 文字模式切换：正常 ↔ 情话 */}
+        <button className={`mood-toggle${navMode === 'whisper' ? ' on' : ''}`} onClick={toggleNavMode}
+          aria-pressed={navMode === 'whisper'} title={navMode === 'whisper' ? '切回正常文字' : '切换为情话文字'}>
+          <span aria-hidden="true">{navMode === 'whisper' ? '💌' : '💬'}</span>
+          {navMode === 'whisper' ? '文字 · 情话' : '文字 · 正常'}
+        </button>
         {/* 烛光密室开关：暗场聚光 + 大胆文案档 + Wall 慢节奏（烛焰随体温涨落） */}
         <button className={`mood-toggle${moodMode ? ' on' : ''}`} onClick={toggleMood}
           aria-pressed={moodMode} title={moodMode ? '离开密室' : '进入烛光密室'}>

@@ -56,6 +56,10 @@ interface AppState {
   nightBoost: boolean
   setNightBoost: (on: boolean) => void
 
+  /** 侧边栏文字模式：normal 正常 / whisper 情话（v4.1 切换按钮） */
+  navMode: 'normal' | 'whisper'
+  toggleNavMode: () => void
+
   /** 声色层：WebAudio 音效总开关（默认静音） */
   soundOn: boolean
   setSoundOn: (on: boolean) => void
@@ -132,6 +136,13 @@ export const useStore = create<AppState>((set, get) => ({
   setNightBoost: (on) => {
     localStorage.setItem('nightBoost', on ? '1' : '0')
     set({ nightBoost: on })
+  },
+
+  navMode: (localStorage.getItem('navMode') as 'normal' | 'whisper') || 'normal',
+  toggleNavMode: () => {
+    const next = get().navMode === 'whisper' ? 'normal' : 'whisper'
+    localStorage.setItem('navMode', next)
+    set({ navMode: next })
   },
 
   soundOn: audio.enabled,

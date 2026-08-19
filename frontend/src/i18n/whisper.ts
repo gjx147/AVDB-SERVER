@@ -144,3 +144,32 @@ export function greetingKey(): WhisperKey {
   if (h >= 12 && h < 18) return 'greet_noon'
   return 'greet_night'
 }
+
+/* ── v4.1 侧边栏双文案：normal（正常）↔ whisper（情话），切换按钮在侧栏底部 ── */
+const NAV_WHISPER: Record<string, string> = {
+  '浏览': '流连',
+  '采集': '狩猎',
+  '系统': '闺房',
+  '首页': '今夜的她',
+  '仪表盘': '心跳记录',
+  '影片库': '群芳谱',
+  '收藏': '心尖上',
+  '演员库': '佳人们',
+  '排行榜': '群芳榜',
+  '列表源': '猎场',
+  '爬取控制台': '潜入暗房',
+  '订阅': '挂念的人',
+  '下载历史': '收入囊中',
+  '下载器': '接她回家',
+  '设置': '闺房布置',
+}
+
+export function navLabel(normal: string): string {
+  const mode = useStore.getState().navMode
+  return mode === 'whisper' ? (NAV_WHISPER[normal] ?? normal) : normal
+}
+
+export function useNavMode() {
+  const mode = useStore((s) => s.navMode)
+  return (normal: string) => (mode === 'whisper' ? (NAV_WHISPER[normal] ?? normal) : normal)
+}

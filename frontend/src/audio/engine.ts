@@ -69,7 +69,7 @@ class AudioEngine {
   setEnabled(on: boolean) {
     this.enabled = on
     localStorage.setItem('sound', on ? '1' : '0')
-    if (!on) { this.stopHeartbeat(); this.stopAmbient() }
+    if (!on) { this.stopHeartbeat(); this.stopMoan(); this.stopAmbient() }
   }
 
   setBusVolume(b: Bus, v: number) {
@@ -82,6 +82,10 @@ class AudioEngine {
   setHeat(h01: number) {
     this.heat = h01
     if (h01 > 0.3) this.startHeartbeat()
+    else this.stopHeartbeat()
+    // 喘息层：heat>25% 启动，越热越急促越深（v4.1）
+    if (h01 > 0.25) { this.startMoan(); this.moan?.update(h01) }
+    else this.stopMoan()
   }
 
   /* ── 心跳持续层：BPM = 52 + heat×60，音量∝heat；页面隐藏/静音即停 ── */
@@ -96,6 +100,22 @@ class AudioEngine {
     beat()
   }
   stopHeartbeat() { clearTimeout(this.hbTimer); this.hbTimer = 0 }
+
+  /* ── 喘息层（v4.1）：做爱时的喘息声，工厂由 voices.ts 注入；heat 联动 ── */
+  private moanFactory: ((deps: VoiceDeps) => MoanLayer) | null = null
+  private moan: MoanLayer | null = null
+  setMoanFactory(fn: NonNullable<typeof this.moanFactory>) { this.moanFactory = fn }
+  private moanDeps: VoiceDeps | null = null
+  setMoanDeps(d: VoiceDeps) { this.moanDeps = d }
+  startMoan() {
+    if (this.moan || !this.ready || !this.moanFactory || !this.moanDeps) return
+    this.moan = this.moanFactory(this.moanDeps)
+    this.moan.update(this.heat)
+  }
+  stopMoan() {
+    this.moan?.stop()
+    this.moan = null
+  }
 
   /* ── 环境层（烛火）：moodMode 开关驱动，单实例 ── */
   startAmbient(name = 'candle') {
@@ -114,6 +134,12 @@ class AudioEngine {
 /* 音色注册表：由 voices.ts 填充；(t, intensity) => stop? */
 export type Voice = (t: number, intensity: number) => (() => void) | void
 export const VOICES = new Map<string, Voice>()
+
+/* 喘息层控制：循环音色（v4.1） */
+export interface MoanLayer {
+  update: (heat01: number) => void
+  stop: () => void
+}
 
 export interface VoiceDeps {
   ctx: () => AudioContext

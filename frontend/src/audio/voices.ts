@@ -1,10 +1,10 @@
-/** 音色库（Eros V3）—— 纯函数合成配方，全部走 AudioEngine 的总线。
+/** 音色库（Eros V3/V4）—— 纯函数合成配方，全部走 AudioEngine 的总线。
  *  三音色家族：
- *  - 生理音 physio：心跳。低频正弦（60Hz）短指数包络；频率越低越贴身，包络越慢越暧昧
+ *  - 生理音 physio：心跳、喘息（v4.1 做爱时的喘息）。低频正弦短包络；双 formant 粉噪人声共振
  *  - 材质音 tex：丝绸/布料。白噪 bandpass + 滑音 sweep，随机 ±15% 防听觉疲劳
  *  - 环境音 amb：烛火（棕噪+随机噼啪）、杯碰（双高频正弦高 Q 共振）
- *  克制原则：音量整体极低（存在感极低、撤退感极快），绝不叠响。 */
-import { VOICES, type VoiceDeps } from './engine'
+ *  克制原则：默认静音、音量整体极低（存在感极低、撤退感极快），绝不叠响。 */
+import { VOICES, audio, type MoanLayer, type VoiceDeps } from './engine'
 
 let D: VoiceDeps
 
@@ -22,8 +22,72 @@ function noise(t: number, dur: number) {
   return src
 }
 
+/** v4.1 喘息声层：双 formant 粉噪（人声共鸣感）+ 呼吸包络循环 + 呼气微颤。
+ *  heat 越高：呼吸周期越短（2.8s→0.9s）、音量越深、颤音越明显——从轻浅到急促。 */
+export function createMoan(deps: VoiceDeps): MoanLayer {
+  const ctx = deps.ctx()
+  const out = deps.bus('physio')
+  const t = ctx.currentTime
+
+  const src = ctx.createBufferSource()
+  src.buffer = deps.noise()
+  src.loop = true
+  // 双 formant：模拟人声共鸣腔
+  const bp1 = ctx.createBiquadFilter()
+  bp1.type = 'bandpass'; bp1.frequency.value = 620; bp1.Q.value = 1.1
+  const bp2 = ctx.createBiquadFilter()
+  bp2.type = 'bandpass'; bp2.frequency.value = 920; bp2.Q.value = 1.6
+  // 呼气尾端微颤（4-6Hz 气声抖动）
+  const vib = ctx.createOscillator()
+  vib.frequency.value = 5
+  const vibG = ctx.createGain()
+  vibG.gain.value = 8
+  vib.connect(vibG).connect(bp2.frequency)
+  // 呼吸包络：dc(1) + sine(±1) → 0..2 → ×0.5 → 0..1
+  const dc = ctx.createConstantSource()
+  dc.offset.value = 1
+  const lfo = ctx.createOscillator()
+  lfo.frequency.value = 0.36   // 周期 ≈2.8s（heat=0 基准）
+  const sum = ctx.createGain()
+  sum.gain.value = 0.5
+  dc.connect(sum)
+  lfo.connect(sum)
+  const scale = ctx.createGain()
+  scale.gain.value = 0.015
+  sum.connect(scale)
+  const g = ctx.createGain()
+  g.gain.value = 0
+  scale.connect(g.gain)
+
+  src.connect(bp1).connect(bp2).connect(g).connect(out)
+  src.start(t)
+  dc.start(t)
+  lfo.start(t)
+  vib.start(t)
+
+  return {
+    update(heat01: number) {
+      const t0 = ctx.currentTime
+      // 周期 2.8s → 0.9s（更急促）；音量 0.015 → 0.05（更深）；颤音 8 → 22Hz 振幅
+      lfo.frequency.setTargetAtTime(0.36 + heat01 * 0.75, t0, 0.4)
+      scale.gain.setTargetAtTime(0.015 + heat01 * 0.035, t0, 0.4)
+      vibG.gain.setTargetAtTime(8 + heat01 * 14, t0, 0.4)
+    },
+    stop() {
+      const t0 = ctx.currentTime
+      scale.gain.setTargetAtTime(0, t0, 0.35)
+      window.setTimeout(() => {
+        for (const n of [src, dc, lfo, vib]) { try { n.stop() } catch { /* already stopped */ } }
+      }, 900)
+    },
+  }
+}
+
 export function registerVoices(deps: VoiceDeps) {
   D = deps
+  // v4.1 喘息层工厂注入（engine.setHeat 驱动启停与急促度）
+  audio.setMoanDeps(deps)
+  audio.setMoanFactory(createMoan)
 
   /* ── 心跳：双跳结构（两快一慢的"快"部分），60Hz 贴耳低频 ── */
   VOICES.set('heartbeat', (t, k) => {
