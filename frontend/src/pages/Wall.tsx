@@ -126,9 +126,10 @@ export function Wall() {
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
         </div>
-        {/* 左下角信息层：雾面玻璃 + 错峰显影（番号→标题→简介→元信息）；
-            简介位优先 AI 耳语情话，无则 synopsis/静态池兜底 */}
-        <div className="winfo fog-glass">
+        {/* 左下角信息层：错峰显影（番号→标题→简介→元信息）；
+            简介位优先 AI 耳语情话，无则 synopsis/静态池兜底。
+            注意：V3-2 衣衫与雾（哈气玻璃）不对首页生效，这里不加 fog-glass */}
+        <div className="winfo">
           <div className="winfo-code">{t.video_code || '—'}</div>
           <div className="winfo-title">{t.title || '未命名'}</div>
           {(aiLine || synopsis) && <div className="winfo-syn">{aiLine || synopsis}</div>}

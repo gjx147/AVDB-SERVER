@@ -405,8 +405,6 @@ body::after{opacity:calc(.65 + .35*var(--heat))}
   0%{opacity:1;-webkit-mask-size:24% 30%;mask-size:24% 30%}
   60%{opacity:.9;-webkit-mask-size:170% 210%;mask-size:170% 210%}
   100%{opacity:0;-webkit-mask-size:200% 240%;mask-size:200% 240%}}
-/* Wall 信息层雾面 */
-.winfo.fog-glass::before{z-index:0;background:rgba(20,6,12,.18)}
 
 /* ══ V3-3 红灯区聚光：被凝视者红 rim 点亮，其余沉入暗部 ══ */
 @media(hover:hover){
