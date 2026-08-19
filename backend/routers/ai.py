@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from deps import CurrentUser
-from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line
+from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line, test_connection
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -65,3 +65,9 @@ async def ai_whisper(req: WhisperRequest, _user: CurrentUser):
     AI 未配置/调用失败时 ok=false，前端静默回退静态文案池。"""
     line = await whisper_line(req.task_id, tone=req.tone, night=req.night)
     return {"ok": bool(line), "line": line}
+
+
+@router.post("/test")
+async def ai_test(_user: CurrentUser):
+    """用当前 settings 表配置发一句问候，验证 AI 连通性（供设置页「测试连接」）。"""
+    return await test_connection()

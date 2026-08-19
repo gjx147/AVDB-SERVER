@@ -326,6 +326,8 @@ export const api = {
     whisper: (taskId: number, tone: 0 | 1 | 2, night: boolean) =>
       http.post<{ ok: boolean; line: string }>('/api/ai/whisper', { task_id: taskId, tone, night }, { timeout: 8000 })
         .then((r) => r.data),
+    test: () =>
+      http.post<{ ok: boolean; message: string }>('/api/ai/test', {}, { timeout: 30000 }).then((r) => r.data),
   },
 
   // ════════ Content Filter（Phase 4：过滤规则）════════

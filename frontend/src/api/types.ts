@@ -255,6 +255,12 @@ export interface Settings {
 
   // 代理配置
   http_proxy?: string
+
+  // AI 配置（OpenAI 兼容，默认 MiniMax；值均为字符串，api_key 脱敏为 ***）
+  ai_enabled?: string
+  ai_base_url?: string
+  ai_api_key?: string
+  ai_model?: string
 }
 
 export type SettingsUpdate = Partial<Settings>

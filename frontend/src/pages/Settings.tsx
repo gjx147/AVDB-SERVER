@@ -5,7 +5,7 @@ import { PageHead, Loading, ErrorEmpty } from '../components/States'
 import { useStore } from '../store/useStore'
 import { audio } from '../audio/engine'
 
-type Tab = 'crawl' | 'retry' | 'notify' | 'media' | 'appearance' | 'backup'
+type Tab = 'crawl' | 'retry' | 'notify' | 'media' | 'ai' | 'appearance' | 'backup'
 
 export function Settings() {
   const [s, setS] = useState<S | null>(null)
@@ -72,6 +72,7 @@ export function Settings() {
           <button className={tab === 'retry' ? 'on' : ''} onClick={() => setTab('retry')}>自动重试</button>
           <button className={tab === 'notify' ? 'on' : ''} onClick={() => setTab('notify')}>通知配置</button>
           <button className={tab === 'media' ? 'on' : ''} onClick={() => setTab('media')}>媒体库</button>
+          <button className={tab === 'ai' ? 'on' : ''} onClick={() => setTab('ai')}>AI 智能</button>
           <button className={tab === 'appearance' ? 'on' : ''} onClick={() => setTab('appearance')}>外观</button>
           <button className={tab === 'backup' ? 'on' : ''} onClick={() => setTab('backup')}>备份与恢复</button>
         </div>
@@ -133,6 +134,7 @@ export function Settings() {
 
           {tab === 'notify' && <NotifyTab toastOk={toastOk} toastErr={toastErr} />}
           {tab === 'media' && <MediaTab toastOk={toastOk} toastErr={toastErr} />}
+          {tab === 'ai' && <AiTab toastOk={toastOk} toastErr={toastErr} />}
 
           {tab === 'appearance' && <AppearanceTab />}
 
@@ -244,6 +246,105 @@ const EVENT_LABELS: Record<string, string> = {
   download_complete: '下载完成', crawl_complete: '爬取完成',
   disk_warning: '磁盘告警', queue_stuck: '队列卡死',
   retry_exhausted: '重试耗尽', auto_added: '自动入库', actor_new_work: '演员新作',
+}
+
+/* ── MiniMax 模型预设（OpenAI 兼容，platform.minimaxi.com）── */
+const MINIMAX_MODELS = [
+  { id: 'MiniMax-M3', label: 'MiniMax-M3（最新 · 1M 上下文）' },
+  { id: 'MiniMax-M2.7', label: 'MiniMax-M2.7（推荐 · 快且稳）' },
+  { id: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7-highspeed（更快的平替）' },
+  { id: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
+  { id: 'MiniMax-M2.1', label: 'MiniMax-M2.1' },
+]
+const MINIMAX_BASE = 'https://api.minimaxi.com/v1'
+
+function AiTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: (m: string) => void }) {
+  const [enabled, setEnabled] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('MiniMax-M2.7')
+  const [testing, setTesting] = useState(false)
+
+  useEffect(() => {
+    api.settings.get().then((s) => {
+      setEnabled(s.ai_enabled === 'true')
+      setBaseUrl(s.ai_base_url || '')
+      setApiKey(s.ai_api_key && s.ai_api_key !== '***' ? s.ai_api_key : '')
+      setModel(s.ai_model || 'MiniMax-M2.7')
+    }).catch(() => {})
+  }, [])
+
+  const patch = () => ({
+    ai_enabled: enabled ? 'true' : 'false',
+    ai_base_url: baseUrl.trim(),
+    ai_model: model.trim(),
+    // *** 哨兵：未改动时不提交，保留后端已存 Key
+    ...(apiKey ? { ai_api_key: apiKey.trim() } : {}),
+  })
+
+  const save = async () => {
+    try {
+      await api.settings.update(patch())
+      toastOk('AI 配置已保存')
+      return true
+    } catch (e) { toastErr(String((e as Error).message)); return false }
+  }
+  const test = async () => {
+    setTesting(true)
+    try {
+      if (!(await save())) return
+      const r = await api.ai.test()
+      if (r.ok) toastOk(r.message)
+      else toastErr(r.message)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setTesting(false) }
+  }
+  const preset = () => {
+    setBaseUrl(MINIMAX_BASE)
+    setModel('MiniMax-M2.7')
+    toastOk('已应用 MiniMax 预设，填入 API Key 即可')
+  }
+
+  return (
+    <div className="card">
+      <div className="field">
+        <label>启用 AI</label>
+        <div className="seg">
+          <button className={enabled ? 'on' : ''} onClick={() => setEnabled(true)}>开启</button>
+          <button className={!enabled ? 'on' : ''} onClick={() => setEnabled(false)}>关闭</button>
+        </div>
+        <div className="hint">AI 耳语（Wall 轮播情话 / 今夜情人落款）、标题翻译、标签生成都走这里</div>
+      </div>
+      <div className="field">
+        <label htmlFor="ai-base">接口地址（OpenAI 兼容）</label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <input id="ai-base" className="input" placeholder={MINIMAX_BASE} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+          <button className="btn btn--ghost btn--sm" onClick={preset} style={{ whiteSpace: 'nowrap' }}>MiniMax 预设</button>
+        </div>
+        <div className="hint">默认走 MiniMax（{MINIMAX_BASE}）；也兼容 OpenAI/DeepSeek/中转站等任何 OpenAI 兼容地址</div>
+      </div>
+      <div className="field">
+        <label htmlFor="ai-key">API Key</label>
+        <input id="ai-key" className="input" type="password" placeholder="在 platform.minimaxi.com → 账户管理 → 接口密钥 创建" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        <div className="hint">仅保存在你的 NAS 本地；留空表示不修改已保存的 Key</div>
+      </div>
+      <div className="field">
+        <label htmlFor="ai-model">模型</label>
+        <select id="ai-model" className="input" value={model} onChange={(e) => setModel(e.target.value)}>
+          {MINIMAX_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          <option value="_custom">自定义（手动输入）…</option>
+        </select>
+        {model === '_custom' && (
+          <input className="input" style={{ marginTop: 8 }} placeholder="输入模型 id，如 MiniMax-M2.5" value="" onChange={(e) => setModel(e.target.value.trim())} />
+        )}
+        <div className="hint">M2.x 的思考链会内嵌在回复里，服务端已自动剥离；M3 自动关闭 thinking 更快更省</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="btn btn--gold" onClick={save}>保存 AI 配置</button>
+        <button className="btn btn--ghost" onClick={test} disabled={testing}>{testing ? '测试中…' : '保存并测试连接'}</button>
+      </div>
+    </div>
+  )
 }
 
 function NotifyTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: (m: string) => void }) {

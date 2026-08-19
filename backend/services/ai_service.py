@@ -6,7 +6,11 @@
 - 重试（空响应/可重试错误，指数退避）
 - 三种任务：translate（标题翻译）/tags（标签生成）/summary（摘要）
 
-统一走 OpenAI 兼容协议，支持任意兼容后端（OpenAI/DeepSeek/中转站等）。
+统一走 OpenAI 兼容协议。默认指向 MiniMax（platform.minimaxi.com）：
+- base_url https://api.minimaxi.com/v1，Bearer API Key
+- MiniMax-M2.x 思考链不可关闭、会以 <think>…</think> 嵌在 content 里 → 统一剥离
+- MiniMax-M3 可显式关闭 thinking（extra_body），更快更省
+也兼容其他 OpenAI 兼容后端（OpenAI/DeepSeek/中转站等）。
 """
 
 from __future__ import annotations
@@ -14,11 +18,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
+import time
 from typing import Any
 
 from openai import AsyncOpenAI
 
 logger = logging.getLogger("avdb.ai")
+
+# MiniMax 默认配置（settings 表未配置时的兜底）
+DEFAULT_BASE_URL = "https://api.minimaxi.com/v1"
+DEFAULT_MODEL = "MiniMax-M2.7"
 
 # 任务提示词模板
 _PROMPTS = {
@@ -26,6 +36,13 @@ _PROMPTS = {
     "tags": "根据以下影片信息生成3-8个中文标签，用逗号分隔，只输出标签：\n标题：{text}",
     "summary": "用一两句话概括以下影片内容：\n{text}",
 }
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_thinking(content: str) -> str:
+    """剥离 MiniMax M2.x 思考链标签（reasoning 默认内嵌 content）。"""
+    return _THINK_RE.sub("", content).strip()
 
 
 async def _get_config() -> dict[str, str]:
@@ -82,9 +99,9 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
     if config.get("ai_enabled", "").lower() != "true":
         return ""
 
-    base_url = config.get("ai_base_url", "").strip() or "https://api.openai.com/v1"
+    base_url = config.get("ai_base_url", "").strip() or DEFAULT_BASE_URL
     api_key = config.get("ai_api_key", "").strip()
-    use_model = model or config.get("ai_model", "").strip() or "gpt-3.5-turbo"
+    use_model = model or config.get("ai_model", "").strip() or DEFAULT_MODEL
     if not api_key:
         logger.warning("AI 未配置 api_key")
         return ""
@@ -99,13 +116,18 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
             return cached
 
     client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=60)
+    # MiniMax-M3 可显式关思考（快+省）；M2.x 不支持该参数，靠下游 _strip_thinking
+    extra_body = {}
+    if use_model.startswith("MiniMax-M3"):
+        extra_body["thinking"] = {"type": "disabled"}
     # 重试：空响应 + 可重试错误
     for attempt in range(3):
         try:
             resp = await client.chat.completions.create(
                 model=use_model, messages=messages, temperature=temperature, max_tokens=1000,
+                extra_body=extra_body or None,
             )
-            content = resp.choices[0].message.content or ""
+            content = _strip_thinking(resp.choices[0].message.content or "")
             if content.strip():
                 if use_cache:
                     _save_cache(prompt_hash, task_type, use_model, prompt_text, content)
@@ -117,6 +139,27 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
             wait = 2 ** attempt  # 1s, 2s 指数退避
             await asyncio.sleep(wait)
     return ""
+
+
+async def test_connection() -> dict:
+    """用当前 DB 配置发一句问候，验证 AI 连通性（不写缓存）。"""
+    t0 = time.monotonic()
+    config = await _get_config()
+    if config.get("ai_enabled", "").lower() != "true":
+        return {"ok": False, "message": "AI 未启用（ai_enabled 不是 true）"}
+    api_key = config.get("ai_api_key", "").strip()
+    if not api_key:
+        return {"ok": False, "message": "未配置 API Key"}
+    base_url = config.get("ai_base_url", "").strip() or DEFAULT_BASE_URL
+    use_model = config.get("ai_model", "").strip() or DEFAULT_MODEL
+    reply = await chat(
+        [{"role": "user", "content": "只回复两个字：你好"}],
+        task_type="test", temperature=0.1, use_cache=False,
+    )
+    elapsed = time.monotonic() - t0
+    if reply:
+        return {"ok": True, "message": f"连通正常（{use_model}，{elapsed:.1f}s）：{reply[:40]}"}
+    return {"ok": False, "message": f"调用失败（{base_url} / {use_model}），请检查 Key 与模型名"}
 
 
 async def translate(text: str, *, model: str | None = None) -> str:
