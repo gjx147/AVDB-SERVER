@@ -62,6 +62,20 @@ export function DailyReveal() {
     at(2300, () => setPhase('done'))
   }
 
+  const close = () => {
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    setPhase('idle')
+  }
+
+  // ESC 或点背景关闭舞台（保留"就是她了/再换一位"路径）
+  useEffect(() => {
+    if (phase === 'idle') return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [phase])
+
   if (phase === 'idle') {
     return (
       <button className="reveal-pouch" onClick={start} disabled={!tasks || tasks.length === 0}
@@ -75,7 +89,7 @@ export function DailyReveal() {
   const cls = phase === 'silhouette' ? 'silhouette' : phase
 
   return (
-    <div className="reveal-stage" role="dialog" aria-label="今夜情人揭幕">
+    <div className="reveal-stage" role="dialog" aria-label="今夜情人揭幕" onClick={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="reveal-inner">
         <div className={`reveal-cover ${cls}`} onClick={() => nav(`/task/${pick.id}`)} style={{ cursor: 'pointer' }}
           role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') nav(`/task/${pick.id}`) }}>

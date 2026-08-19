@@ -28,19 +28,23 @@ export function Wall() {
   const [tallGeom, setTallGeom] = useState<{ left: number; w: number } | null>(null)
   const [aiLine, setAiLine] = useState<string | null>(null)
   const touchX = useRef<number | null>(null)
+  const pageRef = useRef<HTMLDivElement | null>(null)
 
   // 切换作品时重置方向检测（等 onLoad 重新判定）+ 换片掀纱音
   useEffect(() => { setTall(false); setTallRatio(null); setTallGeom(null); audio.play('veil', 0.6) }, [index])
 
   // 竖版 contain 时计算图片实际显示区域（居中），信息层贴图左缘+图底
+  // 注意：wall-page 在 .main 内（左侧有侧边栏），必须用容器实际尺寸而非 window 尺寸
   useEffect(() => {
     const recalc = () => {
       if (tallRatio == null) return
-      const H = window.innerHeight
+      const el = pageRef.current
+      const W = el ? el.clientWidth : window.innerWidth
+      const H = el ? el.clientHeight : window.innerHeight
       const w = H * tallRatio
-      const left = (window.innerWidth - w) / 2
+      const left = (W - w) / 2
       // 接近横图比例时退化为全宽贴视口（避免信息层过窄）
-      setTallGeom(left > 8 ? { left, w } : { left: 0, w: window.innerWidth })
+      setTallGeom(left > 8 ? { left, w } : { left: 0, w: W })
     }
     recalc()
     window.addEventListener('resize', recalc)
@@ -109,7 +113,7 @@ export function Wall() {
     (t.tags ? t.tags.split(',').map((x) => x.trim()).filter(Boolean).join(' · ') : '')
 
   return (
-    <div className="wall-page" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+    <div className="wall-page" ref={pageRef} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
       onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={(e) => {
         if (touchX.current == null) return
@@ -146,8 +150,7 @@ export function Wall() {
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
         </div>
         {/* 左下角信息层：错峰显影（番号→标题→简介→元信息）；
-            简介位优先 AI 耳语情话，无则 synopsis/静态池兜底。
-            注意：V3-2 衣衫与雾（哈气玻璃）不对首页生效，这里不加 fog-glass */}
+            简介位优先 AI 耳语情话，无则 synopsis/静态池兜底 */}
         <div className="winfo">
           <div className="winfo-code">{t.video_code || '—'}</div>
           <div className="winfo-title">{t.title || '未命名'}</div>

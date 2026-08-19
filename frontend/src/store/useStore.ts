@@ -217,21 +217,20 @@ export const useStore = create<AppState>((set, get) => ({
 if (typeof window !== 'undefined') {
   window.setInterval(() => {
     if (document.hidden) return
-    const { heat, addHeat, excite, addExcite } = useStore.getState()
+    const { heat, addHeat } = useStore.getState()
     if (heat > 0) addHeat(-1)
-    if (excite > 0) addExcite(-5)
   }, 10_000)
   window.setInterval(() => {
     if (document.hidden) return
     const { excite, addExcite } = useStore.getState()
     if (excite > 0) addExcite(-5)
   }, 2_000)
-  // 页面隐藏：心跳/环境音即停（回来由 heat 重新拉起）
+  // 页面隐藏：心跳/喘息即停；回前台按当前体温整体恢复（heartbeat + moan）
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) audio.stopHeartbeat()
     else {
       const h = useStore.getState().heat
-      if (h > 30 && audio.enabled) audio.startHeartbeat()
+      if (h > 0) audio.setHeat(h / 100)  // 同步心跳与喘息层
     }
   })
   // 系统深浅色变化时，auto 主题实时跟随

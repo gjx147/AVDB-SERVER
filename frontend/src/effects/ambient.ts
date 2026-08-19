@@ -43,7 +43,13 @@ export function initAmbientEffects() {
 
 /* 9. 声色接线：首次手势 unlock AudioContext；海报 hover 播丝绸音（2.5s 节流） */
 function initSoundWiring() {
-  document.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true, passive: true })
+  document.addEventListener('pointerdown', () => {
+    audio.unlock()
+    // 解锁后立即恢复持续层（心跳/喘息/密室烛火），不等下一次交互
+    const { heat, moodMode } = useStore.getState()
+    if (heat > 0) audio.setHeat(heat / 100)
+    if (moodMode && audio.enabled) audio.startAmbient()
+  }, { once: true, capture: true, passive: true })
   let lastSilk = 0
   document.addEventListener('pointerover', (e) => {
     if (!audio.enabled) return

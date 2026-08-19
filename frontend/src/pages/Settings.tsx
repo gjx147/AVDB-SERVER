@@ -263,6 +263,7 @@ function AiTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: 
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('MiniMax-M2.7')
+  const [customModel, setCustomModel] = useState('')
   const [testing, setTesting] = useState(false)
 
   useEffect(() => {
@@ -270,14 +271,16 @@ function AiTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: 
       setEnabled(s.ai_enabled === 'true')
       setBaseUrl(s.ai_base_url || '')
       setApiKey(s.ai_api_key && s.ai_api_key !== '***' ? s.ai_api_key : '')
-      setModel(s.ai_model || 'MiniMax-M2.7')
+      const m = s.ai_model || 'MiniMax-M2.7'
+      if (MINIMAX_MODELS.some((x) => x.id === m)) { setModel(m); setCustomModel('') }
+      else { setModel('_custom'); setCustomModel(m) }
     }).catch(() => {})
   }, [])
 
   const patch = () => ({
     ai_enabled: enabled ? 'true' : 'false',
     ai_base_url: baseUrl.trim(),
-    ai_model: model.trim(),
+    ai_model: (model === '_custom' ? customModel : model).trim(),
     // *** 哨兵：未改动时不提交，保留后端已存 Key
     ...(apiKey ? { ai_api_key: apiKey.trim() } : {}),
   })
@@ -335,7 +338,8 @@ function AiTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastErr: 
           <option value="_custom">自定义（手动输入）…</option>
         </select>
         {model === '_custom' && (
-          <input className="input" style={{ marginTop: 8 }} placeholder="输入模型 id，如 MiniMax-M2.5" value="" onChange={(e) => setModel(e.target.value.trim())} />
+          <input className="input" style={{ marginTop: 8 }} placeholder="输入模型 id，如 MiniMax-M2.5"
+            value={customModel} onChange={(e) => setCustomModel(e.target.value)} />
         )}
         <div className="hint">M2.x 的思考链会内嵌在回复里，服务端已自动剥离；M3 自动关闭 thinking 更快更省</div>
       </div>

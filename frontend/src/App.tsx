@@ -44,6 +44,16 @@ export default function App() {
   // 列表页滚动位置记忆：POP（返回/前进）时恢复，新导航回顶
   const scrollMap = useRef(new Map<string, number>())
   const firstRoute = useRef(true)
+  // 娇嗔气泡文案：sulk 出现时固定一条（避免重渲染随机抖动）
+  const [sulkLine, setSulkLine] = useState('')
+  useEffect(() => {
+    if (sulk) {
+      const p = ['急什么呀…', '慢一点，好吗？', '你翻这么快，人家头晕了…']
+      setSulkLine(p[Math.floor(Math.random() * p.length)])
+    } else {
+      setSulkLine('')
+    }
+  }, [sulk])
   useEffect(() => {
     const key = pathname + search
     const onScroll = () => scrollMap.current.set(key, window.scrollY)
@@ -122,10 +132,8 @@ export default function App() {
       </main>
       <Toast />
       <ConfirmDialog />
-      {sulk && (
-        <div className="sulk-bubble" role="status">
-          {(() => { const p = ['急什么呀…', '慢一点，好吗？', '你翻这么快，人家头晕了…']; return p[Math.floor(Math.random() * p.length)] })()}
-        </div>
+      {sulk && sulkLine && (
+        <div className="sulk-bubble" role="status">{sulkLine}</div>
       )}
     </div>
   )
