@@ -1,0 +1,56 @@
+/* ══ 批次B/C 交互手感收尾：页面进场 / 确认弹窗 / 收藏心跳 / 推送高光 / 错峰入场 / 登录退场 ══ */
+
+/* ════════ 批次B/C：交互手感 + 华丽收尾 ════════ */
+
+/* 页面进场：统一缓动上浮（替代旧的 fade ease） */
+.page{animation:pageEnter .35s cubic-bezier(.23,1,.32,1)}
+@keyframes pageEnter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* 确认弹窗（替代原生 confirm） */
+.cd-overlay{position:fixed;inset:0;z-index:400;background:rgba(61,21,38,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;animation:cdFade .25s ease}
+@keyframes cdFade{from{opacity:0}to{opacity:1}}
+.cd-card{width:min(400px,calc(100vw - 48px));background:var(--bg-raised);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:26px 26px 22px;box-shadow:var(--shadow-float);animation:cdIn .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes cdIn{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.cd-title{font-family:var(--ff-serif);font-size:19px;font-weight:700;color:var(--t-display);margin-bottom:10px}
+.cd-message{font-size:13px;color:var(--t-body);line-height:1.7;margin-bottom:20px}
+.cd-actions{display:flex;justify-content:flex-end;gap:10px}
+
+/* Toast 手动关闭 */
+.toast-close{margin-left:4px;background:none;border:none;color:var(--t-faint);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:4px;line-height:1}
+.toast-close:hover{color:var(--t-body);background:var(--gold-wash)}
+
+/* 收藏成功：封面心跳 */
+.detail-cover.beat{animation:heartBeat .6s cubic-bezier(.23,1,.32,1)}
+
+/* 推送成功：磁力卡高光扫过 */
+.magnet-box.sent-glow{animation:sentGlow .9s ease-out}
+@keyframes sentGlow{0%{box-shadow:0 0 0 0 rgba(255,20,147,.45);border-color:var(--gold)}100%{box-shadow:0 0 26px 12px rgba(255,20,147,0);border-color:var(--line-soft)}}
+
+/* 复制按钮 ✓ 回弹 */
+.btn--ghost.copied{color:var(--green);border-color:var(--green)}
+
+/* 海报卡批量选中态：描边 + 上浮 */
+.poster.selected .poster-frame{box-shadow:0 0 0 2px var(--gold),0 8px 24px rgba(255,20,147,.28);transform:translateY(-4px)}
+.poster-check{width:26px;height:26px;border-radius:6px;cursor:pointer;border:2.5px solid rgba(255,255,255,.85);background:rgba(0,0,0,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;transition:all .2s}
+.poster-check.on{border:none;background:var(--gold);box-shadow:0 0 8px rgba(255,20,147,.4);animation:popIn .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes popIn{from{transform:scale(0)}to{transform:scale(1)}}
+
+/* 入场动效铺开：行视图/演员卡错峰 */
+.row-item{animation:pageIn .35s cubic-bezier(.23,1,.32,1) backwards}
+.row-item:nth-child(1){animation-delay:.02s}.row-item:nth-child(2){animation-delay:.05s}.row-item:nth-child(3){animation-delay:.08s}
+.row-item:nth-child(4){animation-delay:.11s}.row-item:nth-child(5){animation-delay:.14s}.row-item:nth-child(6){animation-delay:.17s}
+.row-item:nth-child(n+7){animation-delay:.2s}
+.actor{animation:pageIn .45s cubic-bezier(.23,1,.32,1) backwards}
+.actor:nth-child(1){animation-delay:.03s}.actor:nth-child(2){animation-delay:.07s}.actor:nth-child(3){animation-delay:.11s}
+.actor:nth-child(4){animation-delay:.15s}.actor:nth-child(5){animation-delay:.19s}.actor:nth-child(6){animation-delay:.23s}
+.actor:nth-child(n+7){animation-delay:.26s}
+
+/* 空状态：极慢浮动 */
+.empty .em-icon{animation:floatBob 4s ease-in-out infinite alternate}
+@keyframes floatBob{from{transform:translateY(-3px)}to{transform:translateY(3px)}}
+
+/* 登录仪式感退场：卡片上浮消散 + 海报墙提亮 */
+.login-page.leaving .login-card{animation:loginLeave .45s cubic-bezier(.23,1,.32,1) forwards}
+@keyframes loginLeave{to{opacity:0;transform:translateY(-26px) scale(1.04)}}
+.login-page.leaving .login-wall img{filter:saturate(1.5) brightness(1.02);transition:filter .45s}
+.login-page.leaving .pulse-band{animation:none}

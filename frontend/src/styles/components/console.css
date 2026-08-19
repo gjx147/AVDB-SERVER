@@ -1,0 +1,41 @@
+/* ══ 爬取控制台：进度环 / 终端 / 步骤条 ══ */
+
+/* ══ 爬取控制台 ══ */
+.console-grid{display:grid;grid-template-columns:320px 1fr;gap:22px;align-items:start}
+.crawl-state{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:24px;text-align:center}
+.crawl-ring{width:140px;height:140px;margin:0 auto 18px;position:relative}
+.crawl-ring svg{transform:rotate(-90deg)}
+.crawl-ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.crawl-ring .pct b{font-family:var(--ff-serif);font-size:34px;color:var(--t-display);line-height:1}
+.crawl-ring .pct span{font-size:10px;color:var(--t-faint);letter-spacing:.2em;text-transform:uppercase;margin-top:4px}
+.crawl-now{font-size:12px;color:var(--t-mute);margin-bottom:6px}
+.crawl-code-now{font-family:var(--ff-mono);font-size:18px;color:var(--gold);font-weight:600}
+.crawl-stats{display:flex;justify-content:center;gap:24px;margin-top:18px;padding-top:18px;border-top:1px solid var(--line-hair)}
+.crawl-stat b{font-family:var(--ff-serif);font-size:22px;color:var(--t-display);display:block}
+.crawl-stat span{font-size:10px;color:var(--t-faint);letter-spacing:.1em;text-transform:uppercase}
+.crawl-actions{display:flex;gap:8px;margin-top:20px;justify-content:center}
+
+/* 终端：深酒红底 + 粉白文字（贴合主题的终端感） */
+.terminal{background:#2b0f1c;border:1px solid rgba(255,20,147,.25);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-card)}
+.term-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,20,147,.18);background:rgba(255,255,255,.03)}
+.term-dot{width:10px;height:10px;border-radius:50%}
+.term-title{font-size:11px;color:rgba(255,214,232,.55);font-family:var(--ff-mono);margin-left:8px}
+.term-live{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:#7fe0b8}
+.term-live::before{content:"";width:7px;height:7px;border-radius:50%;background:#7fe0b8;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.term-body{padding:16px 18px;font-family:var(--ff-mono);font-size:12px;line-height:1.8;max-height:380px;overflow-y:auto}
+.term-line{color:#f3dbe6}
+.term-line .ts{color:rgba(255,176,200,.45)}
+.term-line .lv-info{color:#9db8ff}
+.term-line .lv-warn{color:#ffc978}
+.term-line .lv-ok{color:#7fe0b8}
+.term-line .lv-err{color:#ff8fa8}
+
+.steps{display:flex;gap:0;margin-bottom:24px}
+.step{flex:1;position:relative;padding:0 12px}
+.step:not(:last-child)::after{content:"";position:absolute;top:14px;right:-50%;width:100%;height:1px;background:var(--line-soft)}
+.step-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--line-soft);background:var(--bg-page);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--ff-mono);color:var(--t-faint);position:relative;z-index:1}
+.step.done .step-dot{background:var(--gold);border-color:var(--gold);color:#fff}
+.step.active .step-dot{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 4px var(--gold-wash)}
+.step-label{font-size:11px;color:var(--t-mute);margin-top:8px}
+.step.active .step-label{color:var(--gold)}

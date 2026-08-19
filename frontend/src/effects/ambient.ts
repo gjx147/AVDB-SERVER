@@ -1,27 +1,102 @@
 /** 桃夭互动特效引擎 —— 纯视觉，不改任何功能。
- *  1. 鼠标追随光晕（lerp 缓动跟随）
+ *  1. 鼠标追随光晕（lerp 缓动跟随，静止停表）
  *  2. 点击涟漪（按钮/chip/tag/海报）
  *  3. 卡片光斑跟随（指针局部高光）
  *  4. 海报 3D 倾斜（hover 按指针位置 ±6°）
  *  5. 红心爆击（收藏点击六瓣飞散）
+ *  6. 体温累积（hover/深 hover 加热，store 衰减；Boudoir）
+ *  7. 烛光尘埃粒子（单 canvas ≤40，密度随体温；Boudoir）
+ *  8. 胶片颗粒层（静态 SVG 噪点；Boudoir）
  *  性能保护：reduced-motion / 触屏（coarse pointer）自动关闭；全部 rAF 节流。
  */
+
+import { useStore } from '../store/useStore'
 
 const prefersReduced = typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const coarse = typeof window !== 'undefined' &&
   window.matchMedia('(pointer: coarse)').matches
+const lowPower = coarse || (typeof navigator !== 'undefined' && (navigator as any).deviceMemory <= 4)
 const enabled = !prefersReduced && !coarse
 
 export function initAmbientEffects() {
-  if (!enabled || typeof document === 'undefined') return
+  if (typeof document === 'undefined') return
+  initGrain()
+  initHeat()
+  if (!enabled) return
   initAura()
   initRipple()
   initSpotlight()
-  initTilt()
+  if (!lowPower) initTilt()
   initHeartBurst()
   initPulseBand()
   initScrollReveal()
+  if (!lowPower && window.innerWidth > 768) initMotes()
+}
+
+/* 8. 胶片颗粒层（静态装饰，任何环境保留；样式在 eros.css） */
+function initGrain() {
+  if (document.querySelector('.grain')) return
+  const g = document.createElement('div')
+  g.className = 'grain'
+  g.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(g)
+}
+
+/* 6. 体温累积：hover 海报 +2（全局 2.5s 节流）、深 hover 1.2s 再 +5。
+   进详情 / 收藏的加热由页面侧调用 addHeat；衰减在 store 的 10s 定时器。 */
+function initHeat() {
+  let lastTick = 0
+  let deepTimer = 0
+  document.addEventListener('pointerover', (e) => {
+    const el = (e.target as HTMLElement).closest('.poster') as HTMLElement | null
+    if (!el) return
+    const now = performance.now()
+    if (now - lastTick > 2500) {
+      lastTick = now
+      useStore.getState().addHeat(2)
+    }
+    clearTimeout(deepTimer)
+    deepTimer = window.setTimeout(() => useStore.getState().addHeat(5), 1200)
+  }, { passive: true })
+  document.addEventListener('pointerout', (e) => {
+    if ((e.target as HTMLElement).closest('.poster')) clearTimeout(deepTimer)
+  }, { passive: true })
+}
+
+/* 7. 烛光尘埃：暖粉尘埃缓慢上浮 + 呼吸明暗；密度随体温档提升；
+   页面隐藏即停摆；单 rAF 循环。 */
+function initMotes() {
+  const c = document.createElement('canvas')
+  c.className = 'motes'
+  c.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(c)
+  const ctx = c.getContext('2d')!
+  const fit = () => { c.width = innerWidth; c.height = innerHeight }
+  fit()
+  window.addEventListener('resize', fit, { passive: true })
+  const ps = Array.from({ length: 40 }, () => ({
+    x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+    r: .5 + Math.random() * 1.8, v: .06 + Math.random() * .15, ph: Math.random() * 7,
+  }))
+  ;(function loop(t: number) {
+    if (!document.hidden) {
+      ctx.clearRect(0, 0, c.width, c.height)
+      const heat = useStore.getState().heat / 100
+      const count = Math.round(16 + 24 * heat)
+      for (let i = 0; i < count; i++) {
+        const p = ps[i]
+        p.y -= p.v * (1 + heat * .8)
+        const a = .12 + .2 * Math.sin(t / 1800 + p.ph) + heat * .1
+        ctx.fillStyle = `rgba(255,143,179,${Math.max(0, a)})`
+        ctx.beginPath()
+        ctx.arc(p.x + 8 * Math.sin(t / 4000 + p.ph), p.y, p.r, 0, 7)
+        ctx.fill()
+        if (p.y < -4) { p.y = innerHeight + 4; p.x = Math.random() * innerWidth }
+      }
+    }
+    requestAnimationFrame(loop)
+  })(0)
 }
 
 /* 滚动显现：视口外的海报暂停入场动画+隐藏，滚到时再播放。
@@ -58,25 +133,27 @@ function initPulseBand() {
   document.body.appendChild(band)
 }
 
-/* 1. 鼠标追随光晕 */
+/* 1. 鼠标追随光晕（lerp 缓动跟随；静止停表——到位即 cancel，move 再重启，省常驻 rAF） */
 function initAura() {
   const aura = document.createElement('div')
   aura.className = 'aura'
   aura.setAttribute('aria-hidden', 'true')
   document.body.appendChild(aura)
   let tx = window.innerWidth / 2, ty = window.innerHeight / 2
-  let x = tx, y = ty, raf = 0
-  const loop = () => {
+  let x = tx + 1, y = ty + 1, raf = 0
+  const step = () => {
     x += (tx - x) * 0.08
     y += (ty - y) * 0.08
     aura.style.transform = `translate(${x - 170}px, ${y - 170}px)`
-    raf = requestAnimationFrame(loop)
+    if (Math.abs(tx - x) < 0.5 && Math.abs(ty - y) < 0.5) { raf = 0; return }
+    raf = requestAnimationFrame(step)
   }
-  window.addEventListener('pointermove', (e) => { tx = e.clientX; ty = e.clientY }, { passive: true })
-  raf = requestAnimationFrame(loop)
+  const kick = () => { if (!raf) raf = requestAnimationFrame(step) }
+  window.addEventListener('pointermove', (e) => { tx = e.clientX; ty = e.clientY; kick() }, { passive: true })
+  kick()
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) cancelAnimationFrame(raf)
-    else raf = requestAnimationFrame(loop)
+    if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
+    else kick()
   })
 }
 

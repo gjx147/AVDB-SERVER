@@ -1,0 +1,44 @@
+/* ══ 基础：reset / body / 滚动条 / 焦点环 / 氛围背景层 ══ */
+
+/* ── Reset ── */
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--ff-sans);
+  font-size:14px;
+  line-height:1.65;
+  color:var(--t-body);
+  background:var(--bg-ink);
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--gold);text-decoration:none}
+a:hover{color:var(--gold-bright)}
+img{display:block;max-width:100%}
+::selection{background:var(--gold-glow);color:var(--t-display)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,20,147,.22);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,20,147,.32)}
+
+/* 全局焦点环（唯一一套） */
+*:focus-visible{outline:2px solid var(--gold) !important;outline-offset:2px}
+
+/* ── 氛围背景层：烛光呼吸 + 桃粉晕光 ── */
+body::after{
+  content:"";position:fixed;inset:-8%;z-index:-1;pointer-events:none;
+  background:radial-gradient(46% 38% at 32% 24%, rgba(255,20,147,.06), transparent 70%);
+  animation:candleDrift 22s ease-in-out infinite alternate, candleBreath 6s ease-in-out infinite;
+}
+@keyframes candleDrift{from{transform:translate(0,0)}to{transform:translate(48px,30px)}}
+@keyframes candleBreath{0%,100%{opacity:.65}50%{opacity:1}}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(60% 42% at 18% 0%, rgba(255,20,147,.32), transparent 70%),
+    radial-gradient(52% 62% at 100% 100%, rgba(220,20,60,.25), transparent 62%),
+    radial-gradient(40% 40% at 55% 45%, rgba(255,0,255,.08), transparent 70%),
+    var(--bg-page);
+}
+/* 暗角：柔粉边缘，聚向中央 */
+.app::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse at center, transparent 58%, rgba(255,200,215,.30) 100%)}

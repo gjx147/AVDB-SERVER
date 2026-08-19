@@ -1,0 +1,135 @@
+/* ══ 设计令牌：字体/色板/曲线/时长（含双主题覆盖，见末尾 data-theme 块）══ */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Noto+Serif+SC:wght@400;600;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root{
+  /* ── 色板 ── */
+  --bg-ink: #fff0f5;          /* 页面整体背景：奶油白粉 */
+  --bg-page: #ffe4ee;         /* 次级容器：浅桃粉 */
+  --bg-surface: #ffffff;      /* 卡片/面板 */
+  --bg-raised: #fff9fb;       /* 浮层 */
+  --bg-overlay: rgba(255,249,251,.88);
+  --skin: #ffd9c2;            /* 肤金点缀 */
+  --electric: #ff00ff;
+
+  --line-hair: rgba(255,20,147,.12);
+  --line-soft: rgba(255,20,147,.20);
+  --line-strong: rgba(255,20,147,.32);
+
+  /* 主色（Deep Pink × Hot Pink × Crimson） */
+  --gold: #ff1493;
+  --gold-bright: #ff69b4;
+  --gold-deep: #dc143c;
+  --gold-wash: rgba(255,20,147,.10);
+  --gold-glow: rgba(255,20,147,.36);
+  --peach: #ff8a72;
+
+  /* 语义色 + wash 半透明底 */
+  --rose: #d94e75;   --rose-wash: rgba(217,78,117,.12);
+  --green: #1e9e68;  --green-wash: rgba(30,158,104,.12);
+  --amber: #d97706;  --amber-wash: rgba(217,119,6,.12);
+  --red: #e03e55;    --red-wash: rgba(224,62,85,.12);
+  --blue: #3d6bb0;   --blue-wash: rgba(61,107,176,.12);
+  --violet: #6b5aa8;
+
+  /* 文字：深桃褐 */
+  --t-display: #3d1526;
+  --t-body: #5e2c3e;
+  --t-mute: #8f5a6d;
+  --t-faint: #b88a99;
+
+  /* 字体 */
+  --ff-serif: "Playfair Display", "Noto Serif SC", Georgia, serif;
+  --ff-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --ff-mono: "JetBrains Mono", "Source Code Pro", monospace;
+
+  /* 圆角（两档为主） */
+  --r-sm: 6px; --r-md: 8px; --r-lg: 16px; --r-xl: 22px;
+
+  /* 阴影 */
+  --shadow-card: 0 1px 2px rgba(220,20,60,.06), 0 6px 20px rgba(220,20,60,.10), 0 0 0 1px rgba(255,20,147,.08);
+  --shadow-float: 0 8px 16px rgba(220,20,60,.10), 0 24px 50px rgba(220,20,60,.16), 0 0 0 1px rgba(255,20,147,.10);
+
+  /* 间距 */
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
+
+  /* 排版字号阶梯 */
+  --fs-xs: 10px; --fs-sm: 12px; --fs-base: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 28px; --fs-2xl: 32px; --fs-display: 44px;
+
+  --sidebar-w: 232px;
+}
+
+/* ══ 欲焰动效节奏体系：「慢·丝·燃·心搏」四档曲线（Boudoir 升级）══ */
+:root{
+  --e-silk: cubic-bezier(.16,1,.3,1);    /* 丝：快起长尾，微交互 0.5-0.8s */
+  --e-slow: cubic-bezier(.37,0,.35,1);   /* 慢：S形滑行，揭示/转场 0.9-1.6s */
+  --e-burn: cubic-bezier(.55,0,1,.45);   /* 燃：缓慢蓄力后涌出，情绪爆点 1.2-2.4s */
+  --e-heart: cubic-bezier(.3,0,.4,1);    /* 心搏：两快一慢的生理节律 */
+  --heat: 0;                              /* 体温 0~1（store 实时写入）：驱动色温/光晕/粒子密度 */
+}
+
+/* ══ 香槟金配角 + 丝绒材质令牌（双主题通用）══ */
+:root{
+  --champagne: #e8c98a;
+  --champagne-glow: rgba(232,201,138,.30);
+  --satin: linear-gradient(105deg,#b98a4a 0%,#f3dfae 28%,#c9a05e 46%,#fdf1cd 62%,#b98a4a 100%);
+}
+
+/* ══ 暗夜丝绒主题 [data-theme=boudoir]：粉从底色变唇色，点亮在黑丝绒上 ══ */
+[data-theme=boudoir]{
+  --bg-ink: #140a12;
+  --bg-page: #1d0e18;
+  --bg-surface: rgba(38,18,30,.72);
+  --bg-raised: #2a1422;
+  --bg-overlay: rgba(24,11,19,.88);
+  --line-hair: rgba(255,143,179,.10);
+  --line-soft: rgba(255,143,179,.18);
+  --line-strong: rgba(255,143,179,.30);
+  --t-display: #f6e3ee;
+  --t-body: #d9b8ca;
+  --t-mute: #a87b93;
+  --t-faint: #7d5568;
+  --gold: #ff4fa3;
+  --gold-bright: #ff7fb8;
+  --gold-wash: rgba(255,79,163,.12);
+  --gold-glow: rgba(255,79,163,.40);
+  --shadow-card: 0 8px 28px rgba(0,0,0,.5),0 0 0 1px rgba(255,143,179,.08);
+  --shadow-float: 0 10px 34px rgba(0,0,0,.6),0 0 0 1px rgba(255,143,179,.12);
+  color-scheme: dark;
+}
+[data-theme=boudoir] body::before{
+  background:
+    radial-gradient(60% 42% at 18% 0%, rgba(255,20,147,.14), transparent 70%),
+    radial-gradient(46% 38% at 85% 90%, rgba(232,201,138,.10), transparent 75%),
+    #140a12;
+}
+[data-theme=boudoir] body::after{
+  background:radial-gradient(46% 38% at 32% 24%, rgba(255,79,163,.08), transparent 70%);
+}
+
+/* ══ 烛光密室交互层 [data-mode=mood]：独立于主题的暗场（亮色主题下也可进入密室）══ */
+[data-mode=mood]{
+  --bg-ink: #17060d;
+  --bg-page: #1f0912;
+  --bg-surface: rgba(42,13,24,.82);
+  --bg-raised: #2a0d18;
+  --bg-overlay: rgba(23,6,13,.9);
+  --line-hair: rgba(255,20,147,.16);
+  --line-soft: rgba(255,20,147,.24);
+  --line-strong: rgba(255,20,147,.34);
+  --t-display: #f7d6e2;
+  --t-body: #e8b8c9;
+  --t-mute: #b587a0;
+  --t-faint: #8a5f74;
+  --gold-glow: rgba(255,20,147,.5);
+  color-scheme: dark;
+}
+[data-mode=mood] body::before{
+  background:
+    radial-gradient(60% 42% at 22% 6%, rgba(255,20,147,.12), transparent 68%),
+    radial-gradient(40% 34% at 80% 92%, rgba(232,140,90,.07), transparent 72%),
+    #17060d;
+}
+[data-mode=mood] body::after{
+  animation-duration:34s, 8s;  /* 烛光更慢更沉 */
+}

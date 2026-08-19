@@ -8,6 +8,7 @@ import { PageHead, Empty, ErrorEmpty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
+import { useWhisper } from '../i18n/whisper'
 
 const PAGE = 48
 
@@ -34,6 +35,7 @@ export function Library() {
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
+  const w = useWhisper()
 
   // P1: 修复定时器泄漏 —— 用 ref 存储 interval，组件卸载时清理
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -246,7 +248,7 @@ export function Library() {
 
       {error ? <ErrorEmpty message={error} onRetry={() => { setPage(0); load(0) }} /> :
        tasks === null ? <SkeletonGallery /> : tasks.length === 0 ? (
-        <Empty icon="♡" title="还空着呢" sub="去把她们带回来——先扫描列表源，或按番号创建任务。" />
+        <Empty icon="♡" title={w('empty_lib_title')} sub={w('empty_lib_sub')} />
       ) : view === 'grid' ? (
         <div className="gallery">
           {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)} />)}

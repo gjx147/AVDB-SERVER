@@ -155,8 +155,29 @@ export function Settings() {
 function AppearanceTab() {
   const imgMode = useStore((s) => s.imgMode)
   const setImgMode = useStore((s) => s.setImgMode)
+  const theme = useStore((s) => s.theme)
+  const setTheme = useStore((s) => s.setTheme)
+  const moodMode = useStore((s) => s.moodMode)
+  const toggleMood = useStore((s) => s.toggleMood)
   return (
     <div className="card">
+      <div className="field">
+        <label>主题</label>
+        <div className="seg">
+          <button className={theme === 'auto' ? 'on' : ''} onClick={() => setTheme('auto')}>跟随系统</button>
+          <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>欲焰 · 亮</button>
+          <button className={theme === 'boudoir' ? 'on' : ''} onClick={() => setTheme('boudoir')}>暗夜丝绒</button>
+        </div>
+        <div className="hint">暗夜丝绒：黑丝绒底 × 鎏金线 × 唇色霓虹，为深夜私享而生</div>
+      </div>
+      <div className="field">
+        <label>烛光密室</label>
+        <div className="seg">
+          <button className={moodMode ? 'on' : ''} onClick={() => { if (!moodMode) toggleMood() }}>开启</button>
+          <button className={!moodMode ? 'on' : ''} onClick={() => { if (moodMode) toggleMood() }}>关闭</button>
+        </div>
+        <div className="hint">暗场聚光、轮播慢舞、耳语文案切换大胆档；可与任意主题叠加</div>
+      </div>
       <div className="field">
         <label>图片显示模式</label>
         <div className="seg">

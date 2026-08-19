@@ -1,0 +1,325 @@
+/* ════════════════════════════════════════════════════════════════
+   欲焰 · Boudoir 情欲感官层（Phase 1–3）
+   五感机制：体温/心跳/掀纱/耳语/唇印 —— 详见 UI_VELVET_PLAN.md
+   本文件在 index.css 最后引入，规则可覆盖前面模块。
+   ════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+:root{--ff-display:"Cormorant Garamond","Playfair Display","Noto Serif SC",Georgia,serif}
+
+/* ════════ 一、解扣式披露（Undress Reveal）════════
+   信息不再浮现而是「解开」：对视(番号)→靠近(标题)→再见心思(元信息)
+   每层多等 300–800ms；悬停 1.2s 后预览薄纱擦过封面（掀起一角） */
+@media(hover:hover){
+  .poster-info > *{opacity:0;transform:translateY(-12px);
+    transition:opacity .55s var(--e-slow),transform .55s var(--e-slow)}
+  .poster:hover .poster-info > *{opacity:1;transform:translateY(0)}
+  .poster:hover .poster-info > *:nth-child(1){transition-delay:.16s}
+  .poster:hover .poster-info > *:nth-child(2){transition-delay:.42s}
+  .poster:hover .poster-info > *:nth-child(3){transition-delay:.66s}
+}
+/* 预览薄纱：--preview 由 PosterCard 写入；悬停 1.15s 后从右向左擦过 */
+.poster-sheen{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;
+  background-image:var(--preview);background-size:cover;background-position:center;
+  -webkit-mask-image:linear-gradient(100deg,transparent 42%,#000 50%,transparent 58%);
+  mask-image:linear-gradient(100deg,transparent 42%,#000 50%,transparent 58%);
+  -webkit-mask-size:260% 100%;mask-size:260% 100%}
+.poster:hover .poster-sheen{animation:veilSweep 1.7s var(--e-slow) 1.15s both}
+@keyframes veilSweep{
+  0%{opacity:0;-webkit-mask-position:130% 0;mask-position:130% 0}
+  14%{opacity:.94}
+  100%{opacity:0;-webkit-mask-position:-30% 0;mask-position:-30% 0}}
+/* 隐私模式下薄纱层禁用 */
+.img-mode-blur .poster-sheen,.img-mode-hidden .poster-sheen{display:none}
+
+/* ════════ 二、心跳脉搏系统（Pulse）════════
+   全站生理节律：两快一慢。加载圈/主按钮待机/进度条/收藏瞬间 */
+.loading::before{animation:heartRing var(--dur-heart,1.5s) var(--e-heart) infinite;border-top-color:var(--gold)}
+@keyframes heartRing{0%{transform:scale(1)}12%{transform:scale(1.22)}24%{transform:scale(1.02)}36%{transform:scale(1.15)}58%,100%{transform:scale(1)}}
+/* 主按钮：缎面绸光流动 + 待机心搏（体温越高，心跳越快）。
+   注意：交互元素上的常驻动画不得动 transform（盒身永不静止会卡死自动化点击），用光晕脉冲表达心搏 */
+.btn--gold{background:var(--satin);background-size:220% 100%;color:#3d1526;font-weight:700;
+  animation:satinFlow 7s linear infinite,btnHeart calc(3.4s - 1.2s*var(--heat)) var(--e-heart) infinite}
+@keyframes satinFlow{to{background-position:220% 0}}
+@keyframes btnHeart{0%,100%{filter:brightness(1);box-shadow:0 4px 18px rgba(255,20,147,.3)}
+  10%{filter:brightness(1.1);box-shadow:0 6px 28px rgba(255,20,147,.55)}
+  20%{filter:brightness(1.02)}30%{filter:brightness(1.07)}45%{filter:brightness(1)}}
+/* 心搏工具类（收藏瞬间等） */
+.heartbeat{animation:heartBeat .6s var(--e-heart)}
+/* Wall 进度条心搏 */
+.wslide-prog-fill{animation:progHeart 1.6s var(--e-heart) infinite}
+@keyframes progHeart{0%,100%{transform:scaleY(1)}12%{transform:scaleY(1.5)}24%{transform:scaleY(1.1)}36%{transform:scaleY(1.35)}58%{transform:scaleY(1)}}
+
+/* ════════ 三、唇印符号系统（Kiss）════════ */
+/* 收藏成功：唇印盖章（--kr 随机角度由 JS 写入） */
+.kiss-stamp{position:absolute;top:12%;right:14%;z-index:6;font-size:36px;line-height:1;pointer-events:none;
+  filter:drop-shadow(0 2px 8px rgba(255,20,147,.5));
+  animation:kissStamp 2.1s var(--e-burn) forwards}
+@keyframes kissStamp{
+  0%{opacity:0;transform:scale(1.9) rotate(var(--kr,-18deg))}
+  16%{opacity:.96;transform:scale(1) rotate(var(--kr,-18deg))}
+  72%{opacity:.92}
+  100%{opacity:0;transform:scale(1.08) rotate(var(--kr,-18deg)) translateY(-8px)}}
+/* 导航活跃项唇印角标（有统计徽章的项让位） */
+.nav-item.on:not(:has(.nav-badge))::before{content:"💋";position:absolute;right:12px;top:50%;
+  transform:translateY(-50%) rotate(-14deg);font-size:11px;opacity:.92;
+  filter:drop-shadow(0 0 5px rgba(255,20,147,.55));animation:popIn .3s cubic-bezier(.34,1.56,.64,1) backwards}
+/* 蕾丝边（登录卡）：打孔蕾丝贴边，data-URI 零外网 */
+.lace-top::before{content:"";position:absolute;left:16px;right:16px;top:-4px;height:8px;pointer-events:none;opacity:.8;
+  background:radial-gradient(circle at 6px 4px,var(--gold-glow) 2.4px,transparent 3.2px);background-size:12px 8px}
+/* 搜索框聚焦：唇色渐染（慢半拍的回应） */
+.search:focus-within{box-shadow:0 0 0 3px var(--gold-wash),0 6px 26px var(--gold-glow);
+  transition:box-shadow .9s var(--e-slow)}
+
+/* ════════ 四、密室模式组件层 [data-mode=mood] ═══════ */
+[data-mode=mood] .sidebar{background:rgba(24,8,16,.93)}
+[data-mode=mood] .poster-frame{background:transparent;box-shadow:0 0 42px rgba(255,20,147,.15)}
+[data-mode=mood] .poster:hover .poster-frame{box-shadow:0 0 72px rgba(255,20,147,.32),0 0 0 1px rgba(255,143,179,.28)}
+[data-mode=mood] .card,[data-mode=mood] .panel,[data-mode=mood] .gallery-toolbar,
+[data-mode=mood] .stat-row .stat,[data-mode=mood] .dash-top-grid .card,[data-mode=mood] .dash-grid .panel,
+[data-mode=mood] .recent-panel,[data-mode=mood] .dash-top-grid .panel{
+  background:rgba(38,13,24,.8);border-color:rgba(255,20,147,.14);backdrop-filter:blur(12px)}
+[data-mode=mood] .poster-frame::before{display:none}  /* 密室不要流光环，只要烛光 */
+
+/* 密室开关（侧栏蜡烛） */
+.mood-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:10px;width:100%;
+  border:1px solid var(--line-soft);border-radius:var(--r-md);background:none;cursor:pointer;
+  color:var(--t-mute);font-size:12px;font-family:var(--ff-sans);
+  transition:color .3s,border-color .3s,box-shadow .6s var(--e-slow)}
+.mood-toggle:hover{color:var(--gold);border-color:var(--gold)}
+.mood-toggle.on{color:var(--gold);border-color:var(--gold);box-shadow:0 0 24px rgba(255,20,147,.22)}
+.mood-toggle .flame{display:inline-block;font-size:14px;transform-origin:50% 90%;
+  transform:scale(calc(1 + var(--heat)*.45));transition:transform 1.5s ease;filter:drop-shadow(0 0 6px rgba(255,140,60,.6))}
+.mood-toggle.on .flame{animation:flameFlicker 2.8s ease-in-out infinite alternate}
+@keyframes flameFlicker{0%{transform:scale(calc(1 + var(--heat)*.45)) rotate(-2deg)}100%{transform:scale(calc(1.08 + var(--heat)*.5)) rotate(2deg)}}
+
+/* ════════ 五、暗夜丝绒主题组件适配 [data-theme=boudoir] ═══════ */
+[data-theme=boudoir] .sidebar{background:rgba(22,10,17,.93)}
+[data-theme=boudoir] .card{background:rgba(38,18,30,.8)}
+[data-theme=boudoir] .stat-row .stat,[data-theme=boudoir] .dash-top-grid .card,
+[data-theme=boudoir] .dash-top-grid .panel,[data-theme=boudoir] .recent-panel,[data-theme=boudoir] .dash-grid .panel{
+  background:rgba(38,18,30,.6);backdrop-filter:blur(12px)}
+[data-theme=boudoir] .btn--ghost{background:rgba(42,20,34,.6)}
+[data-theme=boudoir] .login-card{background:rgba(24,11,19,.9)}
+[data-theme=boudoir] .login-wall::after{background:radial-gradient(80% 70% at 50% 45%,transparent 26%,rgba(10,4,8,.72) 100%),
+  linear-gradient(180deg,rgba(20,10,16,.35),rgba(10,4,8,.5))}
+[data-theme=boudoir] .wall-head,[data-theme=boudoir] .wall-nav,[data-theme=boudoir] .wslide-prog{
+  background:rgba(26,12,20,.62);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-theme=boudoir] .wall-nav{color:#f6e3ee}
+[data-theme=boudoir] .rc-nav{background:rgba(40,18,30,.6);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-theme=boudoir] .rank-badge{background:rgba(30,14,22,.94);color:#f6e3ee}
+[data-theme=boudoir] .poster-frame{background:linear-gradient(135deg,#241019,#160a10)}
+[data-theme=boudoir] .dm-item{background:rgba(255,79,163,.08)}
+[data-theme=boudoir] .tag{background:rgba(255,79,163,.14)}
+[data-theme=boudoir] .app::after{background:radial-gradient(ellipse at center,transparent 58%,rgba(8,3,6,.55) 100%)}
+[data-theme=boudoir] .fade-bottom::after{background:linear-gradient(180deg,transparent,var(--bg-ink))}
+/* 详情页：白纱换黑纱，背景更沉 */
+[data-theme=boudoir] .detail-bg img{filter:blur(4px) sepia(.1) saturate(1.5) brightness(.68)}
+[data-theme=boudoir] .detail-bg::after{background:linear-gradient(180deg,rgba(20,10,16,.55) 0%,rgba(20,10,16,.9) 100%)}
+[data-theme=boudoir] .detail-title,[data-theme=boudoir] .detail-code,[data-theme=boudoir] .dm-val,
+[data-theme=boudoir] .detail-body,[data-theme=boudoir] .tag,[data-theme=boudoir] .magnet-box{
+  text-shadow:0 1px 6px rgba(0,0,0,.55)}
+[data-theme=boudoir] .eyebrow,[data-theme=boudoir] .winfo-code,[data-theme=boudoir] .cap-code{color:var(--champagne)}
+
+/* ════════ 六、体温映射（Heat → 视觉升温）════════
+   冷启动矜持，热时滚烫：光晕半径/透明度/烛焰随 --heat 提升；
+   所有映射过渡 ≥1.5s，避免闪烁焦虑 */
+.aura{opacity:calc(.55 + .45*var(--heat));transition:opacity 1.6s ease}
+.poster:hover .poster-frame{
+  box-shadow:var(--shadow-float),0 0 calc(18px + 34px*var(--heat)) rgba(255,20,147,calc(.18 + .3*var(--heat)))}
+.stat:hover{box-shadow:0 6px 24px rgba(220,20,60,.12),0 0 calc(10px + 26px*var(--heat)) rgba(255,20,147,calc(.1 + .25*var(--heat)))}
+.page-title em{filter:drop-shadow(0 0 calc(6px + 14px*var(--heat)) rgba(255,20,147,calc(.25 + .3*var(--heat))))}
+body::after{opacity:calc(.65 + .35*var(--heat))}
+
+/* ════════ 七、路由纱幕过场（Veil）════════
+   每次切页都是一次掀纱：双侧纱幕合拢再揭开 */
+.veil{position:fixed;inset:0;z-index:500;pointer-events:none;display:grid;grid-template-columns:1fr 1fr}
+.veil i{background:linear-gradient(100deg,rgba(255,228,238,0),rgba(255,143,179,.5),rgba(255,228,238,0));
+  transform:scaleY(0)}
+[data-theme=boudoir] .veil i,[data-mode=mood] .veil i{
+  background:linear-gradient(100deg,rgba(30,12,22,0),rgba(120,20,70,.55),rgba(30,12,22,0))}
+.veil.play i{animation:veilPass 1.3s var(--e-slow) forwards}
+.veil i:nth-child(1){transform-origin:left}
+.veil i:nth-child(2){transform-origin:right}
+@keyframes veilPass{0%{transform:scaleY(0)}38%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+
+/* ════════ 八、海报丝绸之舞（Silk Dance）════════
+   hover 三层三速：封面慢推+回首、光泽反向绸缎视差、信息层延迟升起 */
+@media(hover:hover){
+  .poster:hover .poster-frame img{transform:scale(1.14) translateX(-1.5%);
+    transition:transform 1.2s var(--e-slow)}
+  .poster-frame::after{background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.26) 46%,transparent 60%);
+    background-size:250% 100%;background-position:120% 0;box-shadow:none;
+    transition:background-position 1.5s var(--e-slow)}
+  .poster:hover .poster-frame::after{background-position:-20% 0;box-shadow:none}
+  .poster:hover .poster-info{transform:translateY(0);opacity:1;
+    transition:transform .9s .1s var(--e-slow),opacity .9s .1s var(--e-slow)}
+}
+
+/* ════════ 九、Wall 凝视运镜 + 拉焦 ════════ */
+/* 每张随机一种运镜（Wall.tsx 按 index 挂 gz-* 类）；12–18s 缓慢凝视 */
+.wfull.gz-zoomIn img{animation:gazeZoomIn 15s var(--e-slow) both alternate}
+.wfull.gz-zoomOut img{animation:gazeZoomOut 18s var(--e-slow) both alternate}
+.wfull.gz-panL img{animation:gazePanL 16s var(--e-slow) both alternate}
+.wfull.gz-panR img{animation:gazePanR 16s var(--e-slow) both alternate}
+@keyframes gazeZoomIn{from{transform:scale(1)}to{transform:scale(1.14)}}
+@keyframes gazeZoomOut{from{transform:scale(1.16)}to{transform:scale(1.02)}}
+@keyframes gazePanL{from{transform:scale(1.15) translateX(2.5%)}to{transform:scale(1.15) translateX(-2.5%)}}
+@keyframes gazePanR{from{transform:scale(1.15) translateX(-2.5%)}to{transform:scale(1.15) translateX(2.5%)}}
+/* 切换拉焦进场：从失焦到看清她 */
+.wstage{animation:focusPull 1.4s var(--e-slow)}
+@keyframes focusPull{from{opacity:.2;filter:blur(16px) brightness(1.18)}to{opacity:1;filter:blur(0) brightness(1)}}
+/* 信息层错峰显影：番号→标题→简介→元信息 */
+.winfo > *{animation:softRise .9s var(--e-silk) backwards}
+.winfo > *:nth-child(2){animation-delay:.22s}
+.winfo > *:nth-child(3){animation-delay:.44s}
+.winfo > *:nth-child(4){animation-delay:.66s}
+@keyframes softRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* ════════ 十、详情页「赴约登场」════════
+   黑场静默→追光亮起→磨砂纱掀开→番号落款→阶梯入场 */
+.page.detail-enter .detail-head{animation:heroRise .9s var(--e-slow) backwards}
+@keyframes heroRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+/* 封面磨砂纱：1.5s「燃」曲线掀开 */
+.cover-veil{position:absolute;inset:0;z-index:3;pointer-events:none;
+  backdrop-filter:blur(16px);background:rgba(255,228,238,.42);
+  animation:veilLift 1.5s var(--e-burn) .25s forwards}
+[data-theme=boudoir] .cover-veil,[data-mode=mood] .cover-veil{background:rgba(24,10,18,.5)}
+@keyframes veilLift{to{clip-path:inset(100% 0 0 0);opacity:0}}
+/* 封面追光：中心亮四周暗 */
+.detail-cover::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(80% 70% at 50% 38%,transparent 40%,rgba(20,6,12,calc(.34 - .1*var(--heat))) 100%);
+  animation:spotlightIn 1.8s var(--e-slow) backwards}
+@keyframes spotlightIn{from{opacity:0}to{opacity:1}}
+/* 背景缓慢聚焦 */
+.detail-bg img{animation:bgFocus 2.4s var(--e-slow)}
+@keyframes bgFocus{from{filter:blur(30px) brightness(1.15)}}
+[data-theme=boudoir] .detail-bg img{animation:bgFocusDark 2.4s var(--e-slow)}
+@keyframes bgFocusDark{from{filter:blur(30px) brightness(.9) saturate(1.6)}}
+/* 番号/标题/操作/演员 阶梯入场 */
+.detail-enter .detail-code{animation:softRise .8s var(--e-silk) .35s backwards}
+.detail-enter .detail-title{animation:softRise .8s var(--e-silk) .5s backwards}
+.detail-enter .detail-actions{animation:softRise .8s var(--e-silk) .65s backwards}
+.detail-enter .cast-row{animation:softRise .8s var(--e-silk) .8s backwards}
+.detail-enter .detail-meta-grid{animation:softRise .8s var(--e-silk) .95s backwards}
+
+/* ════════ 十一、电影调色（Film Grade）════════ */
+/* 全局胶片颗粒：SVG 噪点 data-URI，零外网 */
+.grain{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+[data-theme=boudoir] .grain,[data-mode=mood] .grain{opacity:.08}
+/* 详情页背景玫紫纱 */
+.detail-bg::before{background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.06),transparent 70%),
+  radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.05),transparent 60%),rgba(90,20,60,.14)!important}
+/* 演员头像 hover：玫瑰金调 */
+.actor-photo img{transition:transform .5s var(--e-slow),filter .5s var(--e-slow)}
+.actor:hover .actor-photo img{filter:saturate(1.15) contrast(1.06)}
+.actor:hover .actor-name{color:var(--gold-bright)}
+
+/* ════════ 十二、奢华排版（Luxury Type）════════ */
+.page-title{font-family:var(--ff-display);font-weight:600}
+.page-title em{font-family:var(--ff-display);font-style:italic;font-weight:400;
+  background:linear-gradient(120deg,#ff1493,#ff69b4 42%,#e8c98a 78%,#f7e3b0);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:goldShimmer 5s ease-in-out infinite;filter:none}
+[data-theme=boudoir] .page-title em{background:linear-gradient(120deg,#ff4fa3,#e8c98a 50%,#fdf1cd 70%,#c9a05e);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent}
+@keyframes goldShimmer{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
+.eyebrow{display:flex;align-items:center;gap:10px}
+.eyebrow::before,.eyebrow::after{content:"◆";font-size:6px;color:var(--champagne);letter-spacing:0}
+.brand-mark,.login-mark,.panel-title,.actor-name,.cd-title{font-family:var(--ff-display)}
+
+/* ════════ 十三、心动仪式（Heartburst）════════ */
+.hburst{position:absolute;inset:0;pointer-events:none;z-index:7}
+.hburst .hb-heart{position:absolute;left:50%;top:40%;font-size:22px;color:var(--gold);
+  filter:drop-shadow(0 0 10px rgba(255,20,147,.7));transform:translate(-50%,-50%);
+  animation:hbHeart 1s var(--e-burn) forwards}
+.hburst .hb-petal{position:absolute;left:50%;top:40%;width:5px;height:5px;border-radius:60% 40% 60% 40%;
+  background:linear-gradient(135deg,var(--gold-bright),var(--gold));opacity:0;
+  animation:hbPetal 1.1s var(--e-slow) forwards;
+  transform:translate(-50%,-50%) rotate(var(--pr,0deg))}
+@keyframes hbHeart{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}18%{opacity:1;transform:translate(-50%,-50%) scale(1.35)}
+  40%{transform:translate(-50%,-50%) scale(1.05)}100%{opacity:0;transform:translate(-50%,-90%) scale(1.5)}}
+@keyframes hbPetal{0%{opacity:0}12%{opacity:1}
+  100%{opacity:0;transform:translate(calc(-50% + var(--px)),calc(-50% + var(--py))) scale(.3) rotate(calc(var(--pr,0deg) + 180deg))}}
+
+/* ════════ 十四、烛光尘埃（Candle Motes）════════ */
+.motes{position:fixed;inset:0;z-index:2;pointer-events:none}
+
+/* ════════ 十五、今夜情人盲盒（Daily Reveal）════════ */
+.reveal-pouch{position:absolute;top:64px;right:20px;z-index:5;display:flex;align-items:center;gap:8px;
+  padding:9px 16px;border:none;border-radius:999px;cursor:pointer;
+  background:linear-gradient(135deg,#7a1236,#4a0a20);color:#ffe3ef;font-size:13px;font-family:var(--ff-display);
+  font-style:italic;box-shadow:0 6px 22px rgba(160,20,80,.45),inset 0 0 0 1px rgba(255,180,210,.3);
+  transition:transform .4s var(--e-silk),box-shadow .4s;animation:pouchBreath 3.2s var(--e-heart) infinite}
+.reveal-pouch:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 10px 30px rgba(160,20,80,.6)}
+.reveal-pouch .pouch-gem{font-size:15px;filter:drop-shadow(0 0 6px rgba(255,120,170,.8))}
+/* 呼吸只动光晕不动盒身（transform 交给 hover 过渡，自动化点击不被卡死） */
+@keyframes pouchBreath{0%,100%{box-shadow:0 6px 22px rgba(160,20,80,.45),inset 0 0 0 1px rgba(255,180,210,.3)}
+  12%{box-shadow:0 8px 30px rgba(255,50,130,.6),inset 0 0 0 1px rgba(255,200,225,.5)}
+  24%{box-shadow:0 6px 24px rgba(160,20,80,.5),inset 0 0 0 1px rgba(255,180,210,.35)}
+  36%{box-shadow:0 7px 28px rgba(255,50,130,.55),inset 0 0 0 1px rgba(255,200,225,.45)}
+  58%{box-shadow:0 6px 22px rgba(160,20,80,.45),inset 0 0 0 1px rgba(255,180,210,.3)}}
+/* 全屏揭幕舞台 */
+.reveal-stage{position:fixed;inset:0;z-index:600;background:#0c0409;display:flex;align-items:center;justify-content:center;
+  animation:cdFade .5s ease}
+.reveal-inner{position:relative;width:min(560px,86vw);text-align:center}
+.reveal-cover{position:relative;width:min(340px,72vw);margin:0 auto;aspect-ratio:7/10;border-radius:var(--r-lg);overflow:hidden;
+  background:#1a0a12;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 60px rgba(255,20,147,.12)}
+.reveal-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;
+  transition:filter .7s var(--e-slow),transform .7s var(--e-slow)}
+/* 剪影悬念：只见轮廓 */
+.reveal-cover.silhouette img{filter:brightness(0) drop-shadow(0 0 24px rgba(255,105,180,.55));transform:scale(1.04)}
+.reveal-cover.f1 img{filter:blur(60px) brightness(.9) saturate(1.4)}
+.reveal-cover.f2 img{filter:blur(18px) brightness(1) saturate(1.3)}
+.reveal-cover.f3 img{filter:blur(0)}
+.reveal-candle{position:absolute;top:-56px;left:50%;transform:translateX(-50%);font-size:26px;
+  filter:drop-shadow(0 0 14px rgba(255,150,60,.8));animation:flameFlicker 1.8s ease-in-out infinite alternate}
+.reveal-code{font-family:var(--ff-display);font-style:italic;font-size:34px;color:#f6e3ee;margin-top:26px;
+  text-shadow:0 0 24px rgba(255,105,180,.5);animation:softRise .9s var(--e-silk) backwards}
+.reveal-title{font-size:14px;color:rgba(246,227,238,.75);margin-top:8px;animation:softRise .9s var(--e-silk) .18s backwards}
+.reveal-actions{display:flex;gap:12px;justify-content:center;margin-top:30px;animation:softRise .9s var(--e-silk) .36s backwards}
+.reveal-actions .btn--ghost{background:rgba(60,20,40,.5);color:#f6e3ee;border-color:rgba(255,143,179,.4)}
+.reveal-hint{margin-top:22px;font-size:11px;letter-spacing:.3em;color:rgba(246,227,238,.4);font-family:var(--ff-mono)}
+
+/* ════════ 十六、封蜡揭幕（Wax Seal）════════ */
+.wax-wrap{position:relative}
+.wax-wrap img{transition:filter .7s var(--e-slow)}
+.wax-wrap.sealed img{filter:brightness(.55) saturate(.7)}
+.wax-seal{position:absolute;top:50%;left:50%;z-index:5;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#e0507a,#8f1233 62%,#5c0a20);
+  box-shadow:0 4px 14px rgba(140,15,50,.5),inset 0 2px 4px rgba(255,190,210,.35);
+  display:flex;align-items:center;justify-content:center;color:#ffd9e6;font-size:12px;
+  transition:transform .4s var(--e-burn)}
+.wax-wrap.sealed:hover .wax-seal{transform:scale(1.1) rotate(6deg)}
+.wax-wrap.ready .wax-seal{cursor:pointer;animation:waxReady 1.6s var(--e-heart) infinite}
+@keyframes waxReady{0%,100%{box-shadow:0 4px 14px rgba(140,15,50,.5),inset 0 2px 4px rgba(255,190,210,.35)}
+  50%{box-shadow:0 4px 26px rgba(255,60,120,.75),inset 0 2px 4px rgba(255,190,210,.5)}}
+.wax-crack{animation:waxCrack .7s var(--e-burn) forwards}
+@keyframes waxCrack{to{transform:scale(1.6) rotate(24deg);opacity:0;filter:blur(3px)}}
+.wax-countdown{position:absolute;top:58px;right:10px;z-index:5;font-family:var(--ff-mono);font-size:10px;
+  color:#ffd9e6;background:rgba(60,10,26,.8);padding:2px 8px;border-radius:999px}
+
+/* ════════ 十七、scroll 叙事（渐进增强）════════ */
+@supports (animation-timeline: view()){
+  .bar{animation:barGrow .9s var(--e-slow) both;animation-timeline:view();animation-range:entry 10% cover 30%}
+  .page-head{animation:headDrift linear both;animation-timeline:scroll(root)}
+  @keyframes headDrift{to{transform:translateY(10px);opacity:.55}}
+}
+
+/* ════════ 十八、降级护栏（重申：本文件在 motion.css 之后，需自行关照）════════ */
+@media(max-width:768px){
+  .btn--gold{animation:satinFlow 7s linear infinite}  /* 心搏停，缎面留 */
+  .loading::before{animation:heartRing 1.5s var(--e-heart) infinite}
+  .poster-sheen,.veil,.motes,.cover-veil{display:none}
+  .wstage{animation:wInM .45s ease}  /* 手机不做拉焦 blur，沿用轻量入场 */
+  .wslide-prog-fill{animation:none}
+  .poster-info > *{opacity:1;transform:none}  /* 触屏无 hover：信息常显 */
+  .reveal-pouch{top:52px;right:12px;padding:7px 12px;font-size:12px}
+}
+@media (prefers-reduced-motion: reduce){
+  .poster-sheen,.veil,.motes,.cover-veil,.grain{display:none}
+  .poster-info > *{opacity:1;transform:none;transition:none}
+  .btn--gold,.wslide-prog-fill,.reveal-pouch,.mood-toggle.on .flame{animation:none}
+  .aura{opacity:.55!important}
+}

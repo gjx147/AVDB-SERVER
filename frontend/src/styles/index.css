@@ -1,0 +1,16 @@
+/* AVDB 欲焰主题 —— 模块化入口。Vite 构建时按序内联打包为单文件。 */
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './buttons.css';
+@import './cards.css';
+@import './components/gallery.css';
+@import './forms.css';
+@import './components/console.css';
+@import './components/detail.css';
+@import './overlays.css';
+@import './components/login.css';
+@import './components/wall.css';
+@import './polish.css';
+@import './motion.css';
+@import './eros.css';

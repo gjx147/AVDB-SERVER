@@ -1,0 +1,41 @@
+/* ══ 按钮与胶囊：btn 系列 / chip / tag 交互见 forms */
+
+/* ══ 按钮 ══ */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--r-md);
+  font-family:var(--ff-sans);font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;
+  transition:all .22s cubic-bezier(.23,1,.32,1);white-space:nowrap;
+}
+.btn .ic{width:15px;height:15px;transform-origin:center}
+.btn:active{transform:scale(.97)}
+.btn:active .ic{transform:scale(1.25);animation:heartBeat .5s cubic-bezier(.23,1,.32,1)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.btn--sm{padding:6px 13px;font-size:12px}
+.btn--icon{padding:9px;width:38px;justify-content:center}
+
+.btn--gold{
+  background:linear-gradient(135deg,var(--gold-deep),var(--gold) 55%,var(--peach));
+  color:#fff;font-weight:600;position:relative;overflow:hidden;
+  box-shadow:0 4px 18px rgba(255,20,147,.32);
+  animation:goldPulse 2.4s ease-in-out infinite;
+}
+.btn--gold:hover{background:linear-gradient(135deg,var(--gold),var(--gold-bright));box-shadow:0 6px 24px rgba(255,20,147,.42);transform:translateY(-1px);animation:none}
+.btn--gold:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(220,20,60,.08);background:var(--gold-deep)}
+.btn--gold::after{content:"";position:absolute;top:0;left:-80%;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);transition:left .5s ease}
+.btn--gold:hover::after{left:130%}
+@keyframes goldPulse{0%,100%{box-shadow:0 4px 16px rgba(255,20,147,.28)}50%{box-shadow:0 6px 30px rgba(255,20,147,.55)}}
+
+.btn--ghost{color:var(--t-body);background:rgba(255,238,244,.75);backdrop-filter:blur(8px);border-color:var(--line-soft)}
+.btn--ghost:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-wash);box-shadow:0 2px 14px rgba(255,20,147,.22)}
+.btn--danger{color:var(--red);background:var(--red-wash);border-color:rgba(224,62,85,.45)}
+.btn--danger:hover{background:rgba(224,62,85,.18)}
+
+/* ══ 徽章 chip（带状态点胶囊） ══ */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px 2px 8px;border-radius:999px;font-size:10px;font-weight:600}
+.chip::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
+.chip:active{transform:scale(.96)}
+.chip-green{color:var(--green);background:var(--green-wash)}
+.chip-amber{color:var(--amber);background:var(--amber-wash)}
+.chip-red{color:var(--red);background:var(--red-wash)}
+.chip-rose{color:var(--rose);background:var(--rose-wash)}
+.chip-blue{color:var(--blue);background:var(--blue-wash)}

@@ -65,7 +65,7 @@ export default function Login() {
           ))}
         </div>
       )}
-      <div className="login-card">
+      <div className="login-card lace-top">
         <div className="login-brand">
           <div className="login-mark">AV<em>DB</em></div>
           <div className="login-tag">Cinema Library</div>

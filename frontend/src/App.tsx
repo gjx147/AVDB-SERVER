@@ -7,6 +7,7 @@ import { Loading } from './components/States'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useStore } from './store/useStore'
 import { api } from './api/client'
+import { playVeil } from './effects/transition'
 
 // P1: 代码拆分 —— 按需懒加载
 const Login       = lazy(() => import('./pages/Login'))
@@ -41,6 +42,7 @@ export default function App() {
 
   // 列表页滚动位置记忆：POP（返回/前进）时恢复，新导航回顶
   const scrollMap = useRef(new Map<string, number>())
+  const firstRoute = useRef(true)
   useEffect(() => {
     const key = pathname + search
     const onScroll = () => scrollMap.current.set(key, window.scrollY)
@@ -49,6 +51,9 @@ export default function App() {
   }, [pathname, search])
   useEffect(() => {
     setMobileMenuOpen(false)
+    // 路由纱幕过场：每次切页都是一次「掀纱」（首帧跳过；降级在 transition.ts 内处理）
+    if (!firstRoute.current) playVeil()
+    firstRoute.current = false
     if (navType === 'POP') {
       const y = scrollMap.current.get(pathname + search)
       // 等页面渲染后再恢复，避免被组件内 scrollTo 覆盖

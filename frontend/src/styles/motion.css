@@ -1,0 +1,91 @@
+/* ══ 动效层：JS 特效元素(aura/ripple/burst/tilt/spotlight) / 滚动显现 / 隐私模式 / 响应式 / reduced-motion ══ */
+
+/* ══ JS 全局特效元素（ambient.ts 注入） ══ */
+/* 鼠标光晕 */
+.aura{position:fixed;width:340px;height:340px;border-radius:50%;pointer-events:none;z-index:1;
+  background:radial-gradient(circle,rgba(255,143,179,.10),transparent 65%);
+  transform:translate(-50%,-50%);will-change:transform;
+  animation:auraShift 7s ease-in-out infinite}
+@keyframes auraShift{0%,100%{background:radial-gradient(circle,rgba(255,143,179,.10),transparent 65%)}50%{background:radial-gradient(circle,rgba(255,217,194,.12),transparent 65%)}}
+/* 点击涟漪 */
+.ripple{position:absolute;border-radius:50%;background:rgba(255,176,200,.35);transform:scale(0);pointer-events:none;
+  animation:ripple .55s ease-out forwards;z-index:3}
+@keyframes ripple{to{transform:scale(2.6);opacity:0}}
+/* 红心爆击 + 唇印 */
+.burst-dot{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--gold);pointer-events:none;z-index:5;
+  animation:burstFly .6s cubic-bezier(.23,1,.32,1) forwards}
+.burst-kiss{position:absolute;font-size:13px;pointer-events:none;z-index:5;line-height:1;
+  animation:burstFly .7s cubic-bezier(.23,1,.32,1) forwards;filter:drop-shadow(0 0 6px rgba(255,143,179,.6))}
+@keyframes burstFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--bx),var(--by)) scale(.2);opacity:0}}
+/* 卡片光斑跟随（JS 写 --mx/--my） */
+.spotlight{position:relative}
+.spotlight::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(180px circle at var(--mx,50%) var(--my,50%),rgba(255,176,200,.10),transparent 70%);
+  opacity:0;transition:opacity .3s}
+.spotlight:hover::after{opacity:1}
+/* 3D 倾斜（JS 控角度，CSS 管回弹） */
+.tilt{transform-style:preserve-3d;transition:transform .18s ease-out;will-change:transform}
+/* 顶部心跳光带（两快一慢） */
+.pulse-band{position:fixed;top:0;left:0;right:0;height:2px;z-index:250;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--gold),var(--skin),var(--gold),transparent);
+  opacity:0;animation:heartLine 1.8s ease-in-out infinite}
+@keyframes heartLine{0%,100%{opacity:0}8%{opacity:.85}16%{opacity:.12}24%{opacity:.9}42%{opacity:0}}
+@keyframes heartBeat{0%{transform:scale(1)}25%{transform:scale(1.18)}45%{transform:scale(1.02)}65%{transform:scale(1.14)}100%{transform:scale(1)}}
+@keyframes skinBreath{0%,100%{color:var(--gold)}50%{color:var(--skin)}}
+/* 封面加载「掀纱」 */
+@keyframes focusIn{0%{opacity:0;filter:blur(10px);transform:scale(1.06)}70%{opacity:1;filter:blur(0);transform:scale(.995)}100%{transform:scale(1)}}
+.recent-thumb{animation:focusIn .9s cubic-bezier(.23,1,.32,1)}
+
+/* 滚动显现（配合 html.reveal 由 JS 切换） */
+html.reveal .poster:not(.rv){animation-play-state:paused;opacity:0;transform:translateY(18px)}
+html.reveal .poster.rv{opacity:1}
+
+/* ══ 图片隐私模式 ══ */
+.img-mode-blur .poster-frame img,.img-mode-blur .actor-photo img,.img-mode-blur .detail-cover img,.img-mode-blur .recent-thumb,.img-mode-blur .row-thumb,.img-mode-blur .detail-body img,.img-mode-blur .cast-row img{filter:blur(20px);transition:filter .3s}
+.img-mode-blur .poster-frame:hover img,.img-mode-blur .actor-photo:hover img,.img-mode-blur .detail-cover:hover img,.img-mode-blur .detail-body img:hover{filter:blur(0)}
+.img-mode-blur .detail-bg img{filter:blur(60px) brightness(.9) saturate(.7)}
+.img-mode-hidden .poster-frame img,.img-mode-hidden .actor-photo img,.img-mode-hidden .detail-cover img,.img-mode-hidden .recent-thumb,.img-mode-hidden .row-thumb,.img-mode-hidden .detail-body img,.img-mode-hidden .cast-row img{visibility:hidden}
+.img-mode-hidden .detail-bg img{visibility:hidden}
+.img-mode-hidden .detail-bg::after{background:rgba(255,245,248,.97)}
+
+/* ══ 响应式 ══ */
+@media(max-width:1200px){.detail-body{grid-template-columns:1fr}}
+@media(max-width:1100px){.dash-grid,.console-grid,.dash-top-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.card:has(.table){overflow-x:auto}}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);transition:transform .3s cubic-bezier(.23,1,.32,1)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(220,20,60,.15)}
+  .sidebar-overlay{position:fixed;inset:0;z-index:99;background:rgba(61,21,38,.5);animation:fadeIn .3s forwards}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .main{margin-left:0}
+  .page{padding:20px 16px}
+  .page-title{font-size:28px}
+  /* 小屏：封面缩到顶部居中，信息在下方 */
+  .detail-head{grid-template-columns:160px 1fr;gap:18px}
+  .detail-title{font-size:22px;margin-bottom:12px}
+  .detail-meta-grid{grid-template-columns:1fr;gap:10px 0}
+  .detail-body{gap:24px}
+  .stat-row{grid-template-columns:repeat(2,1fr)}
+  .gallery{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:18px 12px}
+  .console-grid{gap:16px}
+  .crawl-ring{width:110px;height:110px}
+  .term-body{max-height:260px}
+  .mobile-menu-btn{display:flex;position:fixed;top:12px;left:12px;z-index:200;width:36px;height:36px;border:none;background:var(--bg-surface);border-radius:var(--r-sm);cursor:pointer;box-shadow:var(--shadow-card);align-items:center;justify-content:center;font-size:18px;color:var(--t-display)}
+  /* 移动端动效降级：省电 */
+  .login-wall img{animation:tileIn .9s ease forwards}
+  .poster-frame::before,.stat::before,.pulse-band,.aura{display:none}
+  .btn--gold{animation:none}
+}
+/* 桌面隐藏汉堡按钮（min-width 媒体块，避免被顺序覆盖） */
+@media(min-width:769px){.mobile-menu-btn{display:none}}
+
+/* ══ 减动效（reduced-motion）：动画播一次即停 ══ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+  .aura{display:none}
+  html{scroll-behavior:auto}
+}

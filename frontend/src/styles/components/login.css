@@ -1,0 +1,39 @@
+/* ══ 登录页：海报墙 / 玻璃登录卡 ══ */
+
+/* ══ 登录页 ══ */
+.login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page);position:relative;overflow:hidden}
+.login-wall{position:absolute;inset:0;z-index:0;display:grid;overflow:hidden;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));grid-auto-rows:minmax(170px,1fr);
+  gap:6px;padding:6px}
+.login-wall img{width:100%;height:100%;object-fit:cover;min-height:150px;
+  filter:saturate(1.22) brightness(.75);
+  opacity:0;
+  animation:tileIn .9s ease forwards,
+            kenburns 22s ease-in-out var(--d,0s) infinite alternate,
+            shimmer 1.8s ease-in-out infinite;
+  will-change:transform;
+  background:linear-gradient(120deg,var(--bg-surface) 25%,var(--bg-raised) 50%,var(--bg-surface) 75%);
+  background-size:200% 100%}
+.login-wall::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(80% 70% at 50% 45%, transparent 30%, rgba(255,200,215,.35) 100%),
+             linear-gradient(180deg, rgba(255,20,147,.12), rgba(255,200,215,.25))}
+@keyframes tileIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:scale(1)}}
+@keyframes kenburns{from{transform:scale(1) translate(0,0)}to{transform:scale(1.14) translate(2%,-2%)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+.login-card{position:relative;z-index:1;width:380px;background:rgba(255,249,251,.90);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:44px 40px;box-shadow:var(--shadow-float),0 0 60px rgba(255,20,147,.12);backdrop-filter:blur(16px);animation:fade .4s ease}
+/* 登录卡背后漂移光斑 */
+.login-card::before,.login-card::after{
+  content:"";position:absolute;width:180px;height:180px;border-radius:50%;pointer-events:none;z-index:-1;
+  filter:blur(46px);
+}
+.login-card::before{background:rgba(255,143,179,.20);top:-50px;left:-60px;animation:blobDrift1 12s ease-in-out infinite alternate}
+.login-card::after{background:rgba(255,154,139,.16);bottom:-60px;right:-50px;animation:blobDrift2 14s ease-in-out infinite alternate}
+@keyframes blobDrift1{from{transform:translate(0,0)}to{transform:translate(36px,22px)}}
+@keyframes blobDrift2{from{transform:translate(0,0)}to{transform:translate(-30px,-26px)}}
+.login-card:focus-within::before{filter:hue-rotate(-18deg) saturate(1.3)}
+.login-brand{text-align:center;margin-bottom:28px}
+.login-mark{font-family:var(--ff-serif);font-size:34px;font-weight:700;color:var(--t-display);letter-spacing:.02em;animation:markGlow 2.4s ease-in-out infinite}
+.login-mark em{color:var(--gold);font-style:normal}
+@keyframes markGlow{0%,100%{text-shadow:0 0 18px rgba(255,20,147,.25)}50%{text-shadow:0 0 34px rgba(255,20,147,.55)}}
+.login-tag{margin-top:6px;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--t-faint)}
+.login-error{margin-bottom:16px;padding:10px 14px;border-radius:var(--r-sm);background:var(--red-wash);border:1px solid rgba(224,62,85,.3);color:var(--red);font-size:12px;text-align:center;animation:shake .4s ease}

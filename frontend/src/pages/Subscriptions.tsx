@@ -94,6 +94,9 @@ export function Subscriptions() {
   }
 
   const unreadCount = releases?.filter((r) => !r.is_read).length || 0
+  // 封蜡揭幕：未读新作默认蒙纱+蜡封；首次 hover 蜡封碎裂、封面亮起（会话内保持）
+  const [cracked, setCracked] = useState<Set<number>>(new Set())
+  const crack = (id: number) => setCracked((prev) => new Set(prev).add(id))
 
   return (
     <div className="page">
@@ -179,19 +182,31 @@ export function Subscriptions() {
           </div>
         ) : (
           <div>
-            {releases.map((nr) => (
+            {releases.map((nr) => {
+              const sealed = !nr.is_read && !cracked.has(nr.id)
+              return (
               <div key={nr.id} className="recent-item" style={{
                 alignItems: 'center',
                 opacity: nr.is_read ? 0.55 : 1,
                 background: nr.is_read ? 'transparent' : 'var(--gold-wash)',
               }}>
-                <img
-                  src={nr.cover_url || ''}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
-                  style={{ flex: 'none', width: 44, height: 60, borderRadius: 6, objectFit: 'cover', objectPosition: 'right center', background: 'var(--bg-page)' }}
-                />
+                <div
+                  className={`wax-wrap${sealed ? ' sealed ready' : ''}`}
+                  style={{ position: 'relative', flex: 'none' }}
+                  onPointerEnter={() => { if (sealed) crack(nr.id) }}
+                  onClick={() => { if (sealed) crack(nr.id) }}
+                >
+                  <img
+                    src={nr.cover_url || ''}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                    style={{ width: 44, height: 60, borderRadius: 6, objectFit: 'cover', objectPosition: 'right center', background: 'var(--bg-page)', display: 'block' }}
+                  />
+                  {!nr.is_read && (
+                    <span className={`wax-seal${cracked.has(nr.id) ? ' wax-crack' : ''}`} aria-hidden="true">♥</span>
+                  )}
+                </div>
                 <div className="recent-meta">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="recent-code">{nr.video_code}</span>
@@ -213,7 +228,8 @@ export function Subscriptions() {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

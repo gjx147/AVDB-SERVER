@@ -5,11 +5,14 @@ import type { TaskDetail as Task, ThumbnailsResponse } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { MetaItem } from '../components/MetaItem'
+import { Heartburst } from '../components/Heartburst'
 import { useStore } from '../store/useStore'
+import { useWhisper } from '../i18n/whisper'
 
 export function TaskDetail() {
   const { id } = useParams()
   const nav = useNavigate()
+  const w = useWhisper()
   const [task, setTask] = useState<Task | null | undefined>(undefined)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [thumbs, setThumbs] = useState<string[]>([])
@@ -28,8 +31,13 @@ export function TaskDetail() {
   // 操作反馈状态
   const confirmBox = useStore((s) => s.confirm)
   const [favBeat, setFavBeat] = useState(false)            // 收藏成功时封面心跳
+  const [kissKey, setKissKey] = useState(0)                // 收藏成功：唇印盖章
+  const [burstKey, setBurstKey] = useState(0)              // 收藏成功：心爆仪式
   const [copiedMagnet, setCopiedMagnet] = useState<string | null>(null)  // 复制 ✓ 回弹
   const [sentMagnet, setSentMagnet] = useState<string | null>(null)      // 推送成功磁力卡高光
+
+  // 赴约即升温：进入详情 +8 体温（Boudoir 体温系统）
+  useEffect(() => { useStore.getState().addHeat(8) }, [id])
 
   const load = () => {
     if (!id) return
@@ -90,15 +98,16 @@ export function TaskDetail() {
     const seen = new Set<string>()
     const items: { link: string; size?: string; name?: string; priority: number }[] = []
     const strVal = (v: unknown): string | undefined => (typeof v === 'string' && v) ? v : undefined
-    for (const m of task.magnets) {
-      const link = m.link || m.magnet || ''
-      if (!link || seen.has(link)) continue
+    for (const m of task.magnets as unknown[]) {
+      const link = (typeof m === 'string' ? m : ((m as { link?: unknown })?.link || (m as { magnet?: unknown })?.magnet)) || ''
+      if (!link || typeof link !== 'string' || seen.has(link)) continue
       seen.add(link)
-      items.push({ link, size: strVal(m.size) || strVal(m.file_size), name: strVal(m.name), priority: typeof m.priority === 'number' ? m.priority : magnetPriority(link) })
+      const mo = (typeof m === 'object' && m) ? m as { size?: unknown; file_size?: unknown; name?: unknown; priority?: unknown } : {}
+      items.push({ link, size: strVal(mo.size) || strVal(mo.file_size), name: strVal(mo.name), priority: typeof mo.priority === 'number' ? mo.priority : magnetPriority(link) })
     }
-    // best_magnet 确保在列表且排第一
+    // best_magnet 确保在列表且排第一（兼容非字符串形态）
     if (task.best_magnet) {
-      const bm = task.best_magnet
+      const bm = typeof task.best_magnet === 'string' ? task.best_magnet : String(task.best_magnet)
       if (!seen.has(bm)) {
         items.unshift({ link: bm, priority: magnetPriority(bm) })
       }
@@ -125,14 +134,19 @@ export function TaskDetail() {
 
   const fav = async () => {
     if (!task) return
-    // 乐观更新：心形立即翻转 + 封面心跳，失败回滚
+    // 乐观更新：心形立即翻转 + 封面心跳 + 唇印盖章 + 心爆仪式，失败回滚
     const prev = task.is_favorite
     const next = prev ? 0 : 1
     setTask({ ...task, is_favorite: next })
-    if (next) setFavBeat(true)
+    if (next) {
+      setFavBeat(true)
+      setKissKey(Date.now())
+      setBurstKey(Date.now())
+      useStore.getState().addHeat(15)
+    }
     try {
       prev ? await api.tasks.unfavorite(task.id) : await api.tasks.favorite(task.id)
-      toastOk(prev ? '已取消收藏' : '心动了，收进私藏')
+      toastOk(prev ? w('fav_remove') : w('fav_add'))
       load()
     } catch (e) {
       setTask((t) => (t ? { ...t, is_favorite: prev } : t))
@@ -182,7 +196,7 @@ export function TaskDetail() {
   const download = async (magnet: string) => {
     try {
       await api.downloaders.download(magnet, dlDownloader || undefined, undefined, task.id)
-      toastOk(`已占为己有${dlDownloader ? ' · ' + dlDownloader : ''}`)
+      toastOk(w('taken') + (dlDownloader ? ' · ' + dlDownloader : ''))
       setSentMagnet(magnet)
       setTimeout(() => setSentMagnet((s) => (s === magnet ? null : s)), 900)
       load()  // 刷新下载状态
@@ -214,8 +228,8 @@ export function TaskDetail() {
   const remoteBackdrop = task.poster_url || remoteImgs[0] || ''
 
   return (
-    <div className="page">
-      {/* emby 风格背景：gallery-1（index 0）全屏模糊 */}
+    <div className="page detail-enter" key={id}>
+      {/* emby 风格背景：gallery-1（index 0）全屏模糊（暗主题换黑纱+玫紫调色） */}
       <div className="detail-bg">
         <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remoteBackdrop) e.currentTarget.src = remoteBackdrop; else e.currentTarget.style.opacity = '0' }} />
@@ -224,7 +238,7 @@ export function TaskDetail() {
       <button className="btn btn--ghost btn--sm" style={{ marginBottom: 20, position: 'relative', zIndex: 1 }}
         onClick={() => { if (window.history.length > 1) nav(-1); else nav('/library') }}><Icon.back />返回</button>
 
-      {/* 紧凑头部：左海报（gallery-2 index 1）+ 右信息 */}
+      {/* 紧凑头部：赴约登场编排（黑场→追光→磨砂纱掀开→阶梯入场） */}
       <div className="detail-head" style={{ position: 'relative', zIndex: 1 }}>
         <div className={`detail-cover${favBeat ? ' beat' : ''}`} onAnimationEnd={() => setFavBeat(false)}>
           <img
@@ -234,20 +248,26 @@ export function TaskDetail() {
             onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
             onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
           />
-          {downloading && <div className="detail-cover-empty" style={{ position: 'absolute', inset: 0 }}>缓存中…</div>}
+          <i className="cover-veil" aria-hidden="true" />
+          {kissKey > 0 && (
+            <span key={kissKey} className="kiss-stamp" aria-hidden="true"
+              style={{ '--kr': `${-(12 + Math.random() * 20)}deg` } as React.CSSProperties}>💋</span>
+          )}
+          <Heartburst playKey={burstKey} />
+          {downloading && <div className="detail-cover-empty" style={{ position: 'absolute', inset: 0, zIndex: 4 }}>缓存中…</div>}
         </div>
         <div className="detail-info">
           <div className="detail-code">{task.video_code || '—'}</div>
           <h1 className="detail-title">{task.title || '未命名作品'}</h1>
 
-          {/* 操作栏 —— 含图片下载（图片爬取） */}
+          {/* 操作栏 —— 耳语文案（密室模式自动切大胆档） */}
           <div className="detail-actions">
             <button className={`btn ${task.is_favorite ? 'btn--ghost' : 'btn--gold'}`} onClick={fav}>
-              <Icon.heart />{task.is_favorite ? '取消收藏' : '收藏'}
+              <Icon.heart />{task.is_favorite ? w('btn_unfav') : w('btn_fav')}
             </button>
-            <button className="btn btn--ghost" onClick={extract}><Icon.link />把她带回家</button>
+            <button className="btn btn--ghost" onClick={extract}><Icon.link />{w('btn_bring')}</button>
             <button className="btn btn--ghost" onClick={() => fetchImages()} disabled={downloading}>
-              <Icon.download />{downloading ? '正在看清…' : '看得更清楚一点'}
+              <Icon.download />{downloading ? w('btn_seeing') : w('btn_see')}
             </button>
             {task.best_magnet && <button className="btn btn--ghost" onClick={() => copyMagnet(task.best_magnet!)}><Icon.copy />复制最佳</button>}
             <button className="btn btn--danger" onClick={remove} title="删除该任务（含关联数据，不可恢复）">删除</button>
@@ -456,7 +476,7 @@ export function TaskDetail() {
                       <button className="btn btn--ghost btn--sm" onClick={() => copyMagnet(m.link)}>
                         {copiedMagnet === m.link ? <><Icon.check />已复制</> : <><Icon.copy />复制</>}
                       </button>
-                      {dlOpen && <button className="btn btn--gold btn--sm" onClick={() => download(m.link)}>占为己有</button>}
+                      {dlOpen && <button className="btn btn--gold btn--sm" onClick={() => download(m.link)}>{w('take')}</button>}
                     </div>
                   </div>
                 ))}
@@ -469,7 +489,7 @@ export function TaskDetail() {
       {/* F15: 相似影片推荐 */}
       {similar.length > 0 && (
         <div style={{ position: 'relative', zIndex: 1, marginTop: 28 }}>
-          <div className="dm-label" style={{ marginBottom: 12 }}>同样让你心动</div>
+          <div className="dm-label" style={{ marginBottom: 12 }}>{w('similar_title')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 14 }}>
             {similar.map((s) => {
               // 与详情页封面统一：poster_url 优先（横版裁剪主角），兜底 thumbnail_urls[0]

@@ -1,0 +1,95 @@
+/** 今夜情人 —— 每日一次的揭幕仪式（Boudoir Phase 3）。
+ *  丝绒红包囊 → 黑场烛息 → 剪影悬念 3s → 三级对焦揭晓（60→18→0px）→ 番号落款。
+ *  种子 = 当日日期哈希：同一天打开是同一位；「换一位」加盐重掷。 */
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { api, coverFileUrl } from '../api/client'
+import type { Task } from '../api/types'
+
+type Phase = 'idle' | 'silhouette' | 'f1' | 'f2' | 'f3' | 'done'
+
+/** date-seeded 伪随机：保证当日固定 */
+function dayHash(salt: number): number {
+  const d = new Date()
+  const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()
+  let h = (seed ^ (salt * 2654435761)) >>> 0
+  h = (h ^ (h >>> 13)) * 1274126177 >>> 0
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+export function DailyReveal() {
+  const nav = useNavigate()
+  const [tasks, setTasks] = useState<Task[] | null>(null)
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [pick, setPick] = useState<Task | null>(null)
+  const [salt, setSalt] = useState(0)
+  const timers = useRef<number[]>([])
+
+  useEffect(() => {
+    api.v2.tasks({ sort: 'rating_desc', limit: 120 }).then((r) => setTasks(r.tasks)).catch(() => setTasks([]))
+    return () => { timers.current.forEach(clearTimeout) }
+  }, [])
+
+  const start = () => {
+    if (!tasks || tasks.length === 0) return
+    setPick(tasks[dayHash(salt) % tasks.length])
+    setPhase('silhouette')
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    const at = (ms: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, ms)) }
+    at(3000, () => setPhase('f1'))   // 剪影悬念 3s
+    at(3800, () => setPhase('f2'))   // 三级对焦，每级心搏间隔
+    at(4600, () => setPhase('f3'))
+    at(5300, () => setPhase('done'))
+  }
+  const reroll = () => {
+    const next = salt + 1
+    setSalt(next)
+    if (!tasks || tasks.length === 0) return
+    setPick(tasks[dayHash(next) % tasks.length])
+    setPhase('f1')
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    const at = (ms: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, ms)) }
+    at(800, () => setPhase('f2'))
+    at(1600, () => setPhase('f3'))
+    at(2300, () => setPhase('done'))
+  }
+
+  if (phase === 'idle') {
+    return (
+      <button className="reveal-pouch" onClick={start} disabled={!tasks || tasks.length === 0}
+        title="今夜为你挑选一位">
+        <span className="pouch-gem" aria-hidden="true">💎</span>
+        今夜情人
+      </button>
+    )
+  }
+  if (!pick) return null
+  const cls = phase === 'silhouette' ? 'silhouette' : phase
+
+  return (
+    <div className="reveal-stage" role="dialog" aria-label="今夜情人揭幕">
+      <div className="reveal-inner">
+        <div className={`reveal-cover ${cls}`} onClick={() => nav(`/task/${pick.id}`)} style={{ cursor: 'pointer' }}
+          role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') nav(`/task/${pick.id}`) }}>
+          <span className="reveal-candle" aria-hidden="true">🕯</span>
+          <img src={coverFileUrl(pick.id)} alt="" referrerPolicy="no-referrer"
+            onError={(e) => {
+              const r = pick.poster_url || (() => { try { return JSON.parse(pick.thumbnail_urls || '[]')[0] } catch { return null } })()
+              if (r && e.currentTarget.src !== r) e.currentTarget.src = r
+            }} />
+        </div>
+        {(phase === 'done') && (<>
+          <div className="reveal-code">{pick.video_code || '—'}</div>
+          <div className="reveal-title">{pick.title || '未命名'}{pick.actors ? ` · ${pick.actors.split(',')[0].trim()}` : ''}</div>
+          <div className="reveal-actions">
+            <button className="btn btn--gold" onClick={() => nav(`/task/${pick.id}`)}>就是她了 →</button>
+            <button className="btn btn--ghost" onClick={reroll}>再换一位</button>
+          </div>
+        </>)}
+        <div className="reveal-hint">TONIGHT'S PICK</div>
+      </div>
+    </div>
+  )
+}

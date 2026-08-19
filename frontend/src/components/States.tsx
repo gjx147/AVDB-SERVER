@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
+import { useWhisper } from '../i18n/whisper'
 
-export function Loading({ label = '加载中…' }: { label?: string }) {
-  return <div className="loading">{label}</div>
+export function Loading({ label }: { label?: string }) {
+  const w = useWhisper()
+  return <div className="loading">{label ?? w('loading')}</div>
 }
 
 export function Empty({ icon = '◯', title, sub }: { icon?: string; title: string; sub?: string }) {

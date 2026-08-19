@@ -50,17 +50,28 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
   const [imgSrc, setImgSrc] = useState(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`)
   const [triedRemote, setTriedRemote] = useState(false)
 
+  // 深悬停预览薄纱层：远程样品图（Boudoir 解扣式披露第 3 层）
+  const previewUrl = (() => {
+    if (task.thumbnail_urls) {
+      try {
+        const arr = JSON.parse(task.thumbnail_urls)
+        if (Array.isArray(arr) && arr.length > 0) return arr[0] as string
+      } catch { /* ignore */ }
+    }
+    return null
+  })()
+
   const open = () => { if (onClick) { onClick() } else { nav(`/task/${task.id}`) } }
   const toggle = (e: React.MouseEvent) => { e.stopPropagation(); onToggle?.() }
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } }
 
   const handleImgError = (e: React.MouseEvent<HTMLImageElement>) => {
-    // 本地缓存失败 → 尝试远程封面
+    // 本地缓存失败 → 尝试远程封面；再失败挂 broken 类（保持画框占位，由 CSS 隐藏）
     if (!triedRemote && remoteCover) {
       setTriedRemote(true)
       setImgSrc(remoteCover)
     } else {
-      e.currentTarget.style.display = 'none'
+      e.currentTarget.classList.add('img-broken')
     }
   }
 
@@ -73,11 +84,13 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           src={imgSrc}
           alt={task.video_code || ''}
           loading="lazy"
+          decoding="async"
           referrerPolicy="no-referrer"
           style={centerImage ? { objectPosition: 'center center' } : undefined}
           onLoad={(e) => { e.currentTarget.classList.add('loaded') }}
           onError={handleImgError}
         />
+        {previewUrl && <i className="poster-sheen" aria-hidden="true" style={{ '--preview': `url("${previewUrl}")` } as React.CSSProperties} />}
         {rank != null && rank > 0 && (
           rank <= 3 ? (
             <span className={`crown-badge cb-${rank}`}>

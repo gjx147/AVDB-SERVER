@@ -36,6 +36,8 @@ const nav: NavSection[] = [
 
 export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const stats = useStore((s) => s.stats)
+  const moodMode = useStore((s) => s.moodMode)
+  const toggleMood = useStore((s) => s.toggleMood)
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
@@ -64,6 +66,12 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
         ))}
       </nav>
       <div className="sidebar-foot">
+        {/* 烛光密室开关：暗场聚光 + 大胆文案档 + Wall 慢节奏（烛焰随体温涨落） */}
+        <button className={`mood-toggle${moodMode ? ' on' : ''}`} onClick={toggleMood}
+          aria-pressed={moodMode} title={moodMode ? '离开密室' : '进入烛光密室'}>
+          <span className="flame" aria-hidden="true">🕯</span>
+          {moodMode ? '离开密室' : '烛光密室'}
+        </button>
         <div><span className="dot">●</span> 后端已连接</div>
         <div>{stats ? `${stats.total} 部作品` : 'AVDB v2.0'}</div>
       </div>

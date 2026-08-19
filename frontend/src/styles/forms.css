@@ -1,0 +1,30 @@
+/* ══ 表单与表格：card / field / input / table / settings-nav ══ */
+
+/* ══ 卡片 / 表单 ══ */
+.card{background:rgba(255,255,255,.88);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:22px;box-shadow:var(--shadow-card);backdrop-filter:blur(14px)}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-family:var(--ff-serif);font-size:18px;color:var(--t-display);font-weight:600;position:relative;padding-bottom:10px;overflow:hidden}
+.card-title::after{content:"";position:absolute;left:0;bottom:0;width:28px;height:2px;background:var(--gold);border-radius:2px;opacity:.9}
+.card-hoverable{border-radius:var(--r-md);transition:transform .2s,box-shadow .25s}
+.card-hoverable:hover{box-shadow:0 8px 22px rgba(220,20,60,.12),0 0 0 1px var(--gold-wash)}
+.field{margin-bottom:18px}
+.field label{display:block;font-size:12px;color:var(--t-mute);margin-bottom:7px}
+.field label .req{color:var(--red)}
+.input{width:100%;background:var(--bg-page);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:10px 14px;color:var(--t-body);font-family:var(--ff-sans);font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s,background-size .3s;background-image:linear-gradient(var(--gold),var(--gold));background-size:0% 2px;background-repeat:no-repeat;background-position:0 100%}
+.input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-wash);background-size:100% 2px}
+.hint{font-size:11px;color:var(--t-faint);margin-top:6px}
+
+/* ══ 表格 ══ */
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th{text-align:left;padding:12px 14px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--t-faint);font-weight:600;border-bottom:1px solid var(--line-soft)}
+.table td{padding:14px;border-bottom:1px solid var(--line-hair);color:var(--t-body)}
+.table .mono{font-family:var(--ff-mono);color:var(--gold)}
+.table tbody tr:nth-child(even) td{background:rgba(255,200,215,.025)}
+.table tbody tr:hover td{background:rgba(255,200,215,.055)}
+
+/* ══ 设置 ══ */
+.settings-layout{display:grid;grid-template-columns:200px 1fr;gap:32px}
+.settings-nav{display:flex;flex-direction:column;gap:2px}
+.settings-nav button{text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;color:var(--t-mute);font-size:13px;border-radius:var(--r-sm);transition:all .2s;font-family:var(--ff-sans)}
+.settings-nav button:hover{color:var(--t-body);background:rgba(255,180,200,.05)}
+.settings-nav button.on{color:var(--gold);background:var(--gold-wash)}
