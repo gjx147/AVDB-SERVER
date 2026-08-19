@@ -24,11 +24,28 @@ export function Wall() {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const [tall, setTall] = useState(false)  // 竖版封面：contain 完整显示（横版 cover 满屏）
+  const [tallRatio, setTallRatio] = useState<number | null>(null)  // 竖图宽高比（信息层贴图定位用）
+  const [tallGeom, setTallGeom] = useState<{ left: number; w: number } | null>(null)
   const [aiLine, setAiLine] = useState<string | null>(null)
   const touchX = useRef<number | null>(null)
 
   // 切换作品时重置方向检测（等 onLoad 重新判定）+ 换片掀纱音
-  useEffect(() => { setTall(false); audio.play('veil', 0.6) }, [index])
+  useEffect(() => { setTall(false); setTallRatio(null); setTallGeom(null); audio.play('veil', 0.6) }, [index])
+
+  // 竖版 contain 时计算图片实际显示区域（居中），信息层贴图左缘+图底
+  useEffect(() => {
+    const recalc = () => {
+      if (tallRatio == null) return
+      const H = window.innerHeight
+      const w = H * tallRatio
+      const left = (window.innerWidth - w) / 2
+      // 接近横图比例时退化为全宽贴视口（避免信息层过窄）
+      setTallGeom(left > 8 ? { left, w } : { left: 0, w: window.innerWidth })
+    }
+    recalc()
+    window.addEventListener('resize', recalc)
+    return () => window.removeEventListener('resize', recalc)
+  }, [tallRatio])
 
   // AI 耳语：换片时按 task+tone+night 取一句情话（缓存/失败回退静态池）
   const currentId = tasks && tasks[index] ? tasks[index].id : null
@@ -115,14 +132,16 @@ export function Wall() {
       {/* 今夜情人 · 盲盒揭幕入口 */}
       <DailyReveal />
 
-      {/* 满屏封面 + 左下角简介（key 切换触发拉焦进场；凝视运镜类随 index 变化） */}
-      <div className="wstage" key={index} onClick={() => nav(`/task/${t.id}`)}
+      {/* 满屏封面 + 左下角简介（key 切换触发拉焦进场；凝视运镜类随 index 变化）
+          信息层始终贴在封面图左下角：横图=视口左下，竖图 contain 时贴图左缘 */}
+      <div className={`wstage${tall ? ' is-tall' : ''}`} key={index} onClick={() => nav(`/task/${t.id}`)}
         role="button" tabIndex={0} aria-label={`查看 ${t.video_code || '作品'} 详情`}
+        style={tallGeom ? ({ '--tall-left': `${tallGeom.left}px`, '--tall-w': `${tallGeom.w}px` } as React.CSSProperties) : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
         <div className={`wfull ${move}`}>
           <img src={coverFileUrl(t.id)} alt={t.video_code || ''} referrerPolicy="no-referrer"
             style={{ objectFit: tall ? 'contain' : 'cover' }}
-            onLoad={(e) => { const im = e.currentTarget; setTall(im.naturalHeight > im.naturalWidth) }}
+            onLoad={(e) => { const im = e.currentTarget; const isTall = im.naturalHeight > im.naturalWidth; setTall(isTall); setTallRatio(isTall ? im.naturalWidth / im.naturalHeight : null) }}
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
         </div>
