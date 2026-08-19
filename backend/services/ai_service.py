@@ -161,3 +161,54 @@ async def enrich_task(task_id: int) -> dict:
         return {"ok": True, "task_id": task_id, "translated": translated, "tags": tags, "changed": changed}
     finally:
         db.close()
+
+
+# ── V3 AI 耳语：按影片元数据生成一句挑逗推荐语（影库女主人人格）──
+_WHISPER_SYSTEM = (
+    "你是一座私人影片影库的女主人，正陪着主人浏览他的收藏。"
+    "你的声音低而近，像贴着耳廓说话：短句、留白、多用第二人称。"
+    "你知情识趣，永远比对方半步从容；说话时把欲望写得像诗——"
+    "用温度、重量、距离、衣料的暗喻，绝不直呼身体器官，不使用任何粗俗词汇。"
+    "任务：根据给定的影片信息，写一句不超过 24 个中文字的挑逗推荐语，"
+    "只输出这一句话本身，不要引号、不要解释、不要出现番号和片商名。"
+)
+
+_TONE_INSTRUCTIONS = {
+    0: "语气克制含蓄，像随口一提的邀请。",
+    1: "语气大胆亲昵，像靠近半步的低语。",
+    2: "语气直接滚烫、性张力拉满，但仍保持文学性暗喻，不落俗。",
+}
+
+
+async def whisper_line(task_id: int, tone: int = 0, night: bool = False) -> str:
+    """为 Wall 轮播/今夜情人生成一句耳语情话（llm_cache 自动缓存）。"""
+    from database import SessionLocal
+    from models import Task
+
+    db = SessionLocal()
+    try:
+        task = db.get(Task, task_id)
+        if not task:
+            return ""
+        meta = "；".join(filter(None, [
+            f"标题：{task.title or ''}",
+            f"演员：{task.actors or ''}",
+            f"标签：{task.tags or ''}",
+            f"评分：{task.rating or ''}",
+        ]))
+    finally:
+        db.close()
+
+    tone_key = 0 if tone <= 0 else (2 if tone >= 2 else 1)
+    user = (
+        f"影片信息 —— {meta}\n"
+        f"{_TONE_INSTRUCTIONS[tone_key]}"
+        + ("此刻是深夜，语气更沉、更近。" if night else "")
+    )
+    line = await chat(
+        [{"role": "system", "content": _WHISPER_SYSTEM},
+         {"role": "user", "content": user}],
+        task_type="whisper", temperature=0.9,
+    )
+    # 截断到 40 字内（防模型超写）
+    return line.strip().strip('“”"')[:40]

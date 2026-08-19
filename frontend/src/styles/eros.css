@@ -323,3 +323,184 @@ body::after{opacity:calc(.65 + .35*var(--heat))}
   .btn--gold,.wslide-prog-fill,.reveal-pouch,.mood-toggle.on .flame{animation:none}
   .aura{opacity:.55!important}
 }
+
+/* ════════════════════════════════════════════════════════════════
+   欲焰 · Eros V3（情欲进阶层）
+   视觉勾引 / 身体对话 / 声色 / 喘息 —— 详见 UI_EROS_PLAN_V3.md
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── V3 令牌：裸色系 × 口红红 × 红灯 × 喘息 ── */
+:root{
+  --nude:#e8c4ae; --nude-deep:#c98f76;
+  --lipstick:#d4125a;
+  --redlight:rgba(212,18,90,.32);
+  --excite:0;  /* 喘息 0~1（store 实时写入，与 --heat 正交） */
+}
+
+/* ══ V3-2 衣衫体系：hover 微褪（纱面滑落）× 长按深褪（三档递进）══ */
+/* 纱面层：默认覆在封面上，hover 向下褪去露出柔焦暖化层 */
+.poster-drape{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,228,238,.10),rgba(255,190,215,.30) 88%);
+  backdrop-filter:blur(2px) saturate(1.08);-webkit-backdrop-filter:blur(2px) saturate(1.08);
+  clip-path:inset(0 0 0 0);transition:clip-path 1.2s var(--e-burn);
+  border-radius:inherit}
+@media(hover:hover){
+  .poster:hover .poster-drape{clip-path:inset(100% 0 0 0)}  /* 纱向下褪去 */
+  .poster:hover .poster-frame img{filter:saturate(1.2) contrast(1.04) brightness(1.03)}
+}
+/* 深褪：长按累积 --peel，样品层从上方逐渐露出（--preview 由卡片写入） */
+.poster-frame .peel-reveal{position:absolute;inset:0;z-index:1;pointer-events:none;
+  background-image:var(--preview);background-size:cover;background-position:center;
+  clip-path:inset(100% 0 0 0);opacity:0;transition:opacity .3s}
+.poster-frame.peeling .peel-reveal{opacity:1;
+  clip-path:inset(calc(100% - var(--peel,0)*68%) 0 0 0);
+  transition:clip-path .12s linear,opacity .3s;
+  filter:saturate(1.1) brightness(1.02)}
+/* 松手弹回轻颤（像被嗔怪） */
+.poster-frame.peel-back{animation:peelSnap .45s var(--e-burn)}
+@keyframes peelSnap{
+  0%{transform:translateY(0)}
+  30%{transform:translateY(4px) scaleY(.99)}
+  55%{transform:translateY(-2px)}
+  100%{transform:translateY(0)}}
+.img-mode-blur .poster-drape,.img-mode-hidden .poster-drape{display:none}
+
+/* ══ V3-2 偷看指缝：blur 模式按住=从指缝看（视孔跟随指针）══ */
+.img-mode-blur .poster-frame{position:relative}
+.img-mode-blur .poster-frame .peek-mask{position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:inherit;
+  -webkit-mask:radial-gradient(circle at var(--mx,50%) var(--my,50%),
+    transparent 0 calc(var(--peek,0)*88px),rgba(0,0,0,.92) calc(var(--peek,0)*88px + 34px));
+  mask:radial-gradient(circle at var(--mx,50%) var(--my,50%),
+    transparent 0 calc(var(--peek,0)*88px),rgba(0,0,0,.92) calc(var(--peek,0)*88px + 34px));
+  backdrop-filter:blur(calc(14px * (1 - var(--peek,0))));
+  -webkit-backdrop-filter:blur(calc(14px * (1 - var(--peek,0))))}
+.poster.peeking .peek-mask{--peek:1}
+.poster.peeking .poster-frame{box-shadow:0 0 0 2px var(--gold-glow),0 0 34px var(--gold-glow)}
+/* 松开瞬间孔沿泛红晕 */
+.poster.was-peeking .poster-frame{animation:peekBlush .6s var(--e-heart)}
+@keyframes peekBlush{0%{box-shadow:0 0 0 0 rgba(212,18,90,0)}
+  30%{box-shadow:0 0 28px 6px rgba(212,18,90,.4)}
+  100%{box-shadow:0 0 0 0 rgba(212,18,90,0)}}
+
+/* ══ V3-2 哈气玻璃：镜面雾气，hover 像手指擦开 ══ */
+.fog-glass{position:relative}
+.fog-glass::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+  backdrop-filter:blur(9px) saturate(1.12);-webkit-backdrop-filter:blur(9px) saturate(1.12);
+  background:rgba(255,244,248,.24);
+  -webkit-mask:radial-gradient(120px 90px at var(--fx,30%) var(--fy,70%),transparent 96%,#000);
+  mask:radial-gradient(120px 90px at var(--fx,30%) var(--fy,70%),transparent 96%,#000)}
+@media(hover:hover){
+  .fog-glass:hover::before{opacity:0;transition:opacity 1s var(--e-slow)}
+}
+/* 进场一次性「雾擦」（详情页封面，替代 v2 磨砂纱掀开） */
+.fog-wipe{position:absolute;inset:0;z-index:3;pointer-events:none;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  background:rgba(255,244,248,.3);
+  -webkit-mask:radial-gradient(140px 110px at 34% 72%,transparent 94%,#000);
+  mask:radial-gradient(140px 110px at 34% 72%,transparent 94%,#000);
+  animation:fogWipe 1.5s var(--e-burn) .25s forwards}
+[data-theme=boudoir] .fog-wipe,[data-mode=mood] .fog-wipe{background:rgba(26,12,20,.4)}
+@keyframes fogWipe{
+  0%{opacity:1;-webkit-mask-size:24% 30%;mask-size:24% 30%}
+  60%{opacity:.9;-webkit-mask-size:170% 210%;mask-size:170% 210%}
+  100%{opacity:0;-webkit-mask-size:200% 240%;mask-size:200% 240%}}
+/* Wall 信息层雾面 */
+.winfo.fog-glass::before{z-index:0;background:rgba(20,6,12,.18)}
+
+/* ══ V3-3 红灯区聚光：被凝视者红 rim 点亮，其余沉入暗部 ══ */
+@media(hover:hover){
+  .gallery:has(.poster:hover) .poster:not(:hover){
+    filter:brightness(.55) saturate(.7);transition:filter .8s var(--e-slow)}
+  .poster .redlight-rim{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;
+    border-radius:inherit;
+    background:linear-gradient(115deg,var(--redlight),transparent 46%),
+      radial-gradient(60% 44% at 78% 8%,rgba(255,80,140,.30),transparent 70%);
+    transition:opacity .6s var(--e-slow)}
+  .poster:hover .redlight-rim{opacity:1}
+}
+
+/* ══ V3-3 锁骨构图：演员照片取景学（视线锚定肩颈—锁骨—唇）══ */
+.actor-photo{aspect-ratio:3/4}
+.actor-photo img{object-position:50% 22%}  /* 焦点上移：脸+肩颈，裁掉证件感 */
+.actor-photo::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(200deg,transparent 55%,rgba(61,21,38,.26) 100%),
+    radial-gradient(70% 46% at 50% 18%,transparent 52%,rgba(255,20,147,.10) 100%)}
+.podium .rank-badge{z-index:6}
+/* 详情页/演员详情头像：微聚唇部 */
+.actor-avatar-zoom img,.cast-row img{object-position:50% 24%}
+
+/* ══ V3-3 心跳辉光锚点：关键 CTA 的「皮下透红」══ */
+.pulse-anchor{position:relative}
+.pulse-anchor::after{content:"";position:absolute;left:18%;top:-5px;width:72%;height:32%;
+  background:radial-gradient(50% 100% at 50% 100%,rgba(212,18,90,.5),transparent 75%);
+  filter:blur(6px);pointer-events:none;border-radius:50%;
+  opacity:calc(.3 + .5*var(--heat));
+  animation:skinGlow calc(3.2s - 1.4s*var(--heat)) var(--e-heart) infinite}
+@keyframes skinGlow{0%,100%{transform:scale(1)}12%{transform:scale(1.16)}24%{transform:scale(1.03)}
+  36%{transform:scale(1.1)}58%{transform:scale(1)}}
+
+/* ══ V3-3 耳鬓厮磨：hover 演员头像她「凑近镜头」══ */
+@media(hover:hover){
+  .cast-row > div{transition:transform .6s cubic-bezier(.34,1.4,.5,1)}
+  .cast-row > div:hover{transform:scale(1.32);z-index:5;position:relative}
+  .cast-row > div:hover img{box-shadow:0 8px 26px rgba(212,18,90,.4)}
+  .cast-row:has(div:hover) > div:not(:hover){opacity:.6;transition:opacity .5s}
+  .actor:hover .actor-photo{box-shadow:0 0 46px rgba(212,18,90,.3)}
+}
+
+/* ══ V3-4 抚摸轨迹：指尖红晕（JS spawn .caress-dot）══ */
+.caress-dot{position:absolute;border-radius:50%;pointer-events:none;z-index:4;
+  background:radial-gradient(circle,rgba(232,120,160,calc(.38*var(--cs,1))),rgba(255,20,147,calc(.14*var(--cs,1))) 55%,transparent 72%);
+  filter:blur(2px);
+  animation:caressFade 1.2s var(--e-slow) forwards}
+@keyframes caressFade{0%{opacity:0;transform:scale(.4)}
+  18%{opacity:1}100%{opacity:0;transform:scale(1.5)}}
+
+/* ══ V3-4 喘息系统：呼吸轻颤 + climax 颤栗 + 融化 ══ */
+/* 喘息 >60：界面呼吸轻颤（±1px，极缓） */
+html[data-breath="on"] .main{animation:breathTremor 2.6s var(--e-heart) infinite}
+@keyframes breathTremor{0%,100%{transform:translateY(0)}45%{transform:translateY(-1px)}55%{transform:translateY(1px)}}
+/* 顶点：一次浑身颤栗 + 绯红闪（400ms） */
+html.climax .main{animation:climaxShake .22s linear 2}
+html.climax body::after{opacity:1!important}
+html.climax .app::after{background:radial-gradient(ellipse at center,transparent 40%,rgba(212,18,90,.22) 100%)!important}
+@keyframes climaxShake{0%{transform:translate(0,0)}25%{transform:translate(1.6px,-1px)}50%{transform:translate(-1.4px,1.2px)}75%{transform:translate(1px,.8px)}100%{transform:translate(0,0)}}
+/* 娇嗔化解后的「融化」：光晕绽开 */
+html.melt .app::after{background:radial-gradient(ellipse at center,rgba(255,150,190,.14) 30%,transparent 70%)!important;transition:background 1.2s var(--e-slow)}
+
+/* ══ V3-4 娇嗔态：快速跳片界面闹脾气 ══ */
+[data-sulk="true"] .poster-frame{transform:rotate(-.6deg)}
+[data-sulk="true"] .poster:hover .poster-frame{transform:rotate(-.6deg) translateY(-6px)}
+.sulk-bubble{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:380;
+  padding:8px 18px;border-radius:999px;background:var(--bg-raised);
+  border:1px solid var(--gold-glow);color:var(--gold);font-size:12px;
+  font-family:var(--ff-display);font-style:italic;
+  box-shadow:var(--shadow-float);animation:popIn .3s var(--e-silk)}
+
+/* ══ V3-5 唇语排版：CSS 唇形符号 / 欲言又止标题 / 口红管胶囊 ══ */
+.eyebrow::before,.eyebrow::after{content:"";width:13px;height:7px;flex:none;
+  background:var(--lipstick);border-radius:60% 60% 60% 60%/100% 100% 40% 40%;
+  clip-path:polygon(0 50%,12% 8%,35% 0,62% 4%,88% 10%,100% 50%,88% 90%,62% 96%,35% 100%,12% 92%)}
+[data-theme=boudoir] .eyebrow::before,[data-theme=boudoir] .eyebrow::after{background:#e87ba0}
+.page-title em{letter-spacing:.05em}
+.dm-label{border-radius:3px 10px 10px 3px}
+
+/* ── 侧栏时段问候 ── */
+.sidebar-greet{font-size:11px;color:var(--t-mute);font-style:italic;
+  font-family:var(--ff-display);letter-spacing:.02em}
+
+/* ══ V3 降级护栏（重申）══ */
+@media(max-width:768px){
+  .fog-glass::before,.poster .redlight-rim{display:none}
+  .caress-dot{display:none}
+  .gallery:has(.poster:hover) .poster:not(:hover){filter:none}
+  html.climax .main,html[data-breath] .main{animation:none}
+}
+@media (prefers-reduced-motion: reduce){
+  .caress-dot,.poster .redlight-rim{display:none}
+  .pulse-anchor::after{animation:none;opacity:.3}
+  html.climax .main,html[data-breath] .main{animation:none}
+  .poster-frame.peel-back{animation:none}
+}

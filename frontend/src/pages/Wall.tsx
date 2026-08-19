@@ -5,12 +5,16 @@ import type { Task } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { DailyReveal } from '../components/DailyReveal'
 import { useStore } from '../store/useStore'
-import { useWhisper } from '../i18n/whisper'
+import { useWhisper, effectiveTier, isNight } from '../i18n/whisper'
+import { audio } from '../audio/engine'
 
 /** 凝视运镜表：每张随机一种（12–18s），key=index 切换自动重播 */
 const MOVES = ['gz-zoomIn', 'gz-zoomOut', 'gz-panL', 'gz-panR'] as const
 
-/** 首页 · 影视墙 —— 满屏封面轮播 + 凝视运镜 + 拉焦进场 + 全屏氛围背景（Boudoir） */
+/** AI 耳语缓存（task+tone+night → 情话；失败静默回退静态池） */
+const aiCache = new Map<string, string>()
+
+/** 首页 · 影视墙 —— 满屏封面轮播 + 凝视运镜 + 拉焦进场 + AI 耳语 + 全屏氛围背景（Eros V3） */
 export function Wall() {
   const nav = useNavigate()
   const w = useWhisper()
@@ -20,10 +24,33 @@ export function Wall() {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const [tall, setTall] = useState(false)  // 竖版封面：contain 完整显示（横版 cover 满屏）
+  const [aiLine, setAiLine] = useState<string | null>(null)
   const touchX = useRef<number | null>(null)
 
-  // 切换作品时重置方向检测（等 onLoad 重新判定）
-  useEffect(() => { setTall(false) }, [index])
+  // 切换作品时重置方向检测（等 onLoad 重新判定）+ 换片掀纱音
+  useEffect(() => { setTall(false); audio.play('veil', 0.6) }, [index])
+
+  // AI 耳语：换片时按 task+tone+night 取一句情话（缓存/失败回退静态池）
+  const currentId = tasks && tasks[index] ? tasks[index].id : null
+  useEffect(() => {
+    if (!currentId) return
+    const tone = effectiveTier()
+    const night = isNight()
+    const key = `${currentId}:${tone}:${night ? 1 : 0}`
+    const cached = aiCache.get(key)
+    if (cached !== undefined) { setAiLine(cached || null); return }
+    let alive = true
+    setAiLine(null)
+    api.ai.whisper(currentId, tone, night)
+      .then((r) => {
+        if (!alive) return
+        const line = r.ok ? (r.line || '').trim() : ''
+        aiCache.set(key, line)
+        if (line) setAiLine(line)
+      })
+      .catch(() => { if (alive) aiCache.set(key, '') })
+    return () => { alive = false }
+  }, [currentId, moodMode])
 
   const load = () => {
     setTasks(null); setError(null)
@@ -99,11 +126,13 @@ export function Wall() {
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
         </div>
-        {/* 左下角信息层：错峰显影（番号→标题→简介→元信息） */}
-        <div className="winfo">
+        {/* 左下角信息层：雾面玻璃 + 错峰显影（番号→标题→简介→元信息）；
+            简介位优先 AI 耳语情话，无则 synopsis/静态池兜底 */}
+        <div className="winfo fog-glass">
           <div className="winfo-code">{t.video_code || '—'}</div>
           <div className="winfo-title">{t.title || '未命名'}</div>
-          {synopsis && <div className="winfo-syn">{synopsis}</div>}
+          {(aiLine || synopsis) && <div className="winfo-syn">{aiLine || synopsis}</div>}
+          {!aiLine && !synopsis && <div className="winfo-syn">{w('carousel_line')}</div>}
           <div className="winfo-meta">
             {t.rating ? <span className="winfo-score">♥ {t.rating}</span> : null}
             {t.release_date && <span>{t.release_date.slice(0, 4)}</span>}

@@ -5,7 +5,6 @@ export function Loading({ label }: { label?: string }) {
   const w = useWhisper()
   return <div className="loading">{label ?? w('loading')}</div>
 }
-
 export function Empty({ icon = '◯', title, sub }: { icon?: string; title: string; sub?: string }) {
   return (
     <div className="empty">
@@ -17,12 +16,13 @@ export function Empty({ icon = '◯', title, sub }: { icon?: string; title: stri
 }
 
 export function ErrorEmpty({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+  const w = useWhisper()
   return (
     <div className="empty">
       <div className="em-icon" style={{ color: 'var(--red)' }}>⚠</div>
-      <div className="em-title" style={{ color: 'var(--red)' }}>加载失败</div>
+      <div className="em-title" style={{ color: 'var(--red)' }}>{w('err_load')}</div>
       <div style={{ fontSize: 13, color: 'var(--t-mute)', maxWidth: 400, textAlign: 'center', margin: '4px 0 12px' }}>
-        {message || '无法连接到服务器，请检查网络后重试。'}
+        {message || w('err_network')}
       </div>
       {onRetry && (
         <button className="btn btn--ghost btn--sm" onClick={onRetry}>重新加载</button>

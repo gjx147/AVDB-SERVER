@@ -7,10 +7,16 @@
  *  6. 体温累积（hover/深 hover 加热，store 衰减；Boudoir）
  *  7. 烛光尘埃粒子（单 canvas ≤40，密度随体温；Boudoir）
  *  8. 胶片颗粒层（静态 SVG 噪点；Boudoir）
+ *  9. 声色解锁与丝绸音（V3；引擎在 audio/，首次手势 unlock）
+ *  10. 抚摸轨迹（指针划过海报留渐隐红晕；V3）
+ *  11. 长按深褪（--peel 衣衫三档递进；V3）
+ *  12. 指缝偷看（blur 模式按住视孔；V3）
+ *  13. 喘息追踪（10s 窗口交互频次 → excite；V3）
  *  性能保护：reduced-motion / 触屏（coarse pointer）自动关闭；全部 rAF 节流。
  */
 
 import { useStore } from '../store/useStore'
+import { audio } from '../audio/engine'
 
 const prefersReduced = typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -23,6 +29,11 @@ export function initAmbientEffects() {
   if (typeof document === 'undefined') return
   initGrain()
   initHeat()
+  initSoundWiring()
+  initCaress()
+  initPeel()
+  initPeek()
+  initExcite()
   if (!enabled) return
   initAura()
   initRipple()
@@ -32,6 +43,126 @@ export function initAmbientEffects() {
   initPulseBand()
   initScrollReveal()
   if (!lowPower && window.innerWidth > 768) initMotes()
+}
+
+/* 9. 声色接线：首次手势 unlock AudioContext；海报 hover 播丝绸音（2.5s 节流） */
+function initSoundWiring() {
+  document.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true, passive: true })
+  let lastSilk = 0
+  document.addEventListener('pointerover', (e) => {
+    if (!audio.enabled) return
+    const el = (e.target as HTMLElement).closest('.poster') as HTMLElement | null
+    if (!el) return
+    const now = performance.now()
+    if (now - lastSilk < 2500) return
+    lastSilk = now
+    audio.play('silk', 0.8)
+  }, { passive: true })
+}
+
+/* 10. 抚摸轨迹：指针在海报内划过留渐隐红晕（60ms 节流，速度反比尺寸；触屏 150ms） */
+function initCaress() {
+  if (prefersReduced || lowPower) return
+  let last = 0
+  let lastX = 0, lastY = 0
+  document.addEventListener('pointermove', (e) => {
+    const el = (e.target as HTMLElement).closest('.poster, .detail-cover, .actor-photo') as HTMLElement | null
+    if (!el) return
+    const now = performance.now()
+    const gap = coarse ? 150 : 60
+    if (now - last < gap) return
+    last = now
+    const host = (el.closest('.poster') || el) as HTMLElement
+    const rect = host.getBoundingClientRect()
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return
+    const dist = Math.hypot(e.clientX - lastX, e.clientY - lastY)
+    lastX = e.clientX; lastY = e.clientY
+    if (dist < 3) return  // 抖动忽略
+    // 划得越慢红晕越大越深
+    const size = Math.max(14, Math.min(64, 900 / Math.max(dist, 8)))
+    const dot = document.createElement('span')
+    dot.className = 'caress-dot'
+    dot.style.width = dot.style.height = `${size}px`
+    dot.style.left = `${e.clientX - rect.left - size / 2}px`
+    dot.style.top = `${e.clientY - rect.top - size / 2}px`
+    dot.style.setProperty('--cs', String(Math.min(1, 90 / Math.max(dist, 10))))
+    host.appendChild(dot)
+    dot.addEventListener('animationend', () => dot.remove(), { once: true })
+  }, { passive: true })
+}
+
+/* 11. 长按深褪：按住海报 1.8s 衣衫三档滑落（--peel 0~1 驱动 clip-path）；
+   松手弹回轻颤；按满 +8 heat。blur 隐私模式禁用（防绕过）。 */
+function initPeel() {
+  if (prefersReduced) return
+  let active: HTMLElement | null = null
+  let raf = 0
+  let start = 0
+  let reached = false
+  const stop = () => {
+    cancelAnimationFrame(raf); raf = 0
+    if (active) {
+      active.classList.add('peel-back')
+      window.setTimeout(() => active?.classList.remove('peel-back'), 450)
+      active.style.setProperty('--peel', '0')
+    }
+    active = null
+  }
+  document.addEventListener('pointerdown', (e) => {
+    const host = (e.target as HTMLElement).closest('.poster') as HTMLElement | null
+    if (!host) return
+    if (host.matches('.img-mode-blur .poster, .img-mode-hidden .poster')) return
+    const frame = host.querySelector('.poster-frame') as HTMLElement | null
+    if (!frame) return
+    active = host
+    reached = false
+    start = performance.now()
+    frame.classList.add('peeling')
+    const tick = () => {
+      if (!active) return
+      const p = Math.min(1, (performance.now() - start) / (coarse ? 1200 : 1800))
+      active.style.setProperty('--peel', p.toFixed(3))
+      if (p >= 1 && !reached) { reached = true; useStore.getState().addHeat(8) }
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+  }, { passive: true })
+  document.addEventListener('pointerup', stop, { passive: true })
+  document.addEventListener('pointercancel', stop, { passive: true })
+}
+
+/* 12. 指缝偷看：blur 隐私模式按住海报=从指缝看（径向视孔跟随指针，松开泛红晕） */
+function initPeek() {
+  document.addEventListener('pointerdown', (e) => {
+    const host = (e.target as HTMLElement).closest('.img-mode-blur .poster') as HTMLElement | null
+    if (!host) return
+    host.classList.add('peeking')
+  }, { passive: true })
+  const close = (e: PointerEvent) => {
+    document.querySelectorAll('.poster.peeking').forEach((el) => {
+      el.classList.remove('peeking')
+      el.classList.add('was-peeking')
+      window.setTimeout(() => el.classList.remove('was-peeking'), 650)
+    })
+  }
+  document.addEventListener('pointerup', close, { passive: true })
+  document.addEventListener('pointercancel', close, { passive: true })
+}
+
+/* 13. 喘息追踪：10s 滑窗内 ≥5 次 pointerdown → excite +20；页面隐藏不计 */
+function initExcite() {
+  if (prefersReduced) return
+  const stamps: number[] = []
+  document.addEventListener('pointerdown', () => {
+    if (document.hidden) return
+    const now = performance.now()
+    while (stamps.length && now - stamps[0] > 10_000) stamps.shift()
+    stamps.push(now)
+    if (stamps.length >= 5) {
+      useStore.getState().addExcite(20)
+      stamps.length = 0
+    }
+  }, { passive: true })
 }
 
 /* 8. 胶片颗粒层（静态装饰，任何环境保留；样式在 eros.css） */

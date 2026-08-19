@@ -8,6 +8,7 @@ import { MetaItem } from '../components/MetaItem'
 import { Heartburst } from '../components/Heartburst'
 import { useStore } from '../store/useStore'
 import { useWhisper } from '../i18n/whisper'
+import { audio } from '../audio/engine'
 
 export function TaskDetail() {
   const { id } = useParams()
@@ -125,7 +126,7 @@ export function TaskDetail() {
 
   // 自动缓存已禁用：用户手动点「重新下载高清图片」才下载
 
-  if (loadError) return <div className="page"><ErrorEmpty message={loadError} onRetry={load} /></div>
+  if (loadError) return <div className="page"><ErrorEmpty message={w('err_network')} onRetry={load} /></div>
   if (task === undefined) return <div className="page"><Loading /></div>
   if (task === null) return <div className="page"><Empty title="任务不存在" /></div>
 
@@ -143,6 +144,7 @@ export function TaskDetail() {
       setKissKey(Date.now())
       setBurstKey(Date.now())
       useStore.getState().addHeat(15)
+      audio.play('sigh', 1)  // 她的回应：一声若有似无的轻叹
     }
     try {
       prev ? await api.tasks.unfavorite(task.id) : await api.tasks.favorite(task.id)
@@ -196,7 +198,7 @@ export function TaskDetail() {
   const download = async (magnet: string) => {
     try {
       await api.downloaders.download(magnet, dlDownloader || undefined, undefined, task.id)
-      toastOk(w('taken') + (dlDownloader ? ' · ' + dlDownloader : ''))
+      toastOk(w('download_start') + (dlDownloader ? ' · ' + dlDownloader : ''))
       setSentMagnet(magnet)
       setTimeout(() => setSentMagnet((s) => (s === magnet ? null : s)), 900)
       load()  // 刷新下载状态
@@ -248,7 +250,7 @@ export function TaskDetail() {
             onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
             onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
           />
-          <i className="cover-veil" aria-hidden="true" />
+          <i className="fog-wipe" aria-hidden="true" />
           {kissKey > 0 && (
             <span key={kissKey} className="kiss-stamp" aria-hidden="true"
               style={{ '--kr': `${-(12 + Math.random() * 20)}deg` } as React.CSSProperties}>💋</span>
@@ -260,9 +262,9 @@ export function TaskDetail() {
           <div className="detail-code">{task.video_code || '—'}</div>
           <h1 className="detail-title">{task.title || '未命名作品'}</h1>
 
-          {/* 操作栏 —— 耳语文案（密室模式自动切大胆档） */}
+          {/* 操作栏 —— 耳语文案（密室模式自动切大胆档；收藏键带皮下辉光） */}
           <div className="detail-actions">
-            <button className={`btn ${task.is_favorite ? 'btn--ghost' : 'btn--gold'}`} onClick={fav}>
+            <button className={`btn pulse-anchor ${task.is_favorite ? 'btn--ghost' : 'btn--gold'}`} onClick={fav}>
               <Icon.heart />{task.is_favorite ? w('btn_unfav') : w('btn_fav')}
             </button>
             <button className="btn btn--ghost" onClick={extract}><Icon.link />{w('btn_bring')}</button>

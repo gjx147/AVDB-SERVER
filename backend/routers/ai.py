@@ -1,4 +1,4 @@
-"""AI 路由 —— 翻译/标签/摘要/任务增强。"""
+"""AI 路由 —— 翻译/标签/摘要/任务增强/V3 耳语情话。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from deps import CurrentUser
-from services.ai_service import enrich_task, generate_tags, summarize, translate
+from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -24,6 +24,12 @@ class TagsRequest(BaseModel):
 class SummaryRequest(BaseModel):
     text: str = Field(max_length=5000)
     model: str | None = Field(default=None, max_length=100)
+
+
+class WhisperRequest(BaseModel):
+    task_id: int
+    tone: int = Field(default=0, ge=0, le=2)  # 0 克制 / 1 大胆 / 2 露骨
+    night: bool = False
 
 
 @router.post("/translate")
@@ -51,3 +57,11 @@ async def ai_enrich(task_id: int, _user: CurrentUser):
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("message", "增强失败"))
     return result
+
+
+@router.post("/whisper")
+async def ai_whisper(req: WhisperRequest, _user: CurrentUser):
+    """AI 耳语：按影片元数据生成一句挑逗推荐语（影库女主人人格，llm_cache 自动缓存）。
+    AI 未配置/调用失败时 ok=false，前端静默回退静态文案池。"""
+    line = await whisper_line(req.task_id, tone=req.tone, night=req.night)
+    return {"ok": bool(line), "line": line}

@@ -23,5 +23,7 @@ export function playVeil() {
   veilEl.classList.remove('play')
   void (veilEl as HTMLElement).offsetWidth
   veilEl.classList.add('play')
+  // 声色：掀纱音（默认静音时无声）
+  import('../audio/engine').then(({ audio }) => audio.play('veil', 0.9)).catch(() => {})
   window.setTimeout(() => veilEl?.classList.remove('play'), 1400)
 }

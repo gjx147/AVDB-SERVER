@@ -38,6 +38,7 @@ export default function App() {
   const navType = useNavigationType()
   const setStats = useStore((s) => s.setStats)
   const imgMode = useStore((s) => s.imgMode)
+  const sulk = useStore((s) => s.sulk)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // 列表页滚动位置记忆：POP（返回/前进）时恢复，新导航回顶
@@ -54,6 +55,9 @@ export default function App() {
     // 路由纱幕过场：每次切页都是一次「掀纱」（首帧跳过；降级在 transition.ts 内处理）
     if (!firstRoute.current) playVeil()
     firstRoute.current = false
+    // 娇嗔（V3）：快速跳片她闹脾气；在同一页温柔停留 3s 触发融化
+    useStore.getState().markDwell()
+    const calm = setTimeout(() => useStore.getState().calmDown(), 3000)
     if (navType === 'POP') {
       const y = scrollMap.current.get(pathname + search)
       // 等页面渲染后再恢复，避免被组件内 scrollTo 覆盖
@@ -61,6 +65,7 @@ export default function App() {
     } else {
       window.scrollTo(0, 0)
     }
+    return () => clearTimeout(calm)
   }, [pathname, search, navType])
 
   useEffect(() => {
@@ -117,6 +122,11 @@ export default function App() {
       </main>
       <Toast />
       <ConfirmDialog />
+      {sulk && (
+        <div className="sulk-bubble" role="status">
+          {(() => { const p = ['急什么呀…', '慢一点，好吗？', '你翻这么快，人家头晕了…']; return p[Math.floor(Math.random() * p.length)] })()}
+        </div>
+      )}
     </div>
   )
 }

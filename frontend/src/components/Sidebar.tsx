@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { Icon } from './Icons'
+import { useWhisper, greetingKey } from '../i18n/whisper'
 
 interface NavItem {
   to: string
@@ -38,6 +39,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
   const stats = useStore((s) => s.stats)
   const moodMode = useStore((s) => s.moodMode)
   const toggleMood = useStore((s) => s.toggleMood)
+  const w = useWhisper()
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
@@ -73,6 +75,8 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           {moodMode ? '离开密室' : '烛光密室'}
         </button>
         <div><span className="dot">●</span> 后端已连接</div>
+        {/* 时段问候：她按早晚深夜换语气 */}
+        <div className="sidebar-greet">{w(greetingKey())}</div>
         <div>{stats ? `${stats.total} 部作品` : 'AVDB v2.0'}</div>
       </div>
     </aside>

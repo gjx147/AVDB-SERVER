@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type { Settings as S } from '../api/types'
 import { PageHead, Loading, ErrorEmpty } from '../components/States'
 import { useStore } from '../store/useStore'
+import { audio } from '../audio/engine'
 
 type Tab = 'crawl' | 'retry' | 'notify' | 'media' | 'appearance' | 'backup'
 
@@ -159,34 +160,82 @@ function AppearanceTab() {
   const setTheme = useStore((s) => s.setTheme)
   const moodMode = useStore((s) => s.moodMode)
   const toggleMood = useStore((s) => s.toggleMood)
+  const copyTier = useStore((s) => s.copyTier)
+  const setCopyTier = useStore((s) => s.setCopyTier)
+  const nightBoost = useStore((s) => s.nightBoost)
+  const setNightBoost = useStore((s) => s.setNightBoost)
+  const soundOn = useStore((s) => s.soundOn)
+  const setSoundOn = useStore((s) => s.setSoundOn)
   return (
-    <div className="card">
-      <div className="field">
-        <label>主题</label>
-        <div className="seg">
-          <button className={theme === 'auto' ? 'on' : ''} onClick={() => setTheme('auto')}>跟随系统</button>
-          <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>欲焰 · 亮</button>
-          <button className={theme === 'boudoir' ? 'on' : ''} onClick={() => setTheme('boudoir')}>暗夜丝绒</button>
+    <>
+      <div className="card">
+        <div className="field">
+          <label>主题</label>
+          <div className="seg">
+            <button className={theme === 'auto' ? 'on' : ''} onClick={() => setTheme('auto')}>跟随系统</button>
+            <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>欲焰 · 亮</button>
+            <button className={theme === 'boudoir' ? 'on' : ''} onClick={() => setTheme('boudoir')}>暗夜丝绒</button>
+          </div>
+          <div className="hint">暗夜丝绒：黑丝绒底 × 鎏金线 × 唇色霓虹，为深夜私享而生</div>
         </div>
-        <div className="hint">暗夜丝绒：黑丝绒底 × 鎏金线 × 唇色霓虹，为深夜私享而生</div>
-      </div>
-      <div className="field">
-        <label>烛光密室</label>
-        <div className="seg">
-          <button className={moodMode ? 'on' : ''} onClick={() => { if (!moodMode) toggleMood() }}>开启</button>
-          <button className={!moodMode ? 'on' : ''} onClick={() => { if (moodMode) toggleMood() }}>关闭</button>
+        <div className="field">
+          <label>烛光密室</label>
+          <div className="seg">
+            <button className={moodMode ? 'on' : ''} onClick={() => { if (!moodMode) toggleMood() }}>开启</button>
+            <button className={!moodMode ? 'on' : ''} onClick={() => { if (moodMode) toggleMood() }}>关闭</button>
+          </div>
+          <div className="hint">暗场聚光、轮播慢舞、烛火环境音；可与任意主题叠加</div>
         </div>
-        <div className="hint">暗场聚光、轮播慢舞、耳语文案切换大胆档；可与任意主题叠加</div>
-      </div>
-      <div className="field">
-        <label>图片显示模式</label>
-        <div className="seg">
-          <button className={imgMode === 'normal' ? 'on' : ''} onClick={() => setImgMode('normal')}>正常显示</button>
-          <button className={imgMode === 'blur' ? 'on' : ''} onClick={() => setImgMode('blur')}>模糊悬停解除</button>
-          <button className={imgMode === 'hidden' ? 'on' : ''} onClick={() => setImgMode('hidden')}>完全隐藏</button>
+        <div className="field">
+          <label>耳语文案档</label>
+          <div className="seg">
+            <button className={copyTier === 0 ? 'on' : ''} onClick={() => setCopyTier(0)}>克制</button>
+            <button className={copyTier === 1 ? 'on' : ''} onClick={() => setCopyTier(1)}>大胆</button>
+            <button className={copyTier === 2 ? 'on' : ''} onClick={() => setCopyTier(2)}>露骨</button>
+          </div>
+          <div className="hint">她是这座影库的女主人——档位决定她说话有多靠近你的耳朵</div>
         </div>
-        <div className="hint">控制封面与演员头像的隐私显示方式</div>
+        <div className="field">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={nightBoost} onChange={(e) => setNightBoost(e.target.checked)} />
+            深夜自动升温（22:00–05:00 文案升一档）
+          </label>
+          <div className="hint">夜深了，她们更放肆</div>
+        </div>
+        <div className="field">
+          <label>图片显示模式</label>
+          <div className="seg">
+            <button className={imgMode === 'normal' ? 'on' : ''} onClick={() => setImgMode('normal')}>正常显示</button>
+            <button className={imgMode === 'blur' ? 'on' : ''} onClick={() => setImgMode('blur')}>模糊悬停解除</button>
+            <button className={imgMode === 'hidden' ? 'on' : ''} onClick={() => setImgMode('hidden')}>完全隐藏</button>
+          </div>
+          <div className="hint">控制封面与演员头像的隐私显示方式</div>
+        </div>
       </div>
+      <div className="card" style={{ marginTop: 22 }}>
+        <div className="field">
+          <label>声色层</label>
+          <div className="seg">
+            <button className={soundOn ? 'on' : ''} onClick={() => { if (!soundOn) setSoundOn(true) }}>开启</button>
+            <button className={!soundOn ? 'on' : ''} onClick={() => { if (soundOn) setSoundOn(false) }}>静音</button>
+          </div>
+          <div className="hint">心跳随体温加速、丝绸沙沙、收藏时她的一声轻叹、密室烛火噼啪——全部程序化合成，无音频文件。默认静音，仅在本机播放</div>
+        </div>
+        {soundOn && <BusVolumeRow bus="physio" label="生理音（心跳/轻叹）" />}
+        {soundOn && <BusVolumeRow bus="tex" label="材质音（丝绸/掀纱）" />}
+        {soundOn && <BusVolumeRow bus="amb" label="环境音（烛火/杯碰）" />}
+      </div>
+    </>
+  )
+}
+
+function BusVolumeRow({ bus, label }: { bus: 'physio' | 'tex' | 'amb'; label: string }) {
+  const [v, setV] = useState(audio.busVolume[bus])
+  return (
+    <div className="field">
+      <label htmlFor={`vol-${bus}`}>{label}</label>
+      <input id={`vol-${bus}`} type="range" min={0} max={1} step={0.05} value={v} style={{ width: '100%', accentColor: 'var(--gold)' }}
+        onChange={(e) => { const nv = +e.target.value; setV(nv); audio.setBusVolume(bus, nv) }} />
     </div>
   )
 }

@@ -321,7 +321,12 @@ export const api = {
 
   // ════════ Scheduler（Phase 3：调度状态）════════
 
-  // ════════ AI（Phase 4：翻译/标签/摘要/增强）════════
+  // ════════ AI（Phase 4：翻译/标签/摘要/增强；V3：耳语情话）════════
+  ai: {
+    whisper: (taskId: number, tone: 0 | 1 | 2, night: boolean) =>
+      http.post<{ ok: boolean; line: string }>('/api/ai/whisper', { task_id: taskId, tone, night }, { timeout: 8000 })
+        .then((r) => r.data),
+  },
 
   // ════════ Content Filter（Phase 4：过滤规则）════════
 

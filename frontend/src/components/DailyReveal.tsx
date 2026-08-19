@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
+import { useWhisper } from '../i18n/whisper'
+import { audio } from '../audio/engine'
 
 type Phase = 'idle' | 'silhouette' | 'f1' | 'f2' | 'f3' | 'done'
 
@@ -19,6 +21,7 @@ function dayHash(salt: number): number {
 
 export function DailyReveal() {
   const nav = useNavigate()
+  const w = useWhisper()
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [pick, setPick] = useState<Task | null>(null)
@@ -29,6 +32,9 @@ export function DailyReveal() {
     api.v2.tasks({ sort: 'rating_desc', limit: 120 }).then((r) => setTasks(r.tasks)).catch(() => setTasks([]))
     return () => { timers.current.forEach(clearTimeout) }
   }, [])
+
+  // 揭幕完成：杯碰一声，像酒杯轻轻相碰
+  useEffect(() => { if (phase === 'done') audio.play('chime', 1) }, [phase])
 
   const start = () => {
     if (!tasks || tasks.length === 0) return
@@ -59,7 +65,7 @@ export function DailyReveal() {
   if (phase === 'idle') {
     return (
       <button className="reveal-pouch" onClick={start} disabled={!tasks || tasks.length === 0}
-        title="今夜为你挑选一位">
+        title={w('blindbox')}>
         <span className="pouch-gem" aria-hidden="true">💎</span>
         今夜情人
       </button>
@@ -82,7 +88,7 @@ export function DailyReveal() {
         </div>
         {(phase === 'done') && (<>
           <div className="reveal-code">{pick.video_code || '—'}</div>
-          <div className="reveal-title">{pick.title || '未命名'}{pick.actors ? ` · ${pick.actors.split(',')[0].trim()}` : ''}</div>
+          <div className="reveal-title">{w('blindbox_result')} · {pick.title || '未命名'}{pick.actors ? ` · ${pick.actors.split(',')[0].trim()}` : ''}</div>
           <div className="reveal-actions">
             <button className="btn btn--gold" onClick={() => nav(`/task/${pick.id}`)}>就是她了 →</button>
             <button className="btn btn--ghost" onClick={reroll}>再换一位</button>

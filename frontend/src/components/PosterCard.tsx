@@ -91,6 +91,12 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           onError={handleImgError}
         />
         {previewUrl && <i className="poster-sheen" aria-hidden="true" style={{ '--preview': `url("${previewUrl}")` } as React.CSSProperties} />}
+        {/* V3 衣衫体系：深褪揭示层（长按 --peel 驱动）+ hover 微褪纱面 + 红灯 rim */}
+        {previewUrl && <i className="peel-reveal" aria-hidden="true" style={{ '--preview': `url("${previewUrl}")` } as React.CSSProperties} />}
+        <i className="poster-drape" aria-hidden="true" />
+        <i className="redlight-rim" aria-hidden="true" />
+        {/* V3 指缝偷看：blur 模式视孔遮罩（ambient 写 --peek/--mx/--my） */}
+        <i className="peek-mask" aria-hidden="true" />
         {rank != null && rank > 0 && (
           rank <= 3 ? (
             <span className={`crown-badge cb-${rank}`}>
