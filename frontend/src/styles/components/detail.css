@@ -1,20 +1,21 @@
 /* ══ 详情页与演员：detail-* / actor-* / 元数据胶囊 / 磁力框 ══ */
 
 /* ══ 详情页 ══ */
-/* emby 风格背景层：轻模糊封面 + 白粉渐变遮罩 */
+/* 背景层：强模糊封面（更朦胧不抢戏）+ 高不透明度白粉遮罩（内容区清晰可读） */
 .detail-bg{position:fixed;top:-2%;left:-2%;right:-2%;bottom:-2%;z-index:-1;overflow:hidden}
-.detail-bg img{width:104%;height:104%;object-fit:cover;filter:blur(4px) sepia(.15) saturate(1.4) brightness(1.05);transform:scale(1.03)}
+.detail-bg img{width:104%;height:104%;object-fit:cover;filter:blur(12px) sepia(.08) saturate(1.3) brightness(.96);transform:scale(1.04)}
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
-.detail-bg::after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(255,255,255,.60) 0%,rgba(255,255,255,.86) 100%)}
+.detail-bg::after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(255,250,253,.76) 0%,rgba(255,250,253,.96) 100%)}
 
 .detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:start;animation:pageIn .5s cubic-bezier(.23,1,.32,1) backwards}
 .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:36px;animation:pageIn .55s .08s cubic-bezier(.23,1,.32,1) backwards}
 @keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 /* JavDB 横版封面右 47% 为主角竖段：7/10 容器 + right center 裁剪呈现主角 */
-.detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:7/10;background:var(--bg-surface);box-shadow:var(--shadow-card)}
+.detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:7/10;background:var(--bg-surface);box-shadow:0 10px 30px rgba(220,20,60,.14),0 2px 8px rgba(220,20,60,.08),0 0 0 1px rgba(255,20,147,.08)}
+/* 信息区玻璃化：浮在朦胧背景上的玻璃卡，信息更聚焦 */
+.detail-info{min-width:0;overflow:hidden;background:rgba(255,255,255,.62);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-hair);border-radius:var(--r-lg);padding:22px 26px;box-shadow:var(--shadow-card)}
 .detail-cover img{width:100%;height:100%;object-fit:cover;object-position:right center;image-rendering:auto}
 .detail-cover-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:12px}
-.detail-info{min-width:0;overflow:hidden}
 .detail-code{font-family:var(--ff-mono);font-size:15px;color:var(--gold);font-weight:600;letter-spacing:.04em;word-break:break-all;text-shadow:0 0 14px rgba(255,143,179,.55)}
 .detail-title{font-family:var(--ff-serif);font-size:28px;color:var(--t-display);margin:6px 0 16px;line-height:1.25;font-weight:700;overflow-wrap:break-word;word-break:break-word}
 @media(min-width:769px){.detail-title{font-size:32px}.detail-title::after{content:"";display:block;width:40px;height:3px;margin-top:12px;background:var(--gold);border-radius:2px}}

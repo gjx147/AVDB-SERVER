@@ -121,9 +121,13 @@
 [data-theme=boudoir] .tag{background:rgba(255,79,163,.14)}
 [data-theme=boudoir] .app::after{background:radial-gradient(ellipse at center,transparent 58%,rgba(8,3,6,.55) 100%)}
 [data-theme=boudoir] .fade-bottom::after{background:linear-gradient(180deg,transparent,var(--bg-ink))}
-/* 详情页：白纱换黑纱，背景更沉 */
-[data-theme=boudoir] .detail-bg img{filter:blur(4px) sepia(.1) saturate(1.5) brightness(.68)}
-[data-theme=boudoir] .detail-bg::after{background:linear-gradient(180deg,rgba(20,10,16,.55) 0%,rgba(20,10,16,.9) 100%)}
+/* 详情页：白纱换黑纱，背景更沉；信息区玻璃换暗玻璃 */
+[data-theme=boudoir] .detail-bg img{filter:blur(12px) sepia(.1) saturate(1.4) brightness(.5)}
+[data-theme=boudoir] .detail-bg::after{background:linear-gradient(180deg,rgba(18,8,14,.74) 0%,rgba(18,8,14,.96) 100%)}
+[data-theme=boudoir] .detail-info{background:rgba(28,12,22,.72)}
+[data-mode=mood] .detail-bg img{filter:blur(12px) sepia(.1) saturate(1.4) brightness(.5)}
+[data-mode=mood] .detail-bg::after{background:linear-gradient(180deg,rgba(18,6,12,.74) 0%,rgba(18,6,12,.96) 100%)}
+[data-mode=mood] .detail-info{background:rgba(30,10,18,.72)}
 [data-theme=boudoir] .detail-title,[data-theme=boudoir] .detail-code,[data-theme=boudoir] .dm-val,
 [data-theme=boudoir] .detail-body,[data-theme=boudoir] .tag,[data-theme=boudoir] .magnet-box{
   text-shadow:0 1px 6px rgba(0,0,0,.55)}
@@ -345,75 +349,6 @@ body::after{opacity:calc(.65 + .35*var(--heat))}
   --excite:0;  /* 喘息 0~1（store 实时写入，与 --heat 正交） */
 }
 
-/* ══ V3-2 衣衫体系：hover 微褪（纱面滑落）× 长按深褪（三档递进）══ */
-/* 纱面层：默认覆在封面上，hover 向下褪去露出柔焦暖化层 */
-.poster-drape{position:absolute;inset:0;z-index:2;pointer-events:none;
-  background:linear-gradient(180deg,rgba(255,228,238,.10),rgba(255,190,215,.30) 88%);
-  backdrop-filter:blur(2px) saturate(1.08);-webkit-backdrop-filter:blur(2px) saturate(1.08);
-  clip-path:inset(0 0 0 0);transition:clip-path 1.2s var(--e-burn);
-  border-radius:inherit}
-@media(hover:hover){
-  .poster:hover .poster-drape{clip-path:inset(100% 0 0 0)}  /* 纱向下褪去 */
-  .poster:hover .poster-frame img{filter:saturate(1.2) contrast(1.04) brightness(1.03)}
-}
-/* 深褪：长按累积 --peel，样品层从上方逐渐露出（--preview 由卡片写入） */
-.poster-frame .peel-reveal{position:absolute;inset:0;z-index:1;pointer-events:none;
-  background-image:var(--preview);background-size:cover;background-position:center;
-  clip-path:inset(100% 0 0 0);opacity:0;transition:opacity .3s}
-.poster-frame.peeling .peel-reveal{opacity:1;
-  clip-path:inset(calc(100% - var(--peel,0)*68%) 0 0 0);
-  transition:clip-path .12s linear,opacity .3s;
-  filter:saturate(1.1) brightness(1.02)}
-/* 松手弹回轻颤（像被嗔怪） */
-.poster-frame.peel-back{animation:peelSnap .45s var(--e-burn)}
-@keyframes peelSnap{
-  0%{transform:translateY(0)}
-  30%{transform:translateY(4px) scaleY(.99)}
-  55%{transform:translateY(-2px)}
-  100%{transform:translateY(0)}}
-.img-mode-blur .poster-drape,.img-mode-hidden .poster-drape{display:none}
-
-/* ══ V3-2 偷看指缝：blur 模式按住=从指缝看（视孔跟随指针）══ */
-.img-mode-blur .poster-frame{position:relative}
-.img-mode-blur .poster-frame .peek-mask{position:absolute;inset:0;z-index:3;pointer-events:none;
-  background:inherit;
-  -webkit-mask:radial-gradient(circle at var(--mx,50%) var(--my,50%),
-    transparent 0 calc(var(--peek,0)*88px),rgba(0,0,0,.92) calc(var(--peek,0)*88px + 34px));
-  mask:radial-gradient(circle at var(--mx,50%) var(--my,50%),
-    transparent 0 calc(var(--peek,0)*88px),rgba(0,0,0,.92) calc(var(--peek,0)*88px + 34px));
-  backdrop-filter:blur(calc(14px * (1 - var(--peek,0))));
-  -webkit-backdrop-filter:blur(calc(14px * (1 - var(--peek,0))))}
-.poster.peeking .peek-mask{--peek:1}
-.poster.peeking .poster-frame{box-shadow:0 0 0 2px var(--gold-glow),0 0 34px var(--gold-glow)}
-/* 松开瞬间孔沿泛红晕 */
-.poster.was-peeking .poster-frame{animation:peekBlush .6s var(--e-heart)}
-@keyframes peekBlush{0%{box-shadow:0 0 0 0 rgba(212,18,90,0)}
-  30%{box-shadow:0 0 28px 6px rgba(212,18,90,.4)}
-  100%{box-shadow:0 0 0 0 rgba(212,18,90,0)}}
-
-/* ══ V3-2 哈气玻璃：镜面雾气，hover 像手指擦开 ══ */
-.fog-glass{position:relative}
-.fog-glass::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
-  backdrop-filter:blur(9px) saturate(1.12);-webkit-backdrop-filter:blur(9px) saturate(1.12);
-  background:rgba(255,244,248,.24);
-  -webkit-mask:radial-gradient(120px 90px at var(--fx,30%) var(--fy,70%),transparent 96%,#000);
-  mask:radial-gradient(120px 90px at var(--fx,30%) var(--fy,70%),transparent 96%,#000)}
-@media(hover:hover){
-  .fog-glass:hover::before{opacity:0;transition:opacity 1s var(--e-slow)}
-}
-/* 进场一次性「雾擦」（详情页封面，替代 v2 磨砂纱掀开） */
-.fog-wipe{position:absolute;inset:0;z-index:3;pointer-events:none;
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  background:rgba(255,244,248,.3);
-  -webkit-mask:radial-gradient(140px 110px at 34% 72%,transparent 94%,#000);
-  mask:radial-gradient(140px 110px at 34% 72%,transparent 94%,#000);
-  animation:fogWipe 1.5s var(--e-burn) .25s forwards}
-[data-theme=boudoir] .fog-wipe,[data-mode=mood] .fog-wipe{background:rgba(26,12,20,.4)}
-@keyframes fogWipe{
-  0%{opacity:1;-webkit-mask-size:24% 30%;mask-size:24% 30%}
-  60%{opacity:.9;-webkit-mask-size:170% 210%;mask-size:170% 210%}
-  100%{opacity:0;-webkit-mask-size:200% 240%;mask-size:200% 240%}}
-
 /* ══ V3-3 红灯区聚光：被凝视者红 rim 点亮，其余沉入暗部 ══ */
 @media(hover:hover){
   .gallery:has(.poster:hover) .poster:not(:hover){
@@ -499,14 +434,14 @@ html.melt .app::after{background:radial-gradient(ellipse at center,rgba(255,150,
 
 /* ══ V3 降级护栏（重申）══ */
 @media(max-width:768px){
-  .fog-glass::before,.poster .redlight-rim{display:none}
+  .poster .redlight-rim{display:none}
   .caress-dot{display:none}
   .gallery:has(.poster:hover) .poster:not(:hover){filter:none}
   html.climax .main,html[data-breath] .main{animation:none}
+  .detail-info{padding:14px 14px;border-radius:var(--r-md)}  /* 玻璃卡移动端收紧 */
 }
 @media (prefers-reduced-motion: reduce){
   .caress-dot,.poster .redlight-rim{display:none}
   .pulse-anchor::after{animation:none;opacity:.3}
   html.climax .main,html[data-breath] .main{animation:none}
-  .poster-frame.peel-back{animation:none}
 }

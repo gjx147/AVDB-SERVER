@@ -9,9 +9,7 @@
  *  8. 胶片颗粒层（静态 SVG 噪点；Boudoir）
  *  9. 声色解锁与丝绸音（V3；引擎在 audio/，首次手势 unlock）
  *  10. 抚摸轨迹（指针划过海报留渐隐红晕；V3）
- *  11. 长按深褪（--peel 衣衫三档递进；V3）
- *  12. 指缝偷看（blur 模式按住视孔；V3）
- *  13. 喘息追踪（10s 窗口交互频次 → excite；V3）
+ *  11. 喘息追踪（10s 窗口交互频次 → excite；V3）
  *  性能保护：reduced-motion / 触屏（coarse pointer）自动关闭；全部 rAF 节流。
  */
 
@@ -31,8 +29,6 @@ export function initAmbientEffects() {
   initHeat()
   initSoundWiring()
   initCaress()
-  initPeel()
-  initPeek()
   initExcite()
   if (!enabled) return
   initAura()
@@ -91,65 +87,7 @@ function initCaress() {
   }, { passive: true })
 }
 
-/* 11. 长按深褪：按住海报 1.8s 衣衫三档滑落（--peel 0~1 驱动 clip-path）；
-   松手弹回轻颤；按满 +8 heat。blur 隐私模式禁用（防绕过）。 */
-function initPeel() {
-  if (prefersReduced) return
-  let active: HTMLElement | null = null
-  let raf = 0
-  let start = 0
-  let reached = false
-  const stop = () => {
-    cancelAnimationFrame(raf); raf = 0
-    if (active) {
-      active.classList.add('peel-back')
-      window.setTimeout(() => active?.classList.remove('peel-back'), 450)
-      active.style.setProperty('--peel', '0')
-    }
-    active = null
-  }
-  document.addEventListener('pointerdown', (e) => {
-    const host = (e.target as HTMLElement).closest('.poster') as HTMLElement | null
-    if (!host) return
-    if (host.matches('.img-mode-blur .poster, .img-mode-hidden .poster')) return
-    const frame = host.querySelector('.poster-frame') as HTMLElement | null
-    if (!frame) return
-    active = host
-    reached = false
-    start = performance.now()
-    frame.classList.add('peeling')
-    const tick = () => {
-      if (!active) return
-      const p = Math.min(1, (performance.now() - start) / (coarse ? 1200 : 1800))
-      active.style.setProperty('--peel', p.toFixed(3))
-      if (p >= 1 && !reached) { reached = true; useStore.getState().addHeat(8) }
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-  }, { passive: true })
-  document.addEventListener('pointerup', stop, { passive: true })
-  document.addEventListener('pointercancel', stop, { passive: true })
-}
-
-/* 12. 指缝偷看：blur 隐私模式按住海报=从指缝看（径向视孔跟随指针，松开泛红晕） */
-function initPeek() {
-  document.addEventListener('pointerdown', (e) => {
-    const host = (e.target as HTMLElement).closest('.img-mode-blur .poster') as HTMLElement | null
-    if (!host) return
-    host.classList.add('peeking')
-  }, { passive: true })
-  const close = (e: PointerEvent) => {
-    document.querySelectorAll('.poster.peeking').forEach((el) => {
-      el.classList.remove('peeking')
-      el.classList.add('was-peeking')
-      window.setTimeout(() => el.classList.remove('was-peeking'), 650)
-    })
-  }
-  document.addEventListener('pointerup', close, { passive: true })
-  document.addEventListener('pointercancel', close, { passive: true })
-}
-
-/* 13. 喘息追踪：10s 滑窗内 ≥5 次 pointerdown → excite +20；页面隐藏不计 */
+/* 12. 喘息追踪：10s 滑窗内 ≥5 次 pointerdown → excite +20；页面隐藏不计 */
 function initExcite() {
   if (prefersReduced) return
   const stamps: number[] = []

@@ -250,7 +250,7 @@ export function TaskDetail() {
             onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
             onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
           />
-          <i className="fog-wipe" aria-hidden="true" />
+          <i className="cover-veil" aria-hidden="true" />
           {kissKey > 0 && (
             <span key={kissKey} className="kiss-stamp" aria-hidden="true"
               style={{ '--kr': `${-(12 + Math.random() * 20)}deg` } as React.CSSProperties}>💋</span>
