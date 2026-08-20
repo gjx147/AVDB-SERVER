@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
 
 from deps import CurrentUser, DbSession, Pagination
 from models import Actor, Subscription, Task, actor_movies
-from schemas import ActorDetailOut, ActorListResponse, ActorOut
+from schemas import ActorDetailOut, ActorListResponse, ActorOut, ActorProfileUpdate
 
 router = APIRouter(prefix="/api/actors", tags=["actors"])
+logger = logging.getLogger("avdb.actors")
 
 
 @router.get("", response_model=ActorListResponse)
@@ -143,6 +146,21 @@ def delete_actor(actor_id: int, db: DbSession, _user: CurrentUser):
     db.delete(actor)
     db.commit()
     return {"ok": True, "message": "已删除"}
+
+
+@router.patch("/{actor_id}")
+def update_actor_profile(actor_id: int, body: ActorProfileUpdate, db: DbSession, _user: CurrentUser):
+    """手动编辑演员资料（当前支持 bio / timeline，未传字段不更新）。"""
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    data = body.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        if hasattr(actor, k):
+            setattr(actor, k, (v or "").strip() or None)
+    db.commit()
+    logger.info("演员资料已手动更新: %s (id=%d) %s", actor.name, actor_id, ",".join(data))
+    return {"ok": True}
 
 
 @router.get("/{actor_id}/movies")

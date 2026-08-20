@@ -128,6 +128,12 @@ class ActorListResponse(BaseModel):
     items: list[ActorOut]
 
 
+class ActorProfileUpdate(BaseModel):
+    """演员简介/时间线手动编辑（未传字段不更新）。"""
+    bio: Optional[str] = None
+    timeline: Optional[str] = None
+
+
 class ActorDetailOut(ActorOut):
     measurements: Optional[str] = None
     debut_date: Optional[str] = None

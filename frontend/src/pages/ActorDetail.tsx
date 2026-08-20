@@ -22,6 +22,11 @@ export function ActorDetail() {
   const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
+  // 人物简介/时间线手动编辑
+  const [editing, setEditing] = useState(false)
+  const [bioDraft, setBioDraft] = useState('')
+  const [timelineDraft, setTimelineDraft] = useState('')
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
@@ -94,6 +99,23 @@ export function ActorDetail() {
       setAutoAdd(r.auto_add)
       toastOk(r.auto_add ? '已开启自动入库' : '已关闭自动入库')
     } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
+  // ── 人物简介/时间线手动编辑 ──
+  const saveProfile = async () => {
+    if (!actor) return
+    setSaving(true)
+    try {
+      await api.actors.update(actor.id, { bio: bioDraft, timeline: timelineDraft })
+      toastOk('简介已保存')
+      setEditing(false)
+      const a = await api.actors.get(actor.id)
+      setActor(a)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── 作品列表多选批量操作 ──
@@ -274,25 +296,59 @@ export function ActorDetail() {
         </div>
       </div>
 
-      {/* 人物简介 + 职业时间线（三源聚合内容） */}
-      {(actor.bio || actor.timeline) && (
-        <div className="detail-main" style={{ marginBottom: 28 }}>
-          {actor.bio && (
-            <>
-              <div className="dm-label" style={{ marginBottom: 8 }}>人物简介</div>
-              <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-body)', marginBottom: 18, whiteSpace: 'pre-wrap' }}>{actor.bio}</p>
-            </>
-          )}
-          {actor.timeline && (
-            <>
-              <div className="dm-label" style={{ marginBottom: 8 }}>职业时间线</div>
-              <div style={{ fontSize: 12, lineHeight: 2, color: 'var(--t-mute)', whiteSpace: 'pre-wrap', fontFamily: 'var(--ff-mono)' }}>
-                {actor.timeline}
-              </div>
-            </>
+      {/* 人物简介 + 职业时间线（三源聚合内容，支持手动编辑） */}
+      <div className="detail-main" style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className="dm-label">人物简介 · 职业时间线</div>
+          {editing ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn--gold btn--sm" onClick={saveProfile} disabled={saving}>
+                {saving ? '保存中…' : '保存'}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => setEditing(false)}>取消</button>
+            </div>
+          ) : (
+            <button className="btn btn--ghost btn--sm" onClick={() => { setBioDraft(actor.bio || ''); setTimelineDraft(actor.timeline || ''); setEditing(true) }}>
+              <Icon.edit />编辑
+            </button>
           )}
         </div>
-      )}
+        {editing ? (
+          <>
+            <div className="dm-label" style={{ marginBottom: 6 }}>人物简介</div>
+            <textarea className="input" rows={4} value={bioDraft}
+              onChange={(e) => setBioDraft(e.target.value)}
+              placeholder="演员的生平简介（自动抓取或手动填写）…"
+              style={{ marginBottom: 14, resize: 'vertical', fontFamily: 'var(--ff-sans)', lineHeight: 1.7 }} />
+            <div className="dm-label" style={{ marginBottom: 6 }}>职业时间线</div>
+            <textarea className="input" rows={4} value={timelineDraft}
+              onChange={(e) => setTimelineDraft(e.target.value)}
+              placeholder="如：2018年 出道，2021年 复归…（每行一条）"
+              style={{ resize: 'vertical', fontFamily: 'var(--ff-sans)', lineHeight: 1.7 }} />
+          </>
+        ) : actor.bio || actor.timeline ? (
+          <>
+            {actor.bio && (
+              <>
+                <div className="dm-label" style={{ marginBottom: 8 }}>人物简介</div>
+                <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-body)', marginBottom: 18, whiteSpace: 'pre-wrap' }}>{actor.bio}</p>
+              </>
+            )}
+            {actor.timeline && (
+              <>
+                <div className="dm-label" style={{ marginBottom: 8 }}>职业时间线</div>
+                <div style={{ fontSize: 12, lineHeight: 2, color: 'var(--t-mute)', whiteSpace: 'pre-wrap', fontFamily: 'var(--ff-mono)' }}>
+                  {actor.timeline}
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--t-faint)' }}>
+            暂无简介——点右上角「编辑」手动添加，或点「刷新资料」从三源自动抓取。
+          </div>
+        )}
+      </div>
 
       {/* 作品列表 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>

@@ -193,6 +193,9 @@ export const api = {
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
     remove: (actorId: number) =>
       http.delete<ApiOk>(`/api/actors/${actorId}`).then((r) => r.data),
+    /** 手动编辑演员资料（bio / timeline，未传字段不更新） */
+    update: (actorId: number, patch: { bio?: string | null; timeline?: string | null }) =>
+      http.patch<ApiOk>(`/api/actors/${actorId}`, patch).then((r) => r.data),
   },
 
   // ════════ Rankings ════════
