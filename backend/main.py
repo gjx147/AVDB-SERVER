@@ -45,6 +45,10 @@ logging.getLogger("avdb").addHandler(_app_file_handler)
 # uvicorn 访问/错误日志也写入
 logging.getLogger("uvicorn").addHandler(_app_file_handler)
 logging.getLogger("uvicorn.access").addHandler(_app_file_handler)
+# 第三方库 logger 也写入（httpx 演员资料抓取/apscheduler 调度/requests 等
+# 不在 avdb 树，此前只走 stdout 导致前端"应用"标签页看不到）
+for _third_name in ("httpx", "httpcore", "apscheduler", "apscheduler.scheduler", "requests", "urllib3"):
+    logging.getLogger(_third_name).addHandler(_app_file_handler)
 
 # 下载器专用日志文件（data/downloaders.log），记录所有推送/测试操作
 _dl_log_path = Path(get_settings().DATA_DIR) / "downloaders.log"
