@@ -22,18 +22,32 @@ _FIELDS = (
 
 
 def run_cycle() -> dict:
-    """抓取一批待处理演员（最多 BATCH_SIZE 个）。返回统计。"""
+    """抓取一批待处理演员（最多 BATCH_SIZE 个）。返回统计。
+
+    男演员（gender='male'）不抓取资料：直接标记已处理，避免一直滞留队列。
+    """
     from database import SessionLocal
     from models import Actor
-    from sqlalchemy import select
+    from sqlalchemy import or_, select, update as sa_update
     from services.actor_profile import fetch_profile
 
     db = SessionLocal()
     try:
+        # 男演员跳过：批量标记已处理（不抓取），脱离待抓队列
+        male_skipped = db.execute(
+            sa_update(Actor)
+            .where(Actor.gender == 'male', Actor.profile_fetched.is_(False))
+            .values(profile_fetched=True, profile_fetch_failed=False)
+        )
+        db.commit()
+        if male_skipped.rowcount:
+            logger.info("跳过男演员资料抓取: %d 位（已标记处理）", male_skipped.rowcount)
+
         rows = db.execute(
             select(Actor).where(
                 Actor.profile_fetched.is_(False),
                 Actor.profile_fetch_failed.is_(False),
+                or_(Actor.gender.is_(None), Actor.gender != 'male'),
             ).order_by(Actor.id).limit(BATCH_SIZE)
         ).scalars().all()
         if not rows:

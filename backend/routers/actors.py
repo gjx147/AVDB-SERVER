@@ -286,6 +286,9 @@ def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
+    # 男演员不抓取资料（三源均为女优库）
+    if (actor.gender or "").lower() == "male":
+        return {"ok": False, "source": None, "message": "男演员不抓取资料"}
     from services.actor_profile import fetch_profile
     result = fetch_profile(actor.name, actor.name_en)
     if not result.get("ok"):
