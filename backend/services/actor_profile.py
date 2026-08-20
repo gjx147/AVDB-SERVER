@@ -333,7 +333,12 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
     # ③ laoshi.ink（百科维度）
     laoshi = fetch_laoshi(name)
     if laoshi:
-        fields.update({k: v for k, v in laoshi.items() if k not in fields})
+        for k, v in laoshi.items():
+            if k == "avatar_url" and v:
+                # laoshi 头像（61KB 高清）质量高于 minnano 125px 小图，覆盖
+                fields["avatar_url"] = v
+            elif k not in fields:
+                fields[k] = v
         source = source or "laoshi"
 
     if fields:
