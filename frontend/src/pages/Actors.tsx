@@ -7,6 +7,8 @@ import { SkeletonGallery } from '../components/Skeleton'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
+const PAGE = 90
+
 export function Actors() {
   const nav = useNavigate()
   const [actors, setActors] = useState<Actor[] | null>(null)
@@ -19,22 +21,32 @@ export function Actors() {
   const [onlyFollowed, setOnlyFollowed] = useState(false)  // 只看关注的
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
 
-  const load = useCallback((keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
+  const load = useCallback((keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }, pageOverride?: number) => {
     setActors(null)
     setError(null)
     setSelected(new Set())
     const wa = opts?.withAvatar !== undefined ? opts.withAvatar : onlyWithAvatar
     const fd = opts?.followed !== undefined ? opts.followed : onlyFollowed
-    const p = keyword?.trim()
-      ? api.actors.search(keyword.trim())
-      : api.actors.list(0, 120, wa, fd)
-    p.then(setActors).catch((e) => { setError(String((e as Error).message)); setActors([]) })
-  }, [onlyWithAvatar, onlyFollowed])
+    const pg = pageOverride !== undefined ? pageOverride : page
+    const q = keyword?.trim() || undefined
+    api.actors.listPage(pg + 1, PAGE, wa, fd, q).then((r) => {
+      setActors(r.items)
+      setTotal(r.total)
+    }).catch((e) => { setError(String((e as Error).message)); setActors([]) })
+  }, [onlyWithAvatar, onlyFollowed, page])
   useEffect(() => { load() }, [load])
+
+  const goPage = (p: number) => { setPage(p); load(undefined, undefined, p) }
+  const resetAndLoad = (keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
+    setPage(0)
+    load(keyword, opts, 0)
+  }
 
   // 加载已订阅的演员 id 集合（用于按钮状态）
   useEffect(() => {
@@ -118,7 +130,7 @@ export function Actors() {
       }
       toastOk(kind === 'follow' ? `已关注 ${n} 位演员` : `已删除 ${n} 位演员`)
       setSelected(new Set())
-      load(kw)
+      resetAndLoad(kw)
     } catch (e) {
       toastErr(String((e as Error).message))
     } finally {
@@ -127,7 +139,7 @@ export function Actors() {
   }
   return (
     <div className="page">
-      <PageHead eyebrow={`Actors · ${actors?.length ?? 0} 位`} title={<>演员<em>库</em></>}
+      <PageHead eyebrow={`Actors · ${total} 位`} title={<>演员<em>库</em></>}
         sub="从心动的那张脸开始，补齐她的全部作品。">
         <button className="btn btn--gold" onClick={() => setAdding(!adding)}><Icon.plus />粘贴演员 URL</button>
       </PageHead>
@@ -148,15 +160,15 @@ export function Actors() {
         <div className="search">
           <Icon.search />
           <input placeholder="搜索演员名…" value={kw}
-            onChange={(e) => setKw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load(kw)} />
+            onChange={(e) => setKw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && resetAndLoad(kw)} />
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={() => load(kw)}>搜索</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => resetAndLoad(kw)}>搜索</button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', cursor: 'pointer', userSelect: 'none' }}>
-          <input type="checkbox" checked={onlyWithAvatar} onChange={(e) => { setOnlyWithAvatar(e.target.checked); load(undefined, { withAvatar: e.target.checked }) }} />
+          <input type="checkbox" checked={onlyWithAvatar} onChange={(e) => { setOnlyWithAvatar(e.target.checked); resetAndLoad(undefined, { withAvatar: e.target.checked }) }} />
           只看有头像
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', cursor: 'pointer', userSelect: 'none' }}>
-          <input type="checkbox" checked={onlyFollowed} onChange={(e) => { setOnlyFollowed(e.target.checked); load(undefined, { followed: e.target.checked }) }} />
+          <input type="checkbox" checked={onlyFollowed} onChange={(e) => { setOnlyFollowed(e.target.checked); resetAndLoad(undefined, { followed: e.target.checked }) }} />
           只看关注
         </label>
         {actors && actors.length > 0 && (
@@ -164,7 +176,7 @@ export function Actors() {
         )}
       </div>
 
-      {error ? <ErrorEmpty message={error} onRetry={() => load(kw)} /> :
+      {error ? <ErrorEmpty message={error} onRetry={() => resetAndLoad(kw)} /> :
        actors === null ? <SkeletonGallery square /> : actors.length === 0 ? (
         <Empty icon="○" title="暂无演员" sub="请通过搜索或 URL 添加。" />
       ) : (
@@ -213,6 +225,17 @@ export function Actors() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 分页 */}
+      {total > PAGE && (
+        <div className="pager">
+          <button disabled={page === 0} onClick={() => goPage(page - 1)}>上一页</button>
+          <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 13, color: 'var(--t-mute)', padding: '0 14px' }}>
+            {page * PAGE + 1}-{Math.min((page + 1) * PAGE, total)} / 共 {total} 条
+          </span>
+          <button disabled={(page + 1) * PAGE >= total} onClick={() => goPage(page + 1)}>下一页</button>
         </div>
       )}
 

@@ -141,6 +141,15 @@ export const api = {
         const d = r.data as unknown
         return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
       }),
+    /** 分页拉取演员（返回 items + total，供演员库翻页） */
+    listPage: (page: number, pageSize: number, withAvatar?: boolean, followed?: boolean, keyword?: string) =>
+      http.get<{ total: number; page: number; page_size: number; items: Actor[] }>('/api/actors', {
+        params: { page, page_size: pageSize, with_avatar: withAvatar, followed, q: keyword || undefined },
+      }).then((r) => {
+        const d = r.data as unknown
+        if (Array.isArray(d)) return { items: d as Actor[], total: (d as Actor[]).length }
+        return { items: (d as { items?: Actor[] }).items || [], total: (d as { total?: number }).total ?? 0 }
+      }),
     /** 自动翻页拉取全部演员（后端 page_size 上限 200；订阅页建头像映射用） */
     listAll: (withAvatar?: boolean, pageSize = 200): Promise<Actor[]> => {
       const fetchPage = async (page: number): Promise<{ items: Actor[]; total: number }> =>
