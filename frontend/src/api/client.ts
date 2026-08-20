@@ -193,8 +193,8 @@ export const api = {
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
     remove: (actorId: number) =>
       http.delete<ApiOk>(`/api/actors/${actorId}`).then((r) => r.data),
-    /** 手动编辑演员资料（intro/bio/timeline/profile_locked/avatar_url，未传字段不更新） */
-    update: (actorId: number, patch: { intro?: string | null; bio?: string | null; timeline?: string | null; profile_locked?: boolean; avatar_url?: string | null }) =>
+    /** 手动编辑演员资料（未传字段不更新；字符串空值=清空） */
+    update: (actorId: number, patch: Record<string, string | null | boolean | undefined>) =>
       http.patch<ApiOk>(`/api/actors/${actorId}`, patch).then((r) => r.data),
     /** 头像手动更换候选（laoshi / minnano-av / JavDB） */
     avatarOptions: (actorId: number) =>

@@ -280,8 +280,8 @@ def avatar_options(actor_id: int, db: DbSession, _user: CurrentUser):
 def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     """手动触发三源资料抓取（minnano-av + WAPdB + laoshi），成功后重置队列标记。
 
-    profile_locked 时跳过 intro/bio/timeline 文本字段（防误刷新覆盖手动编辑内容），
-    其它结构化字段（生日/身高/头像等）照常更新。
+    profile_locked 时跳过全部资料字段（防误刷新覆盖手动编辑内容），
+    仅重置队列标记；未锁定时照常写入全部抓取字段。
     """
     actor = db.get(Actor, actor_id)
     if not actor:
@@ -290,13 +290,14 @@ def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     result = fetch_profile(actor.name, actor.name_en)
     if not result.get("ok"):
         return {"ok": False, "source": None, "message": result.get("message", "minnano、WAPdB 与老师图鉴均未查询到")}
+    fields = result.get("fields") or {}
     locked_skipped: list[str] = []
-    for k, v in (result.get("fields") or {}).items():
-        if hasattr(actor, k) and v:
-            if actor.profile_locked and k in ("intro", "bio", "timeline"):
-                locked_skipped.append(k)
-                continue
-            setattr(actor, k, v)
+    if actor.profile_locked:
+        locked_skipped = [k for k in fields if hasattr(actor, k)]
+    else:
+        for k, v in fields.items():
+            if hasattr(actor, k) and v:
+                setattr(actor, k, v)
     actor.profile_fetched = True
     actor.profile_fetch_failed = False
     db.commit()

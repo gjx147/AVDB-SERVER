@@ -132,12 +132,30 @@ class ActorListResponse(BaseModel):
 
 
 class ActorProfileUpdate(BaseModel):
-    """演员简介/时间线手动编辑（未传字段不更新）。"""
+    """演员资料手动编辑（未传字段不更新；字符串空值=清空，布尔/URL 照实存）。"""
     intro: Optional[str] = None
     bio: Optional[str] = None
     timeline: Optional[str] = None
     profile_locked: Optional[bool] = None
     avatar_url: Optional[str] = None
+    # 基本资料字段（演员详情页胶囊网格全部可手动修改/添加）
+    birth_date: Optional[str] = None
+    height: Optional[str] = None
+    measurements: Optional[str] = None
+    cup: Optional[str] = None
+    blood_type: Optional[str] = None
+    zodiac: Optional[str] = None
+    birthplace: Optional[str] = None
+    nationality: Optional[str] = None
+    debut_date: Optional[str] = None
+    active_years: Optional[str] = None
+    agency: Optional[str] = None
+    alias: Optional[str] = None
+    debut_work: Optional[str] = None
+    hobbies: Optional[str] = None
+    twitter: Optional[str] = None
+    website: Optional[str] = None
+    tags: Optional[str] = None
 
 
 class ActorDetailOut(ActorOut):

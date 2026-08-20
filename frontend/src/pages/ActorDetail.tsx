@@ -8,6 +8,27 @@ import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 30
 
+/** 基本资料可手动编辑字段（演员详情页胶囊网格，键对应 Actor 字段） */
+const EDIT_FIELDS: { key: string; label: string }[] = [
+  { key: 'birth_date', label: '出生日期' },
+  { key: 'height', label: '身高' },
+  { key: 'measurements', label: '三围' },
+  { key: 'cup', label: '罩杯' },
+  { key: 'blood_type', label: '血型' },
+  { key: 'zodiac', label: '星座' },
+  { key: 'birthplace', label: '出身地' },
+  { key: 'nationality', label: '国籍' },
+  { key: 'debut_date', label: '出道' },
+  { key: 'active_years', label: '活跃年限' },
+  { key: 'agency', label: '事务所' },
+  { key: 'alias', label: '别名' },
+  { key: 'debut_work', label: '出道作' },
+  { key: 'hobbies', label: '趣味特技' },
+  { key: 'twitter', label: 'Twitter' },
+  { key: 'website', label: '官网' },
+  { key: 'tags', label: '标签' },
+]
+
 export function ActorDetail() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -139,7 +160,7 @@ export function ActorDetail() {
     try {
       await api.actors.update(actor.id, { profile_locked: next })
       setActor(await api.actors.get(actor.id))
-      toastOk(next ? '已锁定——刷新资料不再覆盖简介/职业生涯' : '已解锁——刷新资料会更新简介/职业生涯')
+      toastOk(next ? '已锁定——刷新资料/自动任务不再覆盖任何资料字段' : '已解锁——刷新资料会更新全部资料')
     } catch (e) {
       toastErr(String((e as Error).message))
     }
@@ -149,6 +170,10 @@ export function ActorDetail() {
   const [avPanelOpen, setAvPanelOpen] = useState(false)
   const [avOptsLoading, setAvOptsLoading] = useState(false)
   const [avatarOpts, setAvatarOpts] = useState<{ current: string | null; options: { key: string; label: string; url: string }[] } | null>(null)
+  // ── 基本资料编辑（胶囊网格整块切换为输入框）──
+  const [metaEditing, setMetaEditing] = useState(false)
+  const [metaDraft, setMetaDraft] = useState<Record<string, string>>({})
+  const [metaSaving, setMetaSaving] = useState(false)
   const openAvatarPanel = () => {
     if (!actor) return
     if (avPanelOpen) { setAvPanelOpen(false); return }
@@ -170,6 +195,29 @@ export function ActorDetail() {
       setActor(await api.actors.get(actor.id))
     } catch (e) {
       toastErr(String((e as Error).message))
+    }
+  }
+
+  // ── 基本资料编辑：打开时把当前值填入草稿（空字段留空可添加）──
+  const openMetaEdit = () => {
+    if (!actor) return
+    const d: Record<string, string> = {}
+    for (const f of EDIT_FIELDS) d[f.key] = ((actor as unknown as Record<string, unknown>)[f.key] as string) || ''
+    setMetaDraft(d)
+    setMetaEditing(true)
+  }
+  const saveMeta = async () => {
+    if (!actor) return
+    setMetaSaving(true)
+    try {
+      await api.actors.update(actor.id, { ...metaDraft })
+      toastOk('资料已保存')
+      setMetaEditing(false)
+      setActor(await api.actors.get(actor.id))
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setMetaSaving(false)
     }
   }
 
@@ -254,7 +302,7 @@ export function ActorDetail() {
       if (r.ok) {
         const srcName = r.source === 'minnano' ? 'minnano-av' : r.source === 'warashi' ? 'WAPdB 百科' : r.source === 'laoshi' ? '老师图鉴' : r.source
         toastOk(r.locked_skipped?.length
-          ? `资料已更新（来源：${srcName}；简介/职业生涯已锁定，本次未覆盖）`
+          ? `资料已更新（来源：${srcName}；已锁定，本次未覆盖任何字段）`
           : `资料已更新（来源：${srcName}）`)
         // 重新加载演员数据
         const a = await api.actors.get(actor.id)
@@ -350,21 +398,50 @@ export function ActorDetail() {
               <Icon.refresh />{refreshing ? '抓取中…' : '刷新资料'}
             </button>
             <button className={`btn btn--sm ${actor.profile_locked ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleLock}
-              title={actor.profile_locked ? '已锁定：刷新资料/自动任务不会覆盖简介与职业生涯。点击解锁' : '点击锁定：防止刷新资料/自动任务覆盖手动编辑的简介与职业生涯'}>
+              title={actor.profile_locked ? '已锁定：刷新资料/自动任务不会覆盖任何资料字段。点击解锁' : '点击锁定：防止刷新资料/自动任务覆盖手动编辑的资料（身高/罩杯/简介等全部字段）'}>
               {actor.profile_locked ? '🔒 已锁定' : '🔓 锁定保护'}
             </button>
+            {metaEditing ? (
+              <>
+                <button className="btn btn--gold" onClick={saveMeta} disabled={metaSaving}>
+                  {metaSaving ? '保存中…' : '保存资料'}
+                </button>
+                <button className="btn btn--ghost" onClick={() => setMetaEditing(false)}>取消</button>
+              </>
+            ) : (
+              <button className="btn btn--ghost" onClick={openMetaEdit}><Icon.edit />编辑资料</button>
+            )}
           </div>
 
-          {/* 资料元数据 */}
-          {metaVisible.length > 0 && (
-            <div className="detail-meta-grid">
-              {metaVisible.map(([k, v]) => (
-                <div className="dm-item" key={k}>
-                  <div className="dm-label">{k}</div>
-                  <div className="dm-val">{v}</div>
+          {/* 资料元数据（编辑模式：全部字段变为输入框，可修改/添加） */}
+          {metaEditing ? (
+            <div className="detail-meta-grid" style={{ marginBottom: 16 }}>
+              {EDIT_FIELDS.map((f) => (
+                <div className="dm-item" key={f.key}>
+                  <div className="dm-label">{f.label}</div>
+                  <input
+                    value={metaDraft[f.key] || ''}
+                    onChange={(e) => setMetaDraft((p) => ({ ...p, [f.key]: e.target.value }))}
+                    placeholder="未填写"
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                      color: 'var(--t-display)', fontSize: 13, fontWeight: 500, fontFamily: 'var(--ff-sans)',
+                      borderBottom: '1px dashed var(--line-soft)', padding: '2px 0',
+                    }} />
                 </div>
               ))}
             </div>
+          ) : (
+            metaVisible.length > 0 && (
+              <div className="detail-meta-grid">
+                {metaVisible.map(([k, v]) => (
+                  <div className="dm-item" key={k}>
+                    <div className="dm-label">{k}</div>
+                    <div className="dm-val">{v}</div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
           {/* 标签（minnano タグ）+ 社交链接 */}
