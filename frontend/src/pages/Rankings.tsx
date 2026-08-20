@@ -101,6 +101,16 @@ export function Rankings() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [refreshing, setRefreshing] = useState<RankType | null>(null)  // 正在按序刷新的榜单
   const [batchBusy, setBatchBusy] = useState(false)
+  /** 每个榜单等待爬取完成的时长上限（分钟），前端手动配置，保存在本机浏览器 */
+  const [waitLimitMin, setWaitLimitMin] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('rankWaitLimitMin') ?? '', 10)
+    return Number.isFinite(v) && v > 0 ? v : 60
+  })
+  const setWaitLimit = (v: number) => {
+    const n = Math.max(1, Math.min(2880, Math.round(v)))  // 1 分钟 ~ 48 小时
+    setWaitLimitMin(n)
+    localStorage.setItem('rankWaitLimitMin', String(n))
+  }
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
@@ -147,14 +157,18 @@ export function Rankings() {
   }, [inLib])
 
   /** 等待 scraper 全局锁空闲（后端同一时刻只允许一个爬取进程）。
-   *  每次触发后都要等它爬完再触发下一个，保证日→周→月→演员严格按序。 */
+   *  每次触发后都要等它爬完再触发下一个，保证日→周→月→演员严格按序。
+   *  等待上限由前端配置（waitLimitMin 分钟），超时返回 false。 */
   const waitIdle = async () => {
-    for (let i = 0; i < 240; i++) {  // 240 × 3s = 12 分钟上限
+    // 上限越长轮询越疏（3s~30s 自适应），避免长时间等待时轰炸状态接口
+    const intervalMs = Math.max(3000, Math.min(30000, waitLimitMin * 100))
+    const polls = Math.ceil((waitLimitMin * 60_000) / intervalMs)
+    for (let i = 0; i < polls; i++) {
       try {
         const s = await api.crawl.status()
         if (!s.running) return true
       } catch { /* 状态查询失败不中断，继续等 */ }
-      await sleep(3000)
+      await sleep(intervalMs)
     }
     return false
   }
@@ -165,16 +179,16 @@ export function Rankings() {
     try {
       for (const t of REFRESH_ORDER) {
         setRefreshing(t)
-        if (!(await waitIdle())) { toastErr('已有爬取任务长时间未结束，刷新中止'); break }
+        if (!(await waitIdle())) { toastErr(`等待其他爬取任务超过 ${waitLimitMin} 分钟，刷新中止`); break }
         try {
           await api.rankings.crawl(t)
         } catch (e) {
           // 409 锁竞争：等空闲后重试一次
           if (!String((e as Error).message).includes('已有爬取任务')) throw e
-          if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 刷新超时，刷新中止`); break }
+          if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 等待超过 ${waitLimitMin} 分钟，刷新中止`); break }
           await api.rankings.crawl(t)
         }
-        if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 爬取超时，刷新中止`); break }
+        if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 等待超过 ${waitLimitMin} 分钟，刷新中止`); break }
       }
       toastOk('四榜已按序刷新完成（日榜→周榜→月榜→演员月榜）')
       api.rankingsNew.dates().then(setLatest).catch(() => {})
@@ -291,6 +305,15 @@ export function Rankings() {
     <div className="page">
       <PageHead eyebrow="Rankings" title={<>排<em>行榜</em></>}
         sub="今夜最热的她们，已经按心动值排好了队。">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+          title="每个榜单等待爬取完成的时长上限，超时则跳过并中止本次刷新（仅保存在本机浏览器）">
+          每榜等待上限
+          <input className="input" type="number" min={1} max={2880} value={waitLimitMin}
+            style={{ width: 68, padding: '6px 8px', textAlign: 'center' }}
+            onChange={(e) => setWaitLimit(+e.target.value)}
+            onBlur={(e) => { if (!e.target.value) setWaitLimit(60) }} />
+          分钟
+        </label>
         <button className="btn btn--ghost btn--sm" onClick={refreshAll} disabled={!!refreshing}>
           <Icon.refresh />{refreshing ? `刷新中 · ${refreshingLabel}…` : '刷新排行'}
         </button>
