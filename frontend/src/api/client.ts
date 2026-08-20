@@ -183,8 +183,8 @@ export const api = {
       ).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),
-    crawlWorks: (actorId: number) =>
-      http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`).then((r) => r.data),
+    crawlWorks: (actorId: number, maxCoStar = 0) =>
+      http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`, { max_co_star: maxCoStar }).then((r) => r.data),
     refreshProfile: (actorId: number) =>
       http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string; locked_skipped?: string[] }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
     profileQueueStatus: () =>
@@ -325,8 +325,8 @@ export const api = {
     delete: (id: number) => http.delete<{ ok: boolean }>(`/api/subscriptions/${id}`).then((r) => r.data),
     toggle: (id: number) => http.post<{ ok: boolean; enabled: boolean }>(`/api/subscriptions/${id}/toggle`).then((r) => r.data),
     /** 启动「全部补齐作品」后台任务（串行爬取所有订阅演员的作品） */
-    fillAllWorks: (waitLimitMin: number) =>
-      http.post<{ ok: boolean; message: string }>('/api/subscriptions/fill-all-works', { wait_limit_min: waitLimitMin }).then((r) => r.data),
+    fillAllWorks: (waitLimitMin: number, maxCoStar = 0) =>
+      http.post<{ ok: boolean; message: string }>('/api/subscriptions/fill-all-works', { wait_limit_min: waitLimitMin, max_co_star: maxCoStar }).then((r) => r.data),
     /** 查询「全部补齐作品」任务进度 */
     fillWorksStatus: () =>
       http.get<{ running: boolean; total: number; idx: number; current_actor_id: number | null; current_name: string | null; done: number; skipped: number; failed: number; wait_limit_min: number; last_summary: string | null }>('/api/subscriptions/fill-works-status').then((r) => r.data),

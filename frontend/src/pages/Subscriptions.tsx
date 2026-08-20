@@ -58,6 +58,16 @@ export function Subscriptions() {
     setWaitLimitMin(n)
     localStorage.setItem('subCrawlWaitLimitMin', String(n))
   }
+  // 最大共演人数限制（与演员详情页共用同一配置）
+  const [maxCoStar, setMaxCoStar] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('maxCoStarLimit') ?? '', 10)
+    return Number.isFinite(v) && v > 0 ? v : 0
+  })
+  const setMaxCoStarVal = (v: number) => {
+    const n = Math.max(0, Math.min(99, Math.round(v)))
+    setMaxCoStar(n)
+    localStorage.setItem('maxCoStarLimit', String(n))
+  }
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -138,8 +148,8 @@ export function Subscriptions() {
   const fillAllWorks = async () => {
     if (filling) return
     try {
-      await api.subscriptions.fillAllWorks(waitLimitMin)
-      toastOk('已启动全部补齐作品（后台串行执行，切走页面不中断）')
+      await api.subscriptions.fillAllWorks(waitLimitMin, maxCoStar)
+      toastOk(maxCoStar > 0 ? `已启动全部补齐作品（最大共演 ${maxCoStar} 人，后台串行执行）` : '已启动全部补齐作品（后台串行执行，切走页面不中断）')
       setFillStatus({ running: true, total: 0, idx: 0, current_actor_id: null, current_name: null, done: 0, skipped: 0, failed: 0, wait_limit_min: waitLimitMin, last_summary: null })
       startPolling()
     } catch (e) {
@@ -190,6 +200,14 @@ export function Subscriptions() {
             onChange={(e) => setWaitLimit(+e.target.value)}
             onBlur={(e) => { if (!e.target.value) setWaitLimit(60) }} />
           分钟
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+          title="最大共演人数：作品女演员数超过此值则跳过，0=不限（与演员详情页共用配置）">
+          最大共演
+          <input className="input" type="number" min={0} max={99} value={maxCoStar}
+            style={{ width: 48, padding: '5px 8px', textAlign: 'center' }}
+            onChange={(e) => setMaxCoStarVal(+e.target.value)}
+            onBlur={(e) => { if (!e.target.value) setMaxCoStarVal(0) }} />
         </label>
         <button className="btn btn--gold btn--sm" onClick={fillAllWorks} disabled={filling}
           title="后台逐位为所有订阅演员补齐作品（串行执行，切走页面/刷新不中断）">

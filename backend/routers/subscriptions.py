@@ -16,15 +16,16 @@ VALID_TYPES = {"ranking", "actor", "composite"}
 
 
 class FillAllWorksRequest(BaseModel):
-    """全部补齐作品：每演员等待上限（分钟，可选）。"""
+    """全部补齐作品：每演员等待上限（分钟，可选）＋最大共演人数限制（可选，0=不限）。"""
     wait_limit_min: int | None = None
+    max_co_star: int | None = None
 
 
 @router.post("/fill-all-works")
 def start_fill_all_works(payload: FillAllWorksRequest, _user: CurrentUser):
     """启动「全部补齐作品」后台任务（串行爬取所有订阅演员的作品）。"""
     from services import actor_works_batch
-    ok, msg = actor_works_batch.start(payload.wait_limit_min or 60)
+    ok, msg = actor_works_batch.start(payload.wait_limit_min or 60, payload.max_co_star or 0)
     if not ok:
         raise HTTPException(status_code=409, detail=msg)
     return {"ok": True, "message": msg}

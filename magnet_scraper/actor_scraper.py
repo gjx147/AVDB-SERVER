@@ -225,21 +225,23 @@ class ActorScraper:
             logger.error(f"搜索演员失败: {e}")
             return []
 
-    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None) -> dict:
+    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0) -> dict:
         """完整爬取演员信息 + 作品列表。
 
         1. 爬取演员详情页（姓名/头像/身高/罩杯等）
-        2. 翻页爬取演员作品列表
+        2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过）
         3. 入库演员 + 创建 pending task
 
         actor_id：若调用方已知目标演员（如演员库"补齐作品"），直接按 id 更新
         元数据并关联作品，不依赖名字匹配——杜绝因名字差异/污染而新建重复演员。
+        max_co_star：最大共演人数限制（0=不限）。
 
         返回 {actor, actor_id, movie_count, tasks_added}
         """
         self._ensure_browser()
 
-        logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else ""))
+        logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else "")
+                    + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else ""))
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
@@ -249,7 +251,7 @@ class ActorScraper:
 
         # 1. 爬取演员信息 + 2. 作品列表
         info = self.crawl_actor_info(actor_url)
-        movies = self.crawl_actor_movies(actor_url, max_pages=50)
+        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star)
         logger.info(f"演员作品列表: {len(movies)} 部")
 
         # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
@@ -393,8 +395,12 @@ class ActorScraper:
 
         return info
 
-    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50) -> list:
-        """翻页爬取演员作品列表，返回详情页 URL 列表。"""
+    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0) -> list:
+        """翻页爬取演员作品列表，返回详情页 URL 列表。
+
+        max_co_star > 0 时开启共演人数限制：逐部访问作品详情页统计女演员数，
+        超过上限的作品跳过（大共演/総集編不拉进库）。
+        """
         all_urls = []
         page_num = 1
         base_url = actor_url.rstrip("/")
@@ -445,4 +451,30 @@ class ActorScraper:
                 break
 
         # 全局去重
-        return list(dict.fromkeys(all_urls))
+        all_urls = list(dict.fromkeys(all_urls))
+
+        # 共演人数限制：逐部访问详情页统计女演员数，超过上限跳过
+        if max_co_star > 0 and all_urls:
+            logger.info(f"开始共演人数核对（上限 {max_co_star} 人），共 {len(all_urls)} 部")
+            kept: list[str] = []
+            skipped = 0
+            for i, movie_url in enumerate(all_urls, start=1):
+                try:
+                    if not self._goto_with_retry(movie_url):
+                        logger.warning(f"详情页访问失败，保留作品: {movie_url}")
+                        kept.append(movie_url)
+                        continue
+                    pairs = self.scraper._extract_actors_with_gender()
+                    count = sum(1 for _, g in pairs if g == "female")
+                    if count and count > max_co_star:
+                        skipped += 1
+                        logger.info(f"跳过共演作品（{count} 人 > {max_co_star}）[{i}/{len(all_urls)}]: {movie_url}")
+                        continue
+                    kept.append(movie_url)
+                    time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
+                except Exception as e:
+                    logger.warning(f"共演人数核对失败，保留作品: {movie_url} ({e})")
+                    kept.append(movie_url)
+            logger.info(f"共演人数核对完成: 保留 {len(kept)} 部，跳过 {skipped} 部")
+            all_urls = kept
+        return all_urls

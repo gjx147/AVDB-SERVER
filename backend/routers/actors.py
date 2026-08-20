@@ -6,6 +6,7 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 
 from deps import CurrentUser, DbSession, Pagination
@@ -220,8 +221,13 @@ def actor_movies_list(
     }
 
 
+class CrawlWorksRequest(BaseModel):
+    """补齐作品请求：最大共演人数限制（作品女演员数超过则跳过；None/0 = 不限）。"""
+    max_co_star: int | None = None
+
+
 @router.post("/{actor_id}/crawl-works")
-def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
+def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSession, _user: CurrentUser):
     """一键补齐演员作品：读 actor.source_url → 触发 crawl-actor 子进程。"""
     actor = db.get(Actor, actor_id)
     if not actor:
@@ -232,10 +238,11 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
         url = actor.note[len("source_url: "):]
     if not url:
         raise HTTPException(status_code=400, detail="该演员无 JavDB URL，需先在演员库通过 URL 添加")
+    max_co_star = (body.max_co_star if body else None)
     # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
     # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
-    return start_actor_crawl(url, actor_id=actor.id)
+    return start_actor_crawl(url, actor_id=actor.id, max_co_star=max_co_star)
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──

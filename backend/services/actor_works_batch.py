@@ -25,6 +25,7 @@ _state = {
     "skipped": 0,
     "failed": 0,
     "wait_limit_min": 60,
+    "max_co_star": 0,
     "last_summary": None,
 }
 _lock = threading.Lock()
@@ -37,7 +38,7 @@ def status() -> dict:
         return dict(_state)
 
 
-def start(wait_limit_min: int = 60) -> tuple[bool, str]:
+def start(wait_limit_min: int = 60, max_co_star: int = 0) -> tuple[bool, str]:
     """启动后台任务。已在运行返回 (False, 原因)。"""
     global _thread
     with _lock:
@@ -49,6 +50,7 @@ def start(wait_limit_min: int = 60) -> tuple[bool, str]:
             "current_actor_id": None, "current_name": None,
             "done": 0, "skipped": 0, "failed": 0,
             "wait_limit_min": max(1, min(2880, int(wait_limit_min or 60))),
+            "max_co_star": max(0, int(max_co_star or 0)),
             "last_summary": None,
         })
     _thread = threading.Thread(target=_run, daemon=True)
@@ -96,7 +98,9 @@ def _run() -> None:
     with _lock:
         _state["total"] = len(sub_list)
     wait_min = _state["wait_limit_min"]
-    logger.info("全部补齐作品开始: %d 位演员（每演员等待上限 %d 分钟）", len(sub_list), wait_min)
+    max_co = _state["max_co_star"]
+    logger.info("全部补齐作品开始: %d 位演员（每演员等待上限 %d 分钟，最大共演 %s）",
+                len(sub_list), wait_min, f"{max_co} 人" if max_co > 0 else "不限")
 
     for i, (actor_id, name) in enumerate(sub_list, start=1):
         with _lock:
@@ -127,12 +131,12 @@ def _run() -> None:
         # ③ 触发爬取（409 锁竞争等空闲重试一次）
         started = False
         try:
-            start_actor_crawl(url, actor_id=actor_id)
+            start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
             started = True
         except Exception as e:
             if "已有爬取任务" in str(e) and _wait_lock_idle(wait_min):
                 try:
-                    start_actor_crawl(url, actor_id=actor_id)
+                    start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
                     started = True
                 except Exception as e2:
                     logger.warning("补齐 %s 触发失败: %s", name, e2)

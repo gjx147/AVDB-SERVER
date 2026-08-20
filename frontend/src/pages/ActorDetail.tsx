@@ -95,8 +95,8 @@ export function ActorDetail() {
     if (!actor) return
     if (!actor.source_url) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
     try {
-      await api.actors.crawlWorks(actor.id)
-      toastOk(`已开始补齐 ${actor.name} 的作品`)
+      await api.actors.crawlWorks(actor.id, maxCoStar)
+      toastOk(maxCoStar > 0 ? `已开始补齐 ${actor.name} 的作品（最大共演 ${maxCoStar} 人）` : `已开始补齐 ${actor.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   // 关注 = 创建 actor 订阅（定时检测+通知）；已关注则取消
@@ -174,6 +174,16 @@ export function ActorDetail() {
   const [metaEditing, setMetaEditing] = useState(false)
   const [metaDraft, setMetaDraft] = useState<Record<string, string>>({})
   const [metaSaving, setMetaSaving] = useState(false)
+  // 最大共演人数限制（补齐作品时作品女演员数超过则跳过；0=不限）
+  const [maxCoStar, setMaxCoStar] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('maxCoStarLimit') ?? '', 10)
+    return Number.isFinite(v) && v > 0 ? v : 0
+  })
+  const setMaxCoStarVal = (v: number) => {
+    const n = Math.max(0, Math.min(99, Math.round(v)))
+    setMaxCoStar(n)
+    localStorage.setItem('maxCoStarLimit', String(n))
+  }
   const openAvatarPanel = () => {
     if (!actor) return
     if (avPanelOpen) { setAvPanelOpen(false); return }
@@ -386,6 +396,14 @@ export function ActorDetail() {
               title={actor.source_url ? '爬取该演员全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐作品
             </button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+              title="最大共演人数：作品女演员数超过此值则跳过，0=不限（共演人数=1部作品的女演员数量，仅保存在本机浏览器）">
+              最大共演
+              <input className="input" type="number" min={0} max={99} value={maxCoStar}
+                onChange={(e) => setMaxCoStarVal(+e.target.value)}
+                onBlur={(e) => { if (!e.target.value) setMaxCoStarVal(0) }}
+                style={{ width: 48, padding: '5px 6px', textAlign: 'center' }} />
+            </label>
             <button className={`btn ${autoAdd ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleAutoAdd} disabled={!subscribed}
               title={!subscribed ? '请先关注' : (autoAdd ? '点击关闭自动入库' : '点击开启：有新作自动入库+下载')}>
               自动入库{autoAdd ? ' ✓' : ''}
