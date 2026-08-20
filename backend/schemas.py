@@ -102,6 +102,16 @@ class ActorOut(BaseModel):
     cup: Optional[str] = None
     movie_count: Optional[int] = None
     is_blacklisted: bool = False
+    # 三源资料聚合字段
+    blood_type: Optional[str] = None
+    zodiac: Optional[str] = None
+    birthplace: Optional[str] = None
+    nationality: Optional[str] = None
+    active_years: Optional[str] = None
+    bio: Optional[str] = None
+    timeline: Optional[str] = None
+    alias: Optional[str] = None
+    profile_fetched: bool = False
 
 
 class ActorListResponse(BaseModel):

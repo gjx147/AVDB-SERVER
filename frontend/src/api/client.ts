@@ -164,6 +164,10 @@ export const api = {
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),
     crawlWorks: (actorId: number) =>
       http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`).then((r) => r.data),
+    refreshProfile: (actorId: number) =>
+      http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
+    profileQueueStatus: () =>
+      http.get<{ pending: number; fetched: number; failed: number }>('/api/actors/profile-queue/status').then((r) => r.data),
     crawlSearch: (actor_name: string) =>
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
   },

@@ -104,6 +104,16 @@ export interface Actor {
   movie_count: number
   local_movie_count: number
   created_at: string | null
+  // 三源资料聚合字段（中文维基/minnano-av/laoshi.ink）
+  blood_type: string | null
+  zodiac: string | null
+  birthplace: string | null
+  nationality: string | null
+  active_years: string | null
+  bio: string | null
+  timeline: string | null
+  alias: string | null
+  profile_fetched: boolean
 }
 
 // 订阅（关注 = sub_type='actor' 的订阅）

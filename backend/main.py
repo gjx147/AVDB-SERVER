@@ -109,6 +109,10 @@ async def lifespan(app: FastAPI):
         # 注册排行榜自动爬取（每天定点 5:00；从 DB settings 读 ranking_auto_crawl，日→月→周→演员月榜串行）
         from services.ranking_auto_crawl import register_job as register_ranking
         register_ranking()
+        # 注册演员资料自动同步（三源聚合：中文维基→minnano→laoshi，每 20min 一轮 5 个）
+        if os.environ.get("ACTOR_PROFILE_SYNC_ENABLED", "true").lower() == "true":
+            from services.actor_profile_sync import register_job as register_profile_sync
+            register_profile_sync(interval_min=int(os.environ.get("ACTOR_PROFILE_INTERVAL_MIN", "20")))
         logger.info("调度任务注册完成")
     except Exception as e:
         logger.warning(f"调度中心启动失败: {e}")

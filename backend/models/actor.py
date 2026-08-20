@@ -47,6 +47,18 @@ class Actor(Base):
     source_url: Mapped[str | None] = mapped_column(String(500))  # JavDB 演员页 URL（用于一键补齐作品）
     note: Mapped[str | None] = mapped_column(Text)
 
+    # ── 三源资料聚合字段（中文维基/minnano-av/laoshi.ink）──
+    blood_type: Mapped[str | None] = mapped_column(String(10))
+    zodiac: Mapped[str | None] = mapped_column(String(20))
+    birthplace: Mapped[str | None] = mapped_column(String(100))
+    nationality: Mapped[str | None] = mapped_column(String(50))
+    active_years: Mapped[str | None] = mapped_column(String(50))
+    bio: Mapped[str | None] = mapped_column(Text)
+    timeline: Mapped[str | None] = mapped_column(Text)
+    alias: Mapped[str | None] = mapped_column(String(200))
+    profile_fetched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    profile_fetch_failed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()

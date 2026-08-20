@@ -1,0 +1,74 @@
+"""演员资料自动同步 —— 定时任务：扫 profile_fetched=0 的演员批量抓取三源资料。
+
+注册于 main.py lifespan（与订阅巡检同模式）。每轮限 BATCH_SIZE 个、
+演员间 5-10s 限速，防 hammer 三源；失败标记跳过避免反复重试。
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+import time
+
+logger = logging.getLogger("avdb.actor_profile_sync")
+
+BATCH_SIZE = 5
+
+_FIELDS = (
+    "blood_type", "zodiac", "birthplace", "nationality", "active_years",
+    "bio", "timeline", "alias", "birth_date", "height", "cup", "measurements", "debut_date",
+)
+
+
+def run_cycle() -> dict:
+    """抓取一批待处理演员（最多 BATCH_SIZE 个）。返回统计。"""
+    from database import SessionLocal
+    from models import Actor
+    from sqlalchemy import select
+    from services.actor_profile import fetch_profile
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            select(Actor).where(
+                Actor.profile_fetched.is_(False),
+                Actor.profile_fetch_failed.is_(False),
+            ).order_by(Actor.id).limit(BATCH_SIZE)
+        ).scalars().all()
+        if not rows:
+            return {"fetched": 0, "skipped": 0}
+        done = skipped = 0
+        for actor in rows:
+            try:
+                result = fetch_profile(actor.name, actor.name_en)
+                if result.get("ok"):
+                    for k, v in (result.get("fields") or {}).items():
+                        if k in _FIELDS and v:
+                            setattr(actor, k, v)
+                    actor.profile_fetched = True
+                    actor.profile_fetch_failed = False
+                    db.commit()
+                    done += 1
+                    logger.info(f"演员资料已抓取 {actor.name}（来源 {result.get('source')}）")
+                else:
+                    actor.profile_fetch_failed = True
+                    db.commit()
+                    skipped += 1
+                    logger.info(f"演员资料三源未命中: {actor.name}")
+            except Exception as e:
+                db.rollback()
+                skipped += 1
+                logger.warning(f"演员资料抓取异常 {actor.name}: {e}")
+            # 限速：演员间 5-10 秒
+            if rows.index(actor) < len(rows) - 1:
+                time.sleep(random.uniform(5, 10))
+        return {"fetched": done, "skipped": skipped}
+    finally:
+        db.close()
+
+
+def register_job(interval_min: int = 20) -> None:
+    """注册到 APScheduler（main.py lifespan 调用）。"""
+    from services.scheduler import add_interval_job
+    add_interval_job(run_cycle, "actor-profile-sync", seconds=interval_min * 60)
+    logger.info("演员资料自动同步已注册: 每 %dmin（每轮 %d 个）", interval_min, BATCH_SIZE)

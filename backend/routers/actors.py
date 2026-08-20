@@ -214,3 +214,34 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
     # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
     return start_actor_crawl(url, actor_id=actor.id)
+
+
+# ── 三源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
+
+@router.post("/{actor_id}/refresh-profile")
+def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
+    """手动触发三源资料抓取（中文维基→minnano→laoshi），成功后重置队列标记。"""
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    from services.actor_profile import fetch_profile
+    result = fetch_profile(actor.name, actor.name_en)
+    if not result.get("ok"):
+        return {"ok": False, "source": None, "message": result.get("message", "三源均未查询到")}
+    for k, v in (result.get("fields") or {}).items():
+        if hasattr(actor, k) and v:
+            setattr(actor, k, v)
+    actor.profile_fetched = True
+    actor.profile_fetch_failed = False
+    db.commit()
+    return {"ok": True, "source": result.get("source"), "fields": result.get("fields")}
+
+
+@router.get("/profile-queue/status")
+def profile_queue_status(db: DbSession, _user: CurrentUser):
+    """资料自动抓取队列状态（未抓/已抓/失败计数）。"""
+    from sqlalchemy import func as sa_func
+    pending = db.execute(sa_func.count(Actor.id).filter(Actor.profile_fetched.is_(False), Actor.profile_fetch_failed.is_(False))).scalar_one()
+    done = db.execute(sa_func.count(Actor.id).filter(Actor.profile_fetched.is_(True))).scalar_one()
+    failed = db.execute(sa_func.count(Actor.id).filter(Actor.profile_fetch_failed.is_(True))).scalar_one()
+    return {"pending": pending, "fetched": done, "failed": failed}

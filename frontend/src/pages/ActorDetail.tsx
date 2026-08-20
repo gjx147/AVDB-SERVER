@@ -19,6 +19,7 @@ export function ActorDetail() {
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
@@ -99,10 +100,36 @@ export function ActorDetail() {
   const meta: [string, string | null][] = [
     ['出生日期', actor.birth_date],
     ['身高', actor.height],
+    ['三围', actor.measurements],
     ['罩杯', actor.cup],
+    ['血型', actor.blood_type],
+    ['星座', actor.zodiac],
+    ['出身地', actor.birthplace],
+    ['国籍', actor.nationality],
+    ['出道', actor.debut_date],
+    ['活跃年限', actor.active_years],
+    ['别名', actor.alias],
     ['作品数', actor.movie_count != null ? String(actor.movie_count) : null],
   ]
   const metaVisible = meta.filter(([, v]) => v)
+
+  const refreshProfile = async () => {
+    if (!actor) return
+    setRefreshing(true)
+    try {
+      const r = await api.actors.refreshProfile(actor.id)
+      if (r.ok) {
+        const srcName = r.source === 'wikipedia' ? '中文维基' : r.source === 'minnano' ? 'minnano-av' : r.source === 'laoshi' ? '老师图鉴' : r.source
+        toastOk(`资料已更新（来源：${srcName}）`)
+        // 重新加载演员数据
+        const a = await api.actors.get(actor.id)
+        setActor(a)
+      } else {
+        toastErr(r.message || '三源均未查询到该演员资料')
+      }
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setRefreshing(false) }
+  }
 
   return (
     <div className="page">
@@ -144,21 +171,45 @@ export function ActorDetail() {
             <button className="btn btn--ghost" onClick={() => nav(`/library?q=${encodeURIComponent(actor.name)}`)}>
               <Icon.library />查看作品库
             </button>
+            <button className="btn btn--ghost" onClick={refreshProfile} disabled={refreshing}
+              title="从中文维基→minnano-av→老师图鉴三级回退抓取资料（自动任务也会定期补齐）">
+              <Icon.refresh />{refreshing ? '抓取中…' : '刷新资料'}
+            </button>
           </div>
 
           {/* 资料元数据 */}
           {metaVisible.length > 0 && (
             <div className="detail-meta-grid">
               {metaVisible.map(([k, v]) => (
-                <div key={k}>
-                  <div style={{ fontSize: 10, color: 'var(--t-faint)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</div>
-                  <div style={{ fontSize: 14, color: 'var(--t-body)', marginTop: 2 }}>{v}</div>
+                <div className="dm-item" key={k}>
+                  <div className="dm-label">{k}</div>
+                  <div className="dm-val">{v}</div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* 人物简介 + 职业时间线（三源聚合内容） */}
+      {(actor.bio || actor.timeline) && (
+        <div className="detail-main" style={{ marginBottom: 28 }}>
+          {actor.bio && (
+            <>
+              <div className="dm-label" style={{ marginBottom: 8 }}>人物简介</div>
+              <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-body)', marginBottom: 18, whiteSpace: 'pre-wrap' }}>{actor.bio}</p>
+            </>
+          )}
+          {actor.timeline && (
+            <>
+              <div className="dm-label" style={{ marginBottom: 8 }}>职业时间线</div>
+              <div style={{ fontSize: 12, lineHeight: 2, color: 'var(--t-mute)', whiteSpace: 'pre-wrap', fontFamily: 'var(--ff-mono)' }}>
+                {actor.timeline}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 作品列表 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
