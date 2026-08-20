@@ -137,6 +137,7 @@ class ActorProfileUpdate(BaseModel):
     bio: Optional[str] = None
     timeline: Optional[str] = None
     profile_locked: Optional[bool] = None
+    avatar_url: Optional[str] = None
 
 
 class ActorDetailOut(ActorOut):

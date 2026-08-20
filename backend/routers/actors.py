@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
@@ -238,6 +239,42 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
+
+@router.get("/{actor_id}/avatar-options")
+def avatar_options(actor_id: int, db: DbSession, _user: CurrentUser):
+    """演员头像手动更换候选：laoshi（高清）/ minnano-av / JavDB 三选一。
+
+    laoshi 走本地磁盘缓存即时返回；minnano 实时搜索（可能稍慢）；
+    JavDB 从 source_url 派生头像地址（c0.jdbstatic.com/avatars/xx/Hash.jpg），零网络。
+    """
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    from services.actor_profile import fetch_laoshi, fetch_minnano
+
+    opts: list[dict] = []
+
+    def add(key: str, label: str, url: str | None):
+        if url and all(o["url"] != url for o in opts):
+            opts.append({"key": key, "label": label, "url": url})
+
+    # laoshi：磁盘缓存（零网络，秒回）
+    la = fetch_laoshi(actor.name)
+    if not la and actor.name_en:
+        la = fetch_laoshi(actor.name_en)
+    add("laoshi", "老师图鉴 · 高清", (la or {}).get("avatar_url"))
+    # minnano-av：实时搜索（带重试/直连兜底）
+    mn = fetch_minnano(actor.name)
+    if not mn and actor.name_en:
+        mn = fetch_minnano(actor.name_en)
+    add("minnano", "minnano-av", mn.get("avatar_url"))
+    # JavDB：由 source_url 的 /actors/Hash 派生（与封面 c0.jdbstatic 同款路径）
+    m = re.search(r"/actors/([A-Za-z0-9]+)", actor.source_url or "")
+    if m:
+        h = m.group(1)
+        add("javdb", "JavDB", f"https://c0.jdbstatic.com/avatars/{h[:2].lower()}/{h}.jpg")
+    return {"current": actor.avatar_url, "options": opts}
+
 
 @router.post("/{actor_id}/refresh-profile")
 def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):

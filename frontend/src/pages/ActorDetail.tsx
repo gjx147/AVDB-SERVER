@@ -145,6 +145,34 @@ export function ActorDetail() {
     }
   }
 
+  // ── 头像手动更换（laoshi / minnano-av / JavDB 三选一）──
+  const [avPanelOpen, setAvPanelOpen] = useState(false)
+  const [avOptsLoading, setAvOptsLoading] = useState(false)
+  const [avatarOpts, setAvatarOpts] = useState<{ current: string | null; options: { key: string; label: string; url: string }[] } | null>(null)
+  const openAvatarPanel = () => {
+    if (!actor) return
+    if (avPanelOpen) { setAvPanelOpen(false); return }
+    setAvPanelOpen(true)
+    if (avatarOpts === null && !avOptsLoading) {
+      setAvOptsLoading(true)
+      api.actors.avatarOptions(actor.id).then((d) => setAvatarOpts(d))
+        .catch((e) => toastErr(String((e as Error).message)))
+        .finally(() => setAvOptsLoading(false))
+    }
+  }
+  const setAvatar = async (url: string) => {
+    if (!actor) return
+    try {
+      await api.actors.update(actor.id, { avatar_url: url })
+      toastOk('头像已更换')
+      setAvPanelOpen(false)
+      setAvatarOpts(null)
+      setActor(await api.actors.get(actor.id))
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    }
+  }
+
   // ── 作品列表多选批量操作 ──
   const toggleSel = (id: number) => {
     setSelected((prev) => {
@@ -245,16 +273,55 @@ export function ActorDetail() {
 
       {/* 头部：头像 + 信息 */}
       <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 28, marginBottom: 32, alignItems: 'start' }}>
-        <div className="actor-avatar-zoom" style={{
-          width: 160, height: 160, borderRadius: 'var(--r-md)', overflow: 'hidden', flex: 'none',
-          background: 'var(--bg-page)', border: '1px solid var(--line-hair)',
-        }}>
-          {actor.avatar_url ? (
-            <img src={actor.avatar_url} alt={actor.name} referrerPolicy="no-referrer"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }} />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t-faint)', fontSize: 48, fontWeight: 600 }}>
-              {actor.name[0] || '?'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="actor-avatar-zoom" style={{
+            width: 160, height: 160, borderRadius: 'var(--r-md)', overflow: 'hidden', flex: 'none',
+            background: 'var(--bg-page)', border: '1px solid var(--line-hair)',
+          }}>
+            {actor.avatar_url ? (
+              <img src={actor.avatar_url} alt={actor.name} referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t-faint)', fontSize: 48, fontWeight: 600 }}>
+                {actor.name[0] || '?'}
+              </div>
+            )}
+          </div>
+          <button className="btn btn--ghost btn--sm" onClick={openAvatarPanel}
+            title="在老师图鉴（高清）/ minnano-av / JavDB 三个来源中选择头像">
+            更换头像
+          </button>
+          {avPanelOpen && (
+            <div className="card" style={{ padding: 12 }}>
+              {avOptsLoading ? (
+                <div style={{ fontSize: 12, color: 'var(--t-faint)', padding: 6 }}>正在获取候选头像…</div>
+              ) : avatarOpts && avatarOpts.options.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--t-faint)', padding: 6 }}>三源均无可用头像</div>
+              ) : (
+                (avatarOpts?.options || []).map((o) => {
+                  const isCur = avatarOpts?.current === o.url
+                  return (
+                    <div key={o.key} onClick={() => setAvatar(o.url)}
+                      style={{
+                        display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', padding: '7px 8px',
+                        borderRadius: 8, background: isCur ? 'var(--gold-wash)' : 'transparent',
+                        transition: 'background .2s',
+                      }}
+                      title={`使用 ${o.label} 头像`}>
+                      <img src={o.url} alt={o.label} referrerPolicy="no-referrer"
+                        onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                        style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', background: 'var(--bg-page)', flex: 'none' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: 'var(--t-body)' }}>{o.label}</div>
+                        <div style={{ fontSize: 10, color: isCur ? 'var(--gold)' : 'var(--t-faint)' }}>
+                          {isCur ? '✓ 当前头像' : '点击更换'}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
         </div>
