@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Optional
@@ -24,7 +25,8 @@ _TIMEOUT = 15.0
 
 # 维基信息框参数 → 目标字段（模板名 |param= 值）
 _WIKI_MAP = [
-    ("birth_date", r"出生日期\s*=\s*\{\{birth date and age\|(\d{4})\|(\d{1,2})\|(\d{1,2})"),
+    ("birth_date", r"出生日期\s*=\s*\{\{(?:birth date and age|birth date)\|(\d{4})\|(\d{1,2})\|(\d{1,2})"),
+    ("birth_date_plain", r"出生日期\s*=\s*(\d{4}年\d{1,2}月\d{1,2}日)"),
     ("height", r"身長\s*=\s*([\d.]+)"),
     ("cup", r"カップ\s*=\s*([A-Z][A-Z]?)"),
     ("blood_type", r"血液型\s*=\s*\[\[ABO式血液型\|([^\]]+)\]\]"),
@@ -78,39 +80,62 @@ def _clean_wiki(text: str) -> str:
     return t.strip()
 
 
+def _curl_json(url: str, params: dict) -> dict:
+    """用 curl 子进程获取 JSON（维基边缘按 TLS 指纹封 Python HTTP 库，curl 可过）。
+
+    返回解析后的 dict；失败返回 {}。curl 继承环境变量代理。
+    """
+    import subprocess
+    from urllib.parse import urlencode
+    try:
+        qs = urlencode(params)
+        cmd = ["curl", "-s", "--max-time", "20", "-A",
+               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+               f"{url}?{qs}"]
+        out = subprocess.run(cmd, capture_output=True, timeout=25)
+        if out.returncode != 0 or not out.stdout.strip():
+            return {}
+        return json.loads(out.stdout.decode("utf-8", "ignore"))
+    except Exception as e:
+        logger.debug(f"curl 请求失败 {url}: {e}")
+        return {}
+
+
 # ── 源 1：中文维基 ──
 def fetch_wikipedia(name: str) -> dict:
-    """中文维基：搜索 → wikitext 四层解析（信息框/导语/时间线/活跃年限）。"""
+    """中文维基：搜索 → wikitext 四层解析（信息框/导语/时间线/活跃年限）。
+
+    走 curl 子进程（维基边缘封 Python TLS 指纹，curl 实测可过）。
+    """
     fields: dict = {}
     try:
-        with _client() as c:
-            r = c.get("https://zh.wikipedia.org/w/api.php", params={
-                "action": "query", "list": "search", "srsearch": name,
-                "format": "json", "srlimit": 3,
-            })
-            hits = r.json().get("query", {}).get("search", [])
+        hits = _curl_json("https://zh.wikipedia.org/w/api.php", {
+            "action": "query", "list": "search", "srsearch": name,
+            "format": "json", "srlimit": 3,
+        }).get("query", {}).get("search", [])
         if not hits:
             return fields
         # 标题包含匹配校验（防同名不同人）
         title = hits[0]["title"]
         if name not in title and title not in name:
             return fields
-        with _client() as c:
-            r = c.get("https://zh.wikipedia.org/w/api.php", params={
-                "action": "parse", "page": title, "prop": "wikitext",
-                "format": "json", "section": 0,
-            })
-            wt = r.json().get("parse", {}).get("wikitext", {}).get("*", "")
+        wt = _curl_json("https://zh.wikipedia.org/w/api.php", {
+            "action": "parse", "page": title, "prop": "wikitext",
+            "format": "json",
+        }).get("parse", {}).get("wikitext", {}).get("*", "")
         if not wt:
             return fields
         # ① 信息框参数
         for field, pattern in _WIKI_MAP:
             m = re.search(pattern, wt)
             if m:
-                val = m.group(2) if field == "birth_date" else m.group(1)
+                if field == "birth_date":
+                    val = f"{m.group(1)}年{int(m.group(2)):02d}月{int(m.group(3)):02d}日"
+                else:
+                    val = m.group(1)
                 val = _clean_wiki(val).strip(" |=")
                 if val:
-                    fields[field] = val
+                    fields["birth_date" if field == "birth_date_plain" else field] = val
         # 三围
         b, w, h = _WIKI_BUST.search(wt), _WIKI_WAIST.search(wt), _WIKI_HIP.search(wt)
         if b and w and h:
@@ -134,8 +159,13 @@ def fetch_wikipedia(name: str) -> dict:
             if len(para) > 40 and not para.startswith("=="):
                 fields["bio"] = para[:300]
                 break
-        # ③ 职业时间线：经历/経歴/生涯 章节下的年份行
-        sec = re.search(r"==+[^=]*(经历|経歴|生涯|人物|経緯)[^=]*==+(.*?)(?:==+|\Z)", wt, re.S)
+        # 出生日期兜底：正文叙述（"出生日期為1997年4月15日"）
+        if not fields.get("birth_date"):
+            m = re.search(r"出生日期[為为]\s*(\d{4})年(\d{1,2})月(\d{1,2})日", wt)
+            if m:
+                fields["birth_date"] = f"{m.group(1)}年{int(m.group(2)):02d}月{int(m.group(3)):02d}日"
+        # ③ 职业时间线：经历/簡歷/生涯 章节下的年份行
+        sec = re.search(r"==+[^=]*(经历|経歴|簡歷|简历|生涯|人物|経緯)[^=]*==+(.*?)(?:==+|\Z)", wt, re.S)
         timeline_lines: list[str] = []
         if sec:
             for line in sec.group(2).splitlines():
@@ -146,7 +176,7 @@ def fetch_wikipedia(name: str) -> dict:
             fields["timeline"] = "\n".join(timeline_lines[:30])
         # ④ 出道年份/活跃年限：active_years 提取（如 "2015年 - 2023年"）
         if fields.get("active_years"):
-            years = re.findall(r"(19|20)\d{2}", fields["active_years"])
+            years = re.findall(r"(?:19|20)\d{2}", fields["active_years"])
             if years:
                 start, end = int(years[0]), int(years[-1])
                 fields["debut_date"] = f"{start}年"
