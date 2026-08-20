@@ -1,12 +1,14 @@
-"""女优资料三源聚合器 —— 中文维基（优先）→ minnano-av → laoshi.ink。
+"""女优资料双源聚合器 —— minnano-av + laoshi.ink。
 
 全自动定时任务与手动重试共用。全部走 httpx 纯请求（无浏览器/无 CF 对抗），
 代理从 DB settings 的 http_proxy 读（与 browser_pool 同款）。
 
-回退逻辑（用户指定）：
-1. 中文维基：四维度一次拿齐（个人信息 + 简介 + 时间线 + 出道/活跃年限）
-2. minnano-av：个人信息（生日/三围/罩杯/身高/血型/星座）
-3. laoshi.ink：人物简介 / 职业时间线 / 出道年份 / 活跃年限
+稳定性设计（针对 NAS 链路的 SSL 抖动）：
+- 每次请求自动重试 3 次（换新连接），最后一次改走直连（不经代理）兜底；
+- laoshi 全量 JSON 落盘缓存（data/laoshi_jav.json），下载一次终身可用，
+  之后只在缓存超过 24h 时后台刷新，刷新失败不影响现有数据；
+- 三源回退逻辑（用户指定）：minnano-av（个人信息）→ laoshi.ink（百科维度），
+  两源都支持中文名/英文名各试一遍。
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -23,22 +27,8 @@ logger = logging.getLogger("avdb.actor_profile")
 # 各源单请求超时
 _TIMEOUT = 15.0
 
-# 维基信息框参数 → 目标字段（模板名 |param= 值）
-_WIKI_MAP = [
-    ("birth_date", r"出生日期\s*=\s*\{\{(?:birth date and age|birth date)\|(\d{4})\|(\d{1,2})\|(\d{1,2})"),
-    ("birth_date_plain", r"出生日期\s*=\s*(\d{4}年\d{1,2}月\d{1,2}日)"),
-    ("height", r"身長\s*=\s*([\d.]+)"),
-    ("cup", r"カップ\s*=\s*([A-Z][A-Z]?)"),
-    ("blood_type", r"血液型\s*=\s*\[\[ABO式血液型\|([^\]]+)\]\]"),
-    ("birthplace", r"出身地\s*=\s*([^\n|]+)"),
-    ("active_years", r"AV出演期間\s*=\s*([^\n|]+)"),
-    ("alias", r"别名\s*=\s*([^\n<|]+)"),
-    ("nationality", r"国籍\s*=\s*([^\n|]+)"),
-]
-# 三围：三个独立参数
-_WIKI_BUST = re.compile(r"バスト\s*=\s*([\d.]+)")
-_WIKI_WAIST = re.compile(r"ウエスト\s*=\s*([\d.]+)")
-_WIKI_HIP = re.compile(r"ヒップ\s*=\s*([\d.]+)")
+_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
 
 def _get_proxy() -> Optional[str]:
@@ -59,138 +49,27 @@ def _get_proxy() -> Optional[str]:
     return (os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or "").strip() or None
 
 
-def _client() -> httpx.Client:
-    proxy = _get_proxy()
-    return httpx.Client(timeout=_TIMEOUT, follow_redirects=True,
-                        proxy=proxy if proxy else None,
-                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"})
+def _get_retry(url: str, params: dict | None = None, tries: int = 3) -> httpx.Response:
+    """带重试的 GET：SSL/TCP 被掐断（SSL EOF、连接重置等）时换全新连接重试，
+    最后一次改走直连（不经代理）兜底——代理隧道抖动是 NAS 上最常见的失败原因。"""
+    last_err: Exception | None = None
+    for i in range(tries):
+        use_proxy = i < tries - 1  # 前两次走代理，最后一次直连
+        try:
+            with httpx.Client(timeout=_TIMEOUT, follow_redirects=True,
+                              proxy=_get_proxy() if use_proxy else None,
+                              headers={"User-Agent": _UA}) as c:
+                r = c.get(url, params=params)
+                r.raise_for_status()
+                return r
+        except Exception as e:
+            last_err = e
+            logger.info(f"请求失败（第{i + 1}/{tries} 次，{'代理' if use_proxy else '直连'}）{url}: {e}")
+            time.sleep(0.6 * (i + 1))
+    raise last_err  # type: ignore[misc]
 
 
-def _clean_wiki(text: str) -> str:
-    """清洗 wiki 标记：ref/cite 模板、[[链接]]、''加粗''、{{模板}}、<br>。"""
-    t = re.sub(r"<ref[^>]*>.*?</ref>|<ref[^/]*/>", "", text, flags=re.S)
-    t = re.sub(r"\{\{[Cc]ite[^}]*\}\}", "", t)
-    t = re.sub(r"\{\{[^}]*\}\}", "", t)  # 剩余模板
-    t = re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]+)\]\]", r"\1", t)
-    t = re.sub(r"''+", "", t)
-    t = re.sub(r"<br\s*/?>", "\n", t)
-    t = re.sub(r"[ \t]+", " ", t)
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    return t.strip()
-
-
-def _curl_json(url: str, params: dict) -> dict:
-    """用 curl 子进程获取 JSON（维基边缘按 TLS 指纹封 Python HTTP 库，curl 可过）。
-
-    返回解析后的 dict；失败返回 {}。curl 继承环境变量代理。
-    """
-    import subprocess
-    from urllib.parse import urlencode
-    try:
-        qs = urlencode(params)
-        cmd = ["curl", "-s", "--max-time", "20", "-A",
-               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-               f"{url}?{qs}"]
-        out = subprocess.run(cmd, capture_output=True, timeout=25)
-        if out.returncode != 0 or not out.stdout.strip():
-            return {}
-        return json.loads(out.stdout.decode("utf-8", "ignore"))
-    except Exception as e:
-        logger.debug(f"curl 请求失败 {url}: {e}")
-        return {}
-
-
-# ── 源 1：中文维基 ──
-def fetch_wikipedia(name: str) -> dict:
-    """中文维基：搜索 → wikitext 四层解析（信息框/导语/时间线/活跃年限）。
-
-    走 curl 子进程（维基边缘封 Python TLS 指纹，curl 实测可过）。
-    """
-    fields: dict = {}
-    try:
-        hits = _curl_json("https://zh.wikipedia.org/w/api.php", {
-            "action": "query", "list": "search", "srsearch": name,
-            "format": "json", "srlimit": 3,
-        }).get("query", {}).get("search", [])
-        if not hits:
-            return fields
-        # 标题包含匹配校验（防同名不同人）
-        title = hits[0]["title"]
-        if name not in title and title not in name:
-            return fields
-        wt = _curl_json("https://zh.wikipedia.org/w/api.php", {
-            "action": "parse", "page": title, "prop": "wikitext",
-            "format": "json",
-        }).get("parse", {}).get("wikitext", {}).get("*", "")
-        if not wt:
-            return fields
-        # ① 信息框参数
-        for field, pattern in _WIKI_MAP:
-            m = re.search(pattern, wt)
-            if m:
-                if field == "birth_date":
-                    val = f"{m.group(1)}年{int(m.group(2)):02d}月{int(m.group(3)):02d}日"
-                else:
-                    val = m.group(1)
-                val = _clean_wiki(val).strip(" |=")
-                if val:
-                    fields["birth_date" if field == "birth_date_plain" else field] = val
-        # 三围
-        b, w, h = _WIKI_BUST.search(wt), _WIKI_WAIST.search(wt), _WIKI_HIP.search(wt)
-        if b and w and h:
-            fields["measurements"] = f"B{b.group(1)} / W{w.group(1)} / H{h.group(1)}"
-        # ② 导语段（简介）：信息框结束后的第一个正文段落
-        infobox_end = 0
-        if "{{AV女優" in wt:
-            depth = 0
-            for i, ch in enumerate(wt):
-                if wt.startswith("{{", i):
-                    depth += 1
-                elif wt.startswith("}}", i) and depth > 0:
-                    depth -= 1
-                    if depth == 0:
-                        infobox_end = i + 2
-                        break
-        lead = _clean_wiki(wt[infobox_end:])
-        # 首个非空段落（截到 300 字）
-        for para in re.split(r"\n{2,}", lead):
-            para = para.strip()
-            if len(para) > 40 and not para.startswith("=="):
-                fields["bio"] = para[:300]
-                break
-        # 出生日期兜底：正文叙述（"出生日期為1997年4月15日"）
-        if not fields.get("birth_date"):
-            m = re.search(r"出生日期[為为]\s*(\d{4})年(\d{1,2})月(\d{1,2})日", wt)
-            if m:
-                fields["birth_date"] = f"{m.group(1)}年{int(m.group(2)):02d}月{int(m.group(3)):02d}日"
-        # ③ 职业时间线：经历/簡歷/生涯 章节下的年份行
-        sec = re.search(r"==+[^=]*(经历|経歴|簡歷|简历|生涯|人物|経緯)[^=]*==+(.*?)(?:==+|\Z)", wt, re.S)
-        timeline_lines: list[str] = []
-        if sec:
-            for line in sec.group(2).splitlines():
-                line = _clean_wiki(line).strip()
-                if re.match(r"^(19|20)\d{2}年", line) and len(line) > 6:
-                    timeline_lines.append(line)
-        if timeline_lines:
-            fields["timeline"] = "\n".join(timeline_lines[:30])
-        # ④ 出道年份/活跃年限：active_years 提取（如 "2015年 - 2023年"）
-        if fields.get("active_years"):
-            years = re.findall(r"(?:19|20)\d{2}", fields["active_years"])
-            if years:
-                start, end = int(years[0]), int(years[-1])
-                fields["debut_date"] = f"{start}年"
-                if end > start:
-                    fields["active_years"] = f"{end - start} 年（{fields['active_years']}）"
-        if fields.get("nationality") and ("日本" in fields["nationality"] or "Japan" in fields["nationality"]):
-            fields["nationality"] = "日本"
-        return fields
-    except Exception as e:
-        logger.debug(f"维基抓取失败 {name}: {e}")
-        return fields
-
-
-# ── 源 2：minnano-av ──
+# ── 源 1：minnano-av ──
 def fetch_minnano(name: str) -> dict:
     """minnano-av：搜索（search_word）→ 详情页资料行（生日/三围/罩杯/身高/血型/星座）。
 
@@ -200,19 +79,17 @@ def fetch_minnano(name: str) -> dict:
     """
     fields: dict = {}
     try:
-        with _client() as c:
-            r = c.get("https://www.minnano-av.com/search_result.php", params={
-                "search_scope": "actress", "search_word": name,
-            })
-            html = r.text
-            # 页面无资料行标记 → 仍是结果列表，跟进第一个演员详情链接
-            if not re.search(r"birthday=|T[\d.]+\s*/\s*B[\d.]+", html):
-                m = re.search(r"(actress\d+\.html)", html)
-                if not m:
-                    logger.info("minnano 无结果 %s", name)
-                    return fields
-                r2 = c.get(f"https://www.minnano-av.com/{m.group(1)}")
-                html = r2.text
+        r = _get_retry("https://www.minnano-av.com/search_result.php", {
+            "search_scope": "actress", "search_word": name,
+        })
+        html = r.text
+        # 页面无资料行标记 → 仍是结果列表，跟进第一个演员详情链接
+        if not re.search(r"birthday=|T[\d.]+\s*/\s*B[\d.]+", html):
+            m = re.search(r"(actress\d+\.html)", html)
+            if not m:
+                logger.info(f"minnano 无结果 {name}")
+                return fields
+            html = _get_retry(f"https://www.minnano-av.com/{m.group(1)}").text
         # 资料行：T158 / B96(Gカップ) / W56 / H82
         m = re.search(r"T([\d.]+)\s*/\s*B([\d.]+)(?:\(([A-Z])?\))?", html)
         if m:
@@ -244,29 +121,97 @@ def fetch_minnano(name: str) -> dict:
         return fields
 
 
-# ── 源 3：laoshi.ink ──
-_LAOSHI_DATA: list[dict] | None = None  # 全量 JSON 缓存（600 演员，进程内）
+# ── 源 2：laoshi.ink ──
+_LAOSHI_DATA: list[dict] | None = None  # 全量 JSON 进程内缓存（600 演员）
 _LAOSHI_FAIL_AT: float = 0.0            # 上次下载失败时间（冷却 5 分钟重试）
+_LAOSHI_CACHE_AGE = 86400               # 磁盘缓存超过 24h 后后台刷新
+
+
+def _laoshi_cache_path() -> Path:
+    from config import get_settings
+    return Path(get_settings().DATA_DIR) / "laoshi_jav.json"
+
+
+def _laoshi_read_cache() -> list[dict] | None:
+    """读磁盘缓存（data/laoshi_jav.json），随 data 卷跨容器重启持久化。"""
+    try:
+        p = _laoshi_cache_path()
+        if not p.exists():
+            return None
+        data = json.loads(p.read_text(encoding="utf-8"))
+        lst = None
+        if isinstance(data, dict):
+            lst = data.get("rankingActors") or data.get("actors")
+        elif isinstance(data, list):
+            lst = data
+        return lst if isinstance(lst, list) and lst else None
+    except Exception:
+        return None
+
+
+def _laoshi_write_cache(raw: object) -> None:
+    try:
+        p = _laoshi_cache_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(p)
+    except Exception as e:
+        logger.info(f"laoshi 磁盘缓存写入失败: {e}")
+
+
+def _laoshi_refresh_background(current: list[dict]) -> None:
+    """后台刷新 laoshi 数据（daemon 线程）：成功则替换缓存，失败保留旧数据。"""
+    import threading
+
+    def _work():
+        try:
+            r = _get_retry("https://laoshi.ink/assets/data/light/jav.json")
+            data = r.json()
+            lst = data.get("rankingActors") or data.get("actors") or []
+            if lst:
+                global _LAOSHI_DATA
+                _LAOSHI_DATA = lst
+                _laoshi_write_cache(data)
+                logger.info(f"laoshi 数据后台刷新完成: {len(lst)} 条")
+            else:
+                logger.info("laoshi 后台刷新：响应为空，保留旧数据")
+        except Exception as e:
+            logger.info(f"laoshi 后台刷新失败（保留旧数据）: {e}")
+
+    threading.Thread(target=_work, daemon=True).start()
 
 
 def _laoshi_json() -> list[dict]:
-    """下载 laoshi 全量数据（assets/data/light/jav.json，进程内缓存）。
-
-    失败不永久缓存——5 分钟冷却后自动重试，避免首次下载抖动导致重启前永远空数据。
-    """
+    """laoshi 全量数据：磁盘缓存优先（零网络），无缓存才下载；缓存超龄后台刷新。"""
     global _LAOSHI_DATA, _LAOSHI_FAIL_AT
     if _LAOSHI_DATA is not None:
         return _LAOSHI_DATA
-    import time
+
+    cached = _laoshi_read_cache()
+    if cached is not None:
+        _LAOSHI_DATA = cached
+        try:
+            age = time.time() - _laoshi_cache_path().stat().st_mtime
+            if age > _LAOSHI_CACHE_AGE:
+                _laoshi_refresh_background(cached)
+        except Exception:
+            pass
+        return _LAOSHI_DATA
+
     if time.time() - _LAOSHI_FAIL_AT < 300:
         return []  # 冷却期内不重复请求
     try:
-        with _client() as c:
-            r = c.get("https://laoshi.ink/assets/data/light/jav.json")
-            data = r.json()
-        _LAOSHI_DATA = data.get("rankingActors") or data.get("actors") or []
-        _LAOSHI_FAIL_AT = 0.0
-        logger.info(f"laoshi 数据已加载: {len(_LAOSHI_DATA)} 条")
+        r = _get_retry("https://laoshi.ink/assets/data/light/jav.json")
+        data = r.json()
+        lst = data.get("rankingActors") or data.get("actors") or []
+        if lst:
+            _laoshi_write_cache(data)
+            _LAOSHI_DATA = lst
+            _LAOSHI_FAIL_AT = 0.0
+            logger.info(f"laoshi 数据已下载并落盘缓存: {len(lst)} 条")
+        else:
+            logger.info("laoshi 数据下载成功但内容为空")
     except Exception as e:
         logger.info(f"laoshi 数据加载失败（5 分钟后自动重试）: {e}")
         _LAOSHI_FAIL_AT = time.time()
@@ -318,32 +263,24 @@ def fetch_laoshi(name: str) -> dict:
                 fields["avatar_url"] = "https://laoshi.ink/" + img
         return fields
     except Exception as e:
-        logger.debug(f"laoshi 抓取失败 {name}: {e}")
+        logger.info(f"laoshi 抓取失败 {name}: {e}")
         return fields
 
 
-# ── 主入口：三级回退 ──
+# ── 主入口：minnano + laoshi 双源整合 ──
 def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
-    """按用户指定逻辑聚合三源。
+    """按用户指定逻辑聚合双源：minnano-av（个人信息）+ laoshi.ink（百科维度）。
 
-    返回 {ok, source, fields}——source: wikipedia/minnano/laoshi/none
+    返回 {ok, source, fields}——source: minnano/laoshi/unknown/none
     每个源都优先用中文名、失败再用英文名试一遍；结果写入 INFO 日志（前端应用日志可见）。
     """
-    # ① 中文维基（四维度一次拿齐）
-    fields = fetch_wikipedia(name)
-    if not fields and name_en:
-        fields = fetch_wikipedia(name_en)
-    if fields:
-        logger.info("演员资料聚合 %s: 命中中文维基 fields=%s", name, ",".join(sorted(fields)))
-        return {"ok": True, "source": "wikipedia", "fields": fields}
-
-    # ② minnano-av（个人信息）
+    # ① minnano-av（个人信息）
     fields = fetch_minnano(name)
     if not fields and name_en:
         fields = fetch_minnano(name_en)
     source = "minnano" if fields else None
 
-    # ③ laoshi.ink（百科维度）
+    # ② laoshi.ink（百科维度，合并进 fields）
     laoshi = fetch_laoshi(name)
     if not laoshi and name_en:
         laoshi = fetch_laoshi(name_en)
@@ -359,5 +296,5 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
     if fields:
         logger.info("演员资料聚合 %s: 命中 %s fields=%s", name, source or "unknown", ",".join(sorted(fields)))
         return {"ok": True, "source": source or "unknown", "fields": fields}
-    logger.info("演员资料聚合 %s: 三源均未命中（维基/minnano/laoshi 均无结果）", name)
-    return {"ok": False, "source": None, "fields": {}, "message": "三源均未查询到该演员资料"}
+    logger.info("演员资料聚合 %s: 双源均未命中（minnano/laoshi 均无结果）", name)
+    return {"ok": False, "source": None, "fields": {}, "message": "minnano 与老师图鉴均未查询到该演员资料"}

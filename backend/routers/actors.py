@@ -216,18 +216,18 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
     return start_actor_crawl(url, actor_id=actor.id)
 
 
-# ── 三源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
+# ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
 
 @router.post("/{actor_id}/refresh-profile")
 def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
-    """手动触发三源资料抓取（中文维基→minnano→laoshi），成功后重置队列标记。"""
+    """手动触发双源资料抓取（minnano-av + laoshi），成功后重置队列标记。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
     from services.actor_profile import fetch_profile
     result = fetch_profile(actor.name, actor.name_en)
     if not result.get("ok"):
-        return {"ok": False, "source": None, "message": result.get("message", "三源均未查询到")}
+        return {"ok": False, "source": None, "message": result.get("message", "minnano 与老师图鉴均未查询到")}
     for k, v in (result.get("fields") or {}).items():
         if hasattr(actor, k) and v:
             setattr(actor, k, v)

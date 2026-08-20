@@ -1,7 +1,7 @@
-"""演员资料自动同步 —— 定时任务：扫 profile_fetched=0 的演员批量抓取三源资料。
+"""演员资料自动同步 —— 定时任务：扫 profile_fetched=0 的演员批量抓取双源资料（minnano-av + laoshi）。
 
 注册于 main.py lifespan（与订阅巡检同模式）。每轮限 BATCH_SIZE 个、
-演员间 5-10s 限速，防 hammer 三源；失败标记跳过避免反复重试。
+演员间 5-10s 限速，防 hammer 两源；失败标记跳过避免反复重试。
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def run_cycle() -> dict:
                     actor.profile_fetch_failed = True
                     db.commit()
                     skipped += 1
-                    logger.info(f"演员资料三源未命中: {actor.name}")
+                    logger.info(f"演员资料双源未命中: {actor.name}")
             except Exception as e:
                 db.rollback()
                 skipped += 1

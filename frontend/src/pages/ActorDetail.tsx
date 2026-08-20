@@ -162,7 +162,7 @@ export function ActorDetail() {
     try {
       const r = await api.actors.refreshProfile(actor.id)
       if (r.ok) {
-        const srcName = r.source === 'wikipedia' ? '中文维基' : r.source === 'minnano' ? 'minnano-av' : r.source === 'laoshi' ? '老师图鉴' : r.source
+        const srcName = r.source === 'minnano' ? 'minnano-av' : r.source === 'laoshi' ? '老师图鉴' : r.source
         toastOk(`资料已更新（来源：${srcName}）`)
         // 重新加载演员数据
         const a = await api.actors.get(actor.id)
@@ -215,7 +215,7 @@ export function ActorDetail() {
               <Icon.library />查看作品库
             </button>
             <button className="btn btn--ghost" onClick={refreshProfile} disabled={refreshing}
-              title="从中文维基→minnano-av→老师图鉴三级回退抓取资料（自动任务也会定期补齐）">
+              title="整合 minnano-av（个人信息）与老师图鉴（简介/出道）双源抓取资料（自动任务也会定期补齐）">
               <Icon.refresh />{refreshing ? '抓取中…' : '刷新资料'}
             </button>
           </div>
