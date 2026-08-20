@@ -32,6 +32,19 @@ export function Subscriptions() {
   const [avatars, setAvatars] = useState<Map<number, string>>(new Map())  // actor_id → avatar_url
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  // 全部补齐作品：逐位演员串行触发 crawl-works（后端全局锁，同一时刻只能爬一位）
+  const [filling, setFilling] = useState(false)
+  const [fillProgress, setFillProgress] = useState<{ idx: number; total: number; name: string } | null>(null)
+  const [fillingId, setFillingId] = useState<number | null>(null)
+  const [waitLimitMin, setWaitLimitMin] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('subCrawlWaitLimitMin') ?? '', 10)
+    return Number.isFinite(v) && v > 0 ? v : 60
+  })
+  const setWaitLimit = (v: number) => {
+    const n = Math.max(1, Math.min(2880, Math.round(v)))
+    setWaitLimitMin(n)
+    localStorage.setItem('subCrawlWaitLimitMin', String(n))
+  }
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -77,6 +90,74 @@ export function Subscriptions() {
     finally { setChecking(false) }
   }
 
+  // ── 全部补齐作品：逐位演员串行触发 crawl-works ──
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+  const waitIdle = async (limitMin: number) => {
+    const intervalMs = Math.max(3000, Math.min(30000, limitMin * 100))
+    const polls = Math.ceil((limitMin * 60_000) / intervalMs)
+    for (let i = 0; i < polls; i++) {
+      try {
+        const s = await api.crawl.status()
+        if (!s.running) return true
+      } catch { /* 状态查询失败不中断 */ }
+      await sleep(intervalMs)
+    }
+    return false
+  }
+
+  const fillAllWorks = async () => {
+    if (!subs || filling) return
+    const targets = subs.filter((s) => s.sub_type === 'actor' && s.actor_id)
+    if (!targets.length) return toastErr('没有演员订阅')
+    setFilling(true)
+    let ok = 0, skipped = 0, failed = 0
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const s = targets[i]
+        setFillProgress({ idx: i + 1, total: targets.length, name: s.name })
+        setFillingId(s.actor_id)
+        if (!(await waitIdle(waitLimitMin))) {
+          toastErr(`等待其他爬取任务超过 ${waitLimitMin} 分钟，跳过 ${s.name}`)
+          failed++
+          continue
+        }
+        try {
+          await api.actors.crawlWorks(s.actor_id as number)
+          ok++
+        } catch (e) {
+          const msg = String((e as Error).message)
+          if (msg.includes('无 JavDB URL')) {
+            skipped++
+          } else if (msg.includes('已有爬取任务')) {
+            // 锁竞争：等空闲后重试一次
+            if (!(await waitIdle(waitLimitMin))) { failed++; toastErr(`${s.name} 等待超时`); continue }
+            try {
+              await api.actors.crawlWorks(s.actor_id as number)
+              ok++
+            } catch (e2) {
+              const m2 = String((e2 as Error).message)
+              if (m2.includes('无 JavDB URL')) skipped++
+              else { failed++; toastErr(`${s.name}: ${m2}`) }
+            }
+          } else {
+            failed++
+            toastErr(`${s.name}: ${msg}`)
+          }
+        }
+        // 等当前演员爬完再继续下一位（后端同一时刻只允许一个爬取进程）
+        if (!(await waitIdle(waitLimitMin))) {
+          toastErr(`${s.name} 补齐超过 ${waitLimitMin} 分钟，继续下一位`)
+        }
+      }
+      toastOk(`全部补齐完成：已启动 ${ok} 位，跳过 ${skipped} 位（无 JavDB URL），失败 ${failed} 位`)
+      load()
+    } finally {
+      setFilling(false)
+      setFillProgress(null)
+      setFillingId(null)
+    }
+  }
+
   const markRead = async (nr: NewRelease) => {
     try {
       await api.newReleases.markRead(nr.id)
@@ -109,8 +190,23 @@ export function Subscriptions() {
     <div className="page">
       <PageHead eyebrow={`Subscriptions · ${subs?.length ?? 0} 条`} title={<>订<em>阅</em></>}
         sub="订阅演员，有新作自动通知/下载。巡检时与 Emby 媒体库比对，避免重复入库。">
-        <button className="btn btn--ghost btn--sm" onClick={checkAll} disabled={checking}>
+        <button className="btn btn--ghost btn--sm" onClick={checkAll} disabled={checking || filling}>
           <Icon.refresh />{checking ? '巡检中…' : '立即巡检全部'}
+        </button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+          title="每位演员补齐作品的等待上限，超时跳过继续下一位（仅保存在本机浏览器）">
+          每演员等待上限
+          <input className="input" type="number" min={1} max={2880} value={waitLimitMin}
+            style={{ width: 62, padding: '5px 8px', textAlign: 'center' }}
+            onChange={(e) => setWaitLimit(+e.target.value)}
+            onBlur={(e) => { if (!e.target.value) setWaitLimit(60) }} />
+          分钟
+        </label>
+        <button className="btn btn--gold btn--sm" onClick={fillAllWorks} disabled={filling}
+          title="逐位为所有订阅演员补齐作品（串行执行，后端同一时刻只爬一位）">
+          <Icon.download />{filling && fillProgress
+            ? `补齐中 · ${fillProgress.name} (${fillProgress.idx}/${fillProgress.total})…`
+            : '全部补齐作品'}
         </button>
       </PageHead>
 
@@ -142,6 +238,7 @@ export function Subscriptions() {
                 <div className="sub-meta">
                   <span className="chip chip-rose">{TYPE_LABEL[s.sub_type] || s.sub_type}</span>
                   {s.auto_add && <span className="chip chip-amber">自动下载</span>}
+                  {fillingId != null && s.actor_id === fillingId && <span className="chip chip-blue">补齐中…</span>}
                 </div>
                 <div className="sub-check">每 {s.check_interval_hours}h 检查 · {fmtTime(s.last_checked_at)}</div>
                 <div className="sub-actions">
