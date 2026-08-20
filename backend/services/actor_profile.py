@@ -232,6 +232,10 @@ def fetch_minnano(name: str) -> dict:
         m = re.search(r"(牡羊座|金牛座|双子座|巨蟹座|狮子座|处女座|天秤座|天蝎座|射手座|摩羯座|水瓶座|双鱼座)", html)
         if m:
             fields["zodiac"] = m.group(1)
+        # 头像：详情页缩略图（p_actress_* 路径，去 query 后缀）
+        m = re.search(r"src=\"(/p_actress_[^\"?]+)", html)
+        if m:
+            fields["avatar_url"] = "https://www.minnano-av.com" + m.group(1)
         return fields
     except Exception as e:
         logger.debug(f"minnano 抓取失败 {name}: {e}")
@@ -294,6 +298,13 @@ def fetch_laoshi(name: str) -> dict:
         cat = (hit.get("category") or "").strip()
         if cat:
             fields["nationality"] = cat  # 如 "日本女优"
+        # 头像：JSON image 字段（相对路径拼 base）
+        img = (hit.get("image") or "").strip()
+        if img:
+            if img.startswith("/"):
+                fields["avatar_url"] = "https://laoshi.ink" + img
+            elif img.startswith("assets/"):
+                fields["avatar_url"] = "https://laoshi.ink/" + img
         return fields
     except Exception as e:
         logger.debug(f"laoshi 抓取失败 {name}: {e}")

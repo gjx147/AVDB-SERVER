@@ -123,7 +123,13 @@ export function Actors() {
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/actor/${a.id}`) } }}
               style={{ cursor: 'pointer' }}>
               <div className="actor-photo">
-                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
+                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : (
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'linear-gradient(160deg, var(--bg-raised), var(--bg-page))',
+                    color: 'var(--t-faint)', fontFamily: 'var(--ff-display)', fontStyle: 'italic', fontSize: 52 }}>
+                    {a.name[0] || '?'}
+                  </div>
+                )}
                 {/* 关注按钮（关注 = actor 订阅） */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleFollow(a) }}
