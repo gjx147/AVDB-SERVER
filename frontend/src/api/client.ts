@@ -198,6 +198,12 @@ export const api = {
       http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string; locked_skipped?: string[] }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
     profileQueueStatus: () =>
       http.get<{ pending: number; fetched: number; failed: number }>('/api/actors/profile-queue/status').then((r) => r.data),
+    /** 一键提取全部待抓演员信息（后台任务） */
+    extractProfiles: () =>
+      http.post<{ ok: boolean; message: string }>('/api/actors/extract-profiles').then((r) => r.data),
+    /** 一键提取任务进度 */
+    extractProfilesStatus: () =>
+      http.get<{ running: boolean; total: number; idx: number; current_name: string | null; done: number; skipped: number; failed: number; last_summary: string | null }>('/api/actors/extract-profiles/status').then((r) => r.data),
     crawlSearch: (actor_name: string) =>
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
     remove: (actorId: number) =>

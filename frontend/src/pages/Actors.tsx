@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Actor } from '../api/types'
@@ -23,6 +23,9 @@ export function Actors() {
   const [batchBusy, setBatchBusy] = useState(false)
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
+  // 一键提取演员信息：后台任务 + 轮询进度
+  const [profStatus, setProfStatus] = useState<{ running: boolean; total: number; idx: number; current_name: string | null; done: number; skipped: number; failed: number; last_summary: string | null } | null>(null)
+  const profPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
@@ -46,6 +49,47 @@ export function Actors() {
   const resetAndLoad = (keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
     setPage(0)
     load(keyword, opts, 0)
+  }
+
+  // ── 一键提取演员信息：后台任务 + 轮询 ──
+  const startProfPolling = () => {
+    if (profPollRef.current) clearInterval(profPollRef.current)
+    profPollRef.current = setInterval(async () => {
+      try {
+        const s = await api.actors.extractProfilesStatus()
+        setProfStatus(s)
+        if (!s.running) {
+          if (profPollRef.current) clearInterval(profPollRef.current)
+          profPollRef.current = null
+          if (s.last_summary) toastOk(s.last_summary)
+          resetAndLoad(kw)
+        }
+      } catch {
+        if (profPollRef.current) clearInterval(profPollRef.current)
+        profPollRef.current = null
+        setProfStatus(null)
+      }
+    }, 3000)
+  }
+  // 挂载时恢复展示进行中的后台任务
+  useEffect(() => {
+    api.actors.extractProfilesStatus().then((s) => {
+      if (s?.running) { setProfStatus(s); startProfPolling() }
+    }).catch(() => {})
+    return () => { if (profPollRef.current) clearInterval(profPollRef.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const extractAllProfiles = async () => {
+    if (profStatus?.running) return
+    try {
+      await api.actors.extractProfiles()
+      toastOk('已启动演员信息一键提取（后台执行，切走页面不中断）')
+      setProfStatus({ running: true, total: 0, idx: 0, current_name: null, done: 0, skipped: 0, failed: 0, last_summary: null })
+      startProfPolling()
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    }
   }
 
   // 加载已订阅的演员 id 集合（用于按钮状态）
@@ -141,6 +185,12 @@ export function Actors() {
     <div className="page">
       <PageHead eyebrow={`Actors · ${total} 位`} title={<>演员<em>库</em></>}
         sub="从心动的那张脸开始，补齐她的全部作品。">
+        <button className="btn btn--ghost btn--sm" onClick={extractAllProfiles} disabled={profStatus?.running}
+          title="一键提取全部待抓演员的信息（minnano/WAPdB/老师图鉴三源，后台串行执行，切走页面不中断）">
+          <Icon.download />{profStatus?.running
+            ? `提取中 · ${profStatus.current_name || '…'} (${profStatus.idx}/${profStatus.total || '…'})…`
+            : '一键提取演员信息'}
+        </button>
         <button className="btn btn--gold" onClick={() => setAdding(!adding)}><Icon.plus />粘贴演员 URL</button>
       </PageHead>
 

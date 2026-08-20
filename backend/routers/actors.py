@@ -323,3 +323,20 @@ def profile_queue_status(db: DbSession, _user: CurrentUser):
     done = db.execute(sa_func.count(Actor.id).filter(Actor.profile_fetched.is_(True))).scalar_one()
     failed = db.execute(sa_func.count(Actor.id).filter(Actor.profile_fetch_failed.is_(True))).scalar_one()
     return {"pending": pending, "fetched": done, "failed": failed}
+
+
+@router.post("/extract-profiles")
+def start_extract_profiles(_user: CurrentUser):
+    """一键提取全部待抓演员信息（后台线程批量执行，切走页面不中断）。"""
+    from services import actor_profile_batch
+    ok, msg = actor_profile_batch.start()
+    if not ok:
+        raise HTTPException(status_code=409, detail=msg)
+    return {"ok": True, "message": msg}
+
+
+@router.get("/extract-profiles/status")
+def extract_profiles_status(_user: CurrentUser):
+    """一键提取任务进度（前端轮询）。"""
+    from services import actor_profile_batch
+    return actor_profile_batch.status()

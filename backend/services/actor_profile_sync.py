@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import random
 import time
+from typing import Callable
 
 logger = logging.getLogger("avdb.actor_profile_sync")
 
@@ -19,6 +20,14 @@ _FIELDS = (
     "bio", "timeline", "alias", "birth_date", "height", "cup", "measurements", "debut_date",
     "agency", "hobbies", "debut_work", "twitter", "website", "tags",
 )
+
+# 进度钩子：一键提取后台任务通过它汇报当前演员名（其余场景为 None）
+_PROGRESS_HOOK: Callable[[str], None] | None = None
+
+
+def set_progress_hook(hook: Callable[[str], None] | None) -> None:
+    global _PROGRESS_HOOK
+    _PROGRESS_HOOK = hook
 
 
 def run_cycle() -> dict:
@@ -54,6 +63,11 @@ def run_cycle() -> dict:
             return {"fetched": 0, "skipped": 0}
         done = skipped = 0
         for actor in rows:
+            if _PROGRESS_HOOK:
+                try:
+                    _PROGRESS_HOOK(actor.name)
+                except Exception:
+                    pass
             try:
                 result = fetch_profile(actor.name, actor.name_en)
                 if result.get("ok"):
