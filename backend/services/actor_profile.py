@@ -194,8 +194,9 @@ def fetch_wikipedia(name: str) -> dict:
 def fetch_minnano(name: str) -> dict:
     """minnano-av：搜索（search_word）→ 详情页资料行（生日/三围/罩杯/身高/血型/星座）。
 
-    实测：精确匹配时搜索直接返回该演员 profile 页（title 含名字），
-    否则为结果列表，取第一个 actressNNN.html 跟进。
+    精确匹配时搜索会直接跳到资料页；否则是结果列表，跟第一个 actressNNN.html。
+    注意：判断依据是「页面是否含资料行标记」（birthday= / T-B-W-H 行）——
+    结果列表里也会出现搜索词本身，仅凭名字在不在页面里判断会把列表误当资料页。
     """
     fields: dict = {}
     try:
@@ -204,10 +205,11 @@ def fetch_minnano(name: str) -> dict:
                 "search_scope": "actress", "search_word": name,
             })
             html = r.text
-            # 列表页：提取第一个演员详情链接
-            if name not in html:
+            # 页面无资料行标记 → 仍是结果列表，跟进第一个演员详情链接
+            if not re.search(r"birthday=|T[\d.]+\s*/\s*B[\d.]+", html):
                 m = re.search(r"(actress\d+\.html)", html)
                 if not m:
+                    logger.info("minnano 无结果 %s", name)
                     return fields
                 r2 = c.get(f"https://www.minnano-av.com/{m.group(1)}")
                 html = r2.text
@@ -238,29 +240,38 @@ def fetch_minnano(name: str) -> dict:
             fields["avatar_url"] = "https://www.minnano-av.com" + m.group(1)
         return fields
     except Exception as e:
-        logger.debug(f"minnano 抓取失败 {name}: {e}")
+        logger.info(f"minnano 抓取失败 {name}: {e}")
         return fields
 
 
 # ── 源 3：laoshi.ink ──
 _LAOSHI_DATA: list[dict] | None = None  # 全量 JSON 缓存（600 演员，进程内）
+_LAOSHI_FAIL_AT: float = 0.0            # 上次下载失败时间（冷却 5 分钟重试）
 
 
 def _laoshi_json() -> list[dict]:
-    """下载 laoshi 全量数据（assets/data/light/jav.json，进程内缓存）。"""
-    global _LAOSHI_DATA
+    """下载 laoshi 全量数据（assets/data/light/jav.json，进程内缓存）。
+
+    失败不永久缓存——5 分钟冷却后自动重试，避免首次下载抖动导致重启前永远空数据。
+    """
+    global _LAOSHI_DATA, _LAOSHI_FAIL_AT
     if _LAOSHI_DATA is not None:
         return _LAOSHI_DATA
+    import time
+    if time.time() - _LAOSHI_FAIL_AT < 300:
+        return []  # 冷却期内不重复请求
     try:
         with _client() as c:
             r = c.get("https://laoshi.ink/assets/data/light/jav.json")
             data = r.json()
         _LAOSHI_DATA = data.get("rankingActors") or data.get("actors") or []
+        _LAOSHI_FAIL_AT = 0.0
         logger.info(f"laoshi 数据已加载: {len(_LAOSHI_DATA)} 条")
     except Exception as e:
-        logger.debug(f"laoshi 数据加载失败: {e}")
-        _LAOSHI_DATA = []
-    return _LAOSHI_DATA
+        logger.info(f"laoshi 数据加载失败（5 分钟后自动重试）: {e}")
+        _LAOSHI_FAIL_AT = time.time()
+        _LAOSHI_DATA = None
+    return _LAOSHI_DATA or []
 
 
 def fetch_laoshi(name: str) -> dict:
@@ -316,22 +327,26 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
     """按用户指定逻辑聚合三源。
 
     返回 {ok, source, fields}——source: wikipedia/minnano/laoshi/none
+    每个源都优先用中文名、失败再用英文名试一遍；结果写入 INFO 日志（前端应用日志可见）。
     """
     # ① 中文维基（四维度一次拿齐）
     fields = fetch_wikipedia(name)
-    if fields:
-        return {"ok": True, "source": "wikipedia", "fields": fields}
-    if name_en:
+    if not fields and name_en:
         fields = fetch_wikipedia(name_en)
-        if fields:
-            return {"ok": True, "source": "wikipedia", "fields": fields}
+    if fields:
+        logger.info("演员资料聚合 %s: 命中中文维基 fields=%s", name, ",".join(sorted(fields)))
+        return {"ok": True, "source": "wikipedia", "fields": fields}
 
     # ② minnano-av（个人信息）
     fields = fetch_minnano(name)
+    if not fields and name_en:
+        fields = fetch_minnano(name_en)
     source = "minnano" if fields else None
 
     # ③ laoshi.ink（百科维度）
     laoshi = fetch_laoshi(name)
+    if not laoshi and name_en:
+        laoshi = fetch_laoshi(name_en)
     if laoshi:
         for k, v in laoshi.items():
             if k == "avatar_url" and v:
@@ -342,5 +357,7 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
         source = source or "laoshi"
 
     if fields:
+        logger.info("演员资料聚合 %s: 命中 %s fields=%s", name, source or "unknown", ",".join(sorted(fields)))
         return {"ok": True, "source": source or "unknown", "fields": fields}
+    logger.info("演员资料聚合 %s: 三源均未命中（维基/minnano/laoshi 均无结果）", name)
     return {"ok": False, "source": None, "fields": {}, "message": "三源均未查询到该演员资料"}
