@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore'
 export function Crawl() {
   const [status, setStatus] = useState<CrawlStatus | null | undefined>(undefined)
   const [logs, setLogs] = useState<string[] | null>(null)
-  const [fileLines, setFileLines] = useState<Record<string, string[] | null>>({ app: null, scraper: null, downloaders: null })
-  const [logSrc, setLogSrc] = useState<'db' | 'app' | 'scraper' | 'downloaders'>('db')  // 日志来源
+  const [fileLines, setFileLines] = useState<Record<string, string[] | null>>({ app: null, scraper: null, downloaders: null, actor_profile: null })
+  const [logSrc, setLogSrc] = useState<'db' | 'app' | 'scraper' | 'downloaders' | 'actor_profile'>('db')  // 日志来源
   const [logFilter, setLogFilter] = useState('')
   const [sources, setSources] = useState<ListSourceWithStats[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -24,8 +24,8 @@ export function Crawl() {
     const refresh = () => {
       api.crawl.status().then((s) => { setStatus(s); setError(null) }).catch(() => setError('无法获取爬取状态'))
       api.crawl.logs().then((l) => setLogs(l.lines)).catch(() => setLogs([]))
-      // 文件日志轮询（应用/爬虫子进程/下载器）
-      for (const f of ['app', 'scraper', 'downloaders'] as const) {
+      // 文件日志轮询（应用/爬虫子进程/下载器/演员资料）
+      for (const f of ['app', 'scraper', 'downloaders', 'actor_profile'] as const) {
         api.system.logs(f, 300).then((r) => setFileLines((prev) => ({ ...prev, [f]: r.lines }))).catch(() => {})
       }
     }
@@ -157,9 +157,9 @@ export function Crawl() {
             <div className="term-dot" style={{ background: '#ffb454' }} />
             <div className="term-dot" style={{ background: '#3ddc97' }} />
             <div className="term-title">实时日志</div>
-            {/* 日志来源切换：数据库 / 应用 app.log / 爬虫子进程 / 下载器 */}
+            {/* 日志来源切换：数据库 / 应用 app.log / 爬虫子进程 / 下载器 / 演员资料 */}
             <div className="seg" style={{ marginLeft: 10, background: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,143,179,.25)' }}>
-              {([['db', '数据库'], ['app', '应用'], ['scraper', '爬虫'], ['downloaders', '下载器']] as const).map(([k, label]) => (
+              {([['db', '数据库'], ['app', '应用'], ['scraper', '爬虫'], ['downloaders', '下载器'], ['actor_profile', '演员资料']] as const).map(([k, label]) => (
                 <button key={k} className={logSrc === k ? 'on' : ''} onClick={() => setLogSrc(k)}
                   style={{ color: logSrc === k ? 'var(--gold)' : 'rgba(243,219,230,.7)', fontSize: 11 }}>{label}</button>
               ))}
@@ -172,7 +172,9 @@ export function Crawl() {
           <div className="term-body" ref={logBodyRef}>
             {displayLines.length === 0 ? (
               <div className="term-line"><span className="ts">--:--:--</span>
-                {logSrc === 'db' ? '等待数据库日志输出…' : '暂无该日志文件输出'}
+                {logSrc === 'db' ? '等待数据库日志输出…'
+                  : logSrc === 'actor_profile' ? '暂无演员资料日志——在演员详情页点「刷新资料」后，三源抓取结果会显示在这里'
+                  : '暂无该日志文件输出'}
               </div>
             ) : displayLines.map((line, i) => (
               <div className="term-line" key={i}>

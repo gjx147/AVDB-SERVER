@@ -59,6 +59,14 @@ for _dl_logger_name in ("avdb.downloaders", "avdb.downloaders.cd2", "avdb.downlo
     _dl_l = logging.getLogger(_dl_logger_name)
     _dl_l.addHandler(_dl_file_handler)
 
+# 演员资料聚合专用日志（data/actor_profile.log），前端爬取控制台「演员资料」标签页读取
+_ap_log_path = Path(get_settings().DATA_DIR) / "actor_profile.log"
+_ap_file_handler = logging.FileHandler(_ap_log_path, encoding="utf-8")
+_ap_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+_ap_file_handler.setLevel(logging.DEBUG if get_settings().DEBUG else logging.INFO)
+for _ap_logger_name in ("avdb.actor_profile", "avdb.actor_profile_sync"):
+    logging.getLogger(_ap_logger_name).addHandler(_ap_file_handler)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

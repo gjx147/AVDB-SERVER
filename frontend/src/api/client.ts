@@ -229,7 +229,7 @@ export const api = {
   // ════════ System ════════
   system: {
     disk: () => http.get<DiskInfo>('/api/system/disk').then((r) => r.data),
-    logs: (file: 'app' | 'scraper' | 'downloaders', limit = 300, filter = '') =>
+    logs: (file: 'app' | 'scraper' | 'downloaders' | 'actor_profile', limit = 300, filter = '') =>
       http.get<{ lines: string[]; total: number; file: string; error?: string }>('/api/system/logs', { params: { file, limit, filter } }).then((r) => r.data),
   },
 

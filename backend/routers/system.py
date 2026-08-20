@@ -106,9 +106,11 @@ def app_logs(_user: CurrentUser, limit: int = 100, filter: str = "", file: str =
     file=app: data/app.log（应用日志）
     file=scraper: data/scraper_stderr.log（scraper 子进程 stdout/stderr）
     file=downloaders: data/downloaders.log（下载器日志）
+    file=actor_profile: data/actor_profile.log（演员资料聚合日志）
     """
     from pathlib import Path
-    filenames = {"app": "app.log", "scraper": "scraper_stderr.log", "downloaders": "downloaders.log"}
+    filenames = {"app": "app.log", "scraper": "scraper_stderr.log", "downloaders": "downloaders.log",
+                 "actor_profile": "actor_profile.log"}
     filename = filenames.get(file, "app.log")
     log_path = Path(get_settings().DATA_DIR) / filename
     if not log_path.exists():
