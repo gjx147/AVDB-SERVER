@@ -240,23 +240,55 @@ export function TaskDetail() {
       <button className="btn btn--ghost btn--sm" style={{ marginBottom: 20, position: 'relative', zIndex: 1 }}
         onClick={() => { if (window.history.length > 1) nav(-1); else nav('/library') }}><Icon.back />返回</button>
 
-      {/* 紧凑头部：赴约登场编排（黑场→追光→磨砂纱掀开→阶梯入场） */}
+      {/* 紧凑头部：赴约登场编排（黑场→追光→磨砂纱掀开→阶梯入场）
+          左列（detail-side-cell）：封面 + 演员头像/名字 + 标签竖排，
+          高度始终等于右侧信息块（不超过右侧块），内容超出自适应收缩/滚动 */}
       <div className="detail-head" style={{ position: 'relative', zIndex: 1 }}>
-        <div className={`detail-cover${favBeat ? ' beat' : ''}`} onAnimationEnd={() => setFavBeat(false)}>
-          <img
-            src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
-            alt={`${task.video_code || '作品'} 海报`}
-            referrerPolicy="no-referrer"
-            onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
-            onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
-          />
-          <i className="cover-veil" aria-hidden="true" />
-          {kissKey > 0 && (
-            <span key={kissKey} className="kiss-stamp" aria-hidden="true"
-              style={{ '--kr': `${-(12 + Math.random() * 20)}deg` } as React.CSSProperties}>💋</span>
-          )}
-          <Heartburst playKey={burstKey} />
-          {downloading && <div className="detail-cover-empty" style={{ position: 'absolute', inset: 0, zIndex: 4 }}>缓存中…</div>}
+        <div className="detail-side-cell">
+          <div className="detail-side">
+            <div className={`detail-cover${favBeat ? ' beat' : ''}`} onAnimationEnd={() => setFavBeat(false)}>
+              <img
+                src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
+                alt={`${task.video_code || '作品'} 海报`}
+                referrerPolicy="no-referrer"
+                onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
+                onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
+              />
+              <i className="cover-veil" aria-hidden="true" />
+              {kissKey > 0 && (
+                <span key={kissKey} className="kiss-stamp" aria-hidden="true"
+                  style={{ '--kr': `${-(12 + Math.random() * 20)}deg` } as React.CSSProperties}>💋</span>
+              )}
+              <Heartburst playKey={burstKey} />
+              {downloading && <div className="detail-cover-empty" style={{ position: 'absolute', inset: 0, zIndex: 4 }}>缓存中…</div>}
+            </div>
+
+            {/* 封面下方：演员头像+名字、标签，竖排自适应 */}
+            {(cast.length > 0 || tags.length > 0 || actors.length > 0) && (
+              <div className="detail-side-extra">
+                {/* 女主演关联（头像+名字，点击跳转影视库按演员筛选） */}
+                {cast.length > 0 && (
+                  <div className="cast-row">
+                    {cast.map((c, i) => (
+                      <div key={i} className="cast-item" onClick={() => nav(`/library?q=${encodeURIComponent(c.name)}`)}
+                        title={`查看 ${c.name} 的作品`}>
+                        <div className="cast-avatar">
+                          {c.avatar_url ? (
+                            <img src={c.avatar_url} alt={c.name} referrerPolicy="no-referrer"
+                              onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                          ) : (c.name[0] || '?')}
+                        </div>
+                        <div className="cast-name">{c.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(tags.length > 0 || actors.length > 0) && (
+                  <div className="tag-row">{[...actors, ...tags].map((t) => <span className="tag" key={t}>{t}</span>)}</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="detail-info">
           <div className="detail-code">{task.video_code || '—'}</div>
@@ -288,34 +320,6 @@ export function TaskDetail() {
             </div>
           )}
 
-          {/* 女主演关联（头像+名字，点击跳转影视库按演员筛选） */}
-          {cast.length > 0 && (
-            <div className="cast-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
-              {cast.map((c, i) => (
-                <div key={i} onClick={() => nav(`/library?q=${encodeURIComponent(c.name)}`)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 72, cursor: 'pointer' }}
-                  title={`查看 ${c.name} 的作品`}>
-                  <div style={{
-                    width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', flex: 'none',
-                    background: 'var(--bg-page)', border: '2px solid var(--line-hair)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--t-faint)', fontSize: 20, fontWeight: 600,
-                  }}>
-                    {c.avatar_url ? (
-                      <img src={c.avatar_url} alt={c.name} referrerPolicy="no-referrer"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                    ) : (c.name[0] || '?')}
-                  </div>
-                  <div style={{
-                    fontSize: 11, color: 'var(--t-mute)', marginTop: 6, textAlign: 'center',
-                    width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{c.name}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* 元数据（移到头部信息区，首屏可见） */}
           <div className="detail-meta-grid" style={{ marginBottom: 20 }}>
             <MetaItem label="演员" val={task.actors} />
@@ -327,10 +331,6 @@ export function TaskDetail() {
             <MetaItem label="系列" val={task.series} />
             <MetaItem label="导演" val={task.director} />
           </div>
-
-          {(tags.length > 0 || actors.length > 0) && (
-            <div className="tag-row">{[...actors, ...tags].map((t) => <span className="tag" key={t}>{t}</span>)}</div>
-          )}
         </div>
       </div>
 

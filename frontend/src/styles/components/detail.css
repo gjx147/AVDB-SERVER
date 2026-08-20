@@ -7,11 +7,25 @@
 .detail-bg::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 30% 20%,rgba(232,93,138,.05),transparent 70%),radial-gradient(ellipse at 70% 80%,rgba(196,58,106,.03),transparent 60%);pointer-events:none}
 .detail-bg::after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(255,250,253,.24) 0%,rgba(255,250,253,.58) 100%)}
 
-.detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:start;animation:pageIn .5s cubic-bezier(.23,1,.32,1) backwards}
+.detail-head{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,1fr);gap:28px;margin-bottom:32px;align-items:stretch;animation:pageIn .5s cubic-bezier(.23,1,.32,1) backwards}
 .detail-body{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:36px;animation:pageIn .55s .08s cubic-bezier(.23,1,.32,1) backwards}
 @keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 /* JavDB 横版封面右 47% 为主角竖段：7/10 容器 + right center 裁剪呈现主角 */
 .detail-cover{position:relative;border-radius:var(--r-lg);overflow:hidden;width:100%;aspect-ratio:7/10;background:var(--bg-surface);box-shadow:0 10px 30px rgba(220,20,60,.14),0 2px 8px rgba(220,20,60,.08),0 0 0 1px rgba(255,20,147,.08)}
+/* 左列单元：内容绝对定位不参与行高——行高完全由右侧信息块决定，
+   左侧（封面+演员+标签）任何情况下都不会超过右侧块的高度 */
+.detail-side-cell{position:relative;min-width:0;min-height:0}
+.detail-side{position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.detail-side .detail-cover{flex:none}
+/* 封面下方有内容时，封面最多占列高 58%，给演员/标签留出空间（图片 cover 裁剪自适应） */
+.detail-side:has(.detail-side-extra) .detail-cover{max-height:58%}
+.detail-side-extra{display:flex;flex-direction:column;gap:12px;flex:none}
+.detail-side .cast-row{display:flex;flex-wrap:wrap;gap:10px 12px}
+.detail-side .cast-item{display:flex;flex-direction:column;align-items:center;width:64px;cursor:pointer}
+.detail-side .cast-avatar{width:48px;height:48px;border-radius:50%;overflow:hidden;flex:none;background:var(--bg-page);border:2px solid var(--line-hair);display:flex;align-items:center;justify-content:center;color:var(--t-faint);font-size:18px;font-weight:600}
+.detail-side .cast-avatar img{width:100%;height:100%;object-fit:cover}
+.detail-side .cast-name{font-size:11px;color:var(--t-mute);margin-top:6px;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-side .tag-row{display:flex;flex-wrap:wrap;gap:6px}
 /* 信息区毛玻璃：背景图透出、文字落在玻璃上仍清晰 */
 .detail-info{min-width:0;overflow:hidden;background:rgba(255,255,255,.5);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);border:1px solid rgba(255,255,255,.55);border-radius:var(--r-lg);padding:22px 26px;box-shadow:var(--shadow-card)}
 /* 左栏内容区同样毛玻璃（预览图/简介/元数据在透底上仍可读） */
