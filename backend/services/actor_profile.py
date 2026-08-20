@@ -1,4 +1,4 @@
-"""女优资料双源聚合器 —— minnano-av + laoshi.ink。
+"""女优资料三源聚合器 —— minnano-av + warashi/WAPdB + laoshi.ink。
 
 全自动定时任务与手动重试共用。全部走 httpx 纯请求（无浏览器/无 CF 对抗），
 代理从 DB settings 的 http_proxy 读（与 browser_pool 同款）。
@@ -7,8 +7,8 @@
 - 每次请求自动重试 3 次（换新连接），最后一次改走直连（不经代理）兜底；
 - laoshi 全量 JSON 落盘缓存（data/laoshi_jav.json），下载一次终身可用，
   之后只在缓存超过 24h 时后台刷新，刷新失败不影响现有数据；
-- 三源回退逻辑（用户指定）：minnano-av（个人信息）→ laoshi.ink（百科维度），
-  两源都支持中文名/英文名各试一遍。
+- 三源整合（用户指定）：minnano-av（个人信息）→ warashi/WAPdB（别名/英文简介补充）
+  → laoshi.ink（中文简介兜底），三源都支持中文名/英文名各试一遍。
 """
 
 from __future__ import annotations
@@ -52,6 +52,13 @@ def _get_proxy() -> Optional[str]:
 def _get_retry(url: str, params: dict | None = None, tries: int = 3) -> httpx.Response:
     """带重试的 GET：SSL/TCP 被掐断（SSL EOF、连接重置等）时换全新连接重试，
     最后一次改走直连（不经代理）兜底——代理隧道抖动是 NAS 上最常见的失败原因。"""
+    return _request_retry(url, params=params, tries=tries)
+
+
+def _request_retry(url: str, params: dict | None = None, data: dict | None = None,
+                   tries: int = 3) -> httpx.Response:
+    """带重试的 HTTP 请求（GET/POST）：SSL/TCP 被掐断（SSL EOF、连接重置等）时换全新连接重试，
+    最后一次改走直连（不经代理）兜底——代理隧道抖动是 NAS 上最常见的失败原因。"""
     last_err: Exception | None = None
     for i in range(tries):
         use_proxy = i < tries - 1  # 前两次走代理，最后一次直连
@@ -59,7 +66,10 @@ def _get_retry(url: str, params: dict | None = None, tries: int = 3) -> httpx.Re
             with httpx.Client(timeout=_TIMEOUT, follow_redirects=True,
                               proxy=_get_proxy() if use_proxy else None,
                               headers={"User-Agent": _UA}) as c:
-                r = c.get(url, params=params)
+                if data is not None:
+                    r = c.post(url, data=data)
+                else:
+                    r = c.get(url, params=params)
                 r.raise_for_status()
                 return r
         except Exception as e:
@@ -372,11 +382,98 @@ def fetch_laoshi(name: str) -> dict:
         return fields
 
 
-# ── 主入口：minnano + laoshi 双源整合 ──
-def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
-    """按用户指定逻辑聚合双源：minnano-av（个人信息）+ laoshi.ink（百科维度）。
+# ── 源 3：warashi-asian-pornstars.fr（WAPdB）──
+_WARASHI_SEARCH = "https://warashi-asian-pornstars.fr/en/s-12/search"
 
-    返回 {ok, source, fields}——source: minnano/laoshi/unknown/none
+# 英文星座 → 中文
+_ZODIAC_EN2CN = {
+    "aries": "牡羊座", "taurus": "金牛座", "gemini": "双子座", "cancer": "巨蟹座",
+    "leo": "狮子座", "virgo": "处女座", "libra": "天秤座", "scorpio": "天蝎座",
+    "sagittarius": "射手座", "capricorn": "摩羯座", "aquarius": "水瓶座", "pisces": "双鱼座",
+}
+
+
+def fetch_warashi(name: str) -> dict:
+    """WAPdB（warashi-asian-pornstars.fr）：搜索 → 演员页结构化资料。
+
+    提供：别名列表 / 生日 / 三围 / 罩杯 / 身高 / 星座 / 出身地 / 活动期间 / 标签 / 英文简介。
+    """
+    try:
+        r = _request_retry(_WARASHI_SEARCH, data={"recherche_critere": "f", "recherche_valeur": name})
+        m = re.search(r'href="(/en/s-2-0/[^"]+/asian-female-pornstar/\d+)"', r.text)
+        if not m:
+            logger.info(f"warashi 无结果 {name}")
+            return {}
+        html = _get_retry("https://warashi-asian-pornstars.fr" + m.group(1)).text
+        return _parse_warashi_page(html)
+    except Exception as e:
+        logger.info(f"warashi 抓取失败 {name}: {e}")
+        return {}
+
+
+def _parse_warashi_page(html: str) -> dict:
+    """解析 WAPdB 演员页（schema.org 微数据，机器可读）。"""
+    fields: dict = {}
+    # 生日（content 属性为 ISO 日期）
+    m = re.search(r'<time itemprop="birthDate" content="(\d{4}-\d{2}-\d{2})">', html)
+    if m:
+        y, mo, d = m.group(1).split("-")
+        fields["birth_date"] = f"{y}年{int(mo):02d}月{int(d):02d}日"
+    # 身高
+    m = re.search(r'height:\s*<span itemprop="value">([\d.]+)</span>\s*cm', html)
+    if m:
+        fields["height"] = f"{m.group(1)}cm"
+    # 三围（JP 102-68-90）
+    m = re.search(r"measurements:\s*JP\s*(\d+)-(\d+)-(\d+)", html)
+    if m:
+        fields["measurements"] = f"B{m.group(1)} / W{m.group(2)} / H{m.group(3)}"
+    # 罩杯
+    m = re.search(r"cup size:\s*([A-Z])", html)
+    if m:
+        fields["cup"] = m.group(1)
+    # 星座（英文 → 中文）
+    m = re.search(r"astrological sign:\s*(\w+)", html)
+    if m:
+        z = _ZODIAC_EN2CN.get(m.group(1).lower())
+        if z:
+            fields["zodiac"] = z
+    # 出身地
+    m = re.search(r'<span itemprop="addressCountry">([^<]+)</span>', html)
+    if m:
+        v = m.group(1).strip()
+        fields["birthplace"] = "日本" if v.lower() == "japan" else v[:100]
+    # 活动期间 → 出道年份 / 活跃年限
+    m = re.search(r"porn/AV activity:\s*(\d{4})\s*-\s*(\d{4}|still active)", html)
+    if m:
+        fields["debut_date"] = f"{m.group(1)}年"
+        if m.group(2) != "still active":
+            fields["active_years"] = f"{int(m.group(2)) - int(m.group(1))} 年"
+    # 别名（also known as 列表，取前 5 个）
+    aliases = [a.strip() for a in re.findall(r'<span itemprop="additionalName">([^<]+)</span>', html) if a.strip()]
+    if aliases:
+        fields["alias"] = " / ".join(aliases[:5])[:200]
+    # 标签
+    m = re.search(r'<p class="implode-tags">(.*?)</p>', html, re.S)
+    if m:
+        tags = [re.sub(r"<[^>]+>", "", t).strip()
+                for t in re.findall(r"<a[^>]*>([^<]+)</a>", m.group(1))]
+        tags = [t for t in tags if t]
+        if tags:
+            fields["tags"] = ",".join(tags)[:500]
+    # 英文简介（biography 区块；无传记时跳过）
+    m = re.search(r'<h2[^>]*id="pornostar-profil-biographie-h2"[^>]*>(.*?)(?=<h2|\Z)', html, re.S)
+    if m:
+        txt = _strip_html(m.group(1))
+        if txt and "no biography is available" not in txt:
+            fields["bio"] = txt[:1000]
+    return fields
+
+
+# ── 主入口：minnano + warashi + laoshi 三源整合 ──
+def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
+    """三源整合：minnano-av（个人信息）+ warashi/WAPdB（别名/英文简介）+ laoshi（中文简介兜底）。
+
+    返回 {ok, source, fields}——source: minnano/warashi/laoshi/unknown/none
     每个源都优先用中文名、失败再用英文名试一遍；结果写入 INFO 日志（前端应用日志可见）。
     """
     # ① minnano-av（个人信息）
@@ -385,7 +482,17 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
         fields = fetch_minnano(name_en)
     source = "minnano" if fields else None
 
-    # ② laoshi.ink（百科维度，合并进 fields）
+    # ② warashi/WAPdB（别名列表/英文简介/结构化补充，只填空缺）
+    warashi = fetch_warashi(name)
+    if not warashi and name_en:
+        warashi = fetch_warashi(name_en)
+    if warashi:
+        for k, v in warashi.items():
+            if k not in fields:
+                fields[k] = v
+        source = source or "warashi"
+
+    # ③ laoshi.ink（中文简介/出道兜底；中文简介优先覆盖英文简介）
     laoshi = fetch_laoshi(name)
     if not laoshi and name_en:
         laoshi = fetch_laoshi(name_en)
@@ -394,6 +501,8 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
             if k == "avatar_url" and v:
                 # laoshi 头像（61KB 高清）质量高于 minnano 125px 小图，覆盖
                 fields["avatar_url"] = v
+            elif k == "bio" and v:
+                fields["bio"] = v  # 中文简介优先于 warashi 英文简介
             elif k not in fields:
                 fields[k] = v
         source = source or "laoshi"
@@ -401,5 +510,5 @@ def fetch_profile(name: str, name_en: Optional[str] = None) -> dict:
     if fields:
         logger.info("演员资料聚合 %s: 命中 %s fields=%s", name, source or "unknown", ",".join(sorted(fields)))
         return {"ok": True, "source": source or "unknown", "fields": fields}
-    logger.info("演员资料聚合 %s: 双源均未命中（minnano/laoshi 均无结果）", name)
-    return {"ok": False, "source": None, "fields": {}, "message": "minnano 与老师图鉴均未查询到该演员资料"}
+    logger.info("演员资料聚合 %s: 三源均未命中（minnano/warashi/laoshi 均无结果）", name)
+    return {"ok": False, "source": None, "fields": {}, "message": "minnano、WAPdB 与老师图鉴均未查询到该演员资料"}

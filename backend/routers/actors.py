@@ -227,7 +227,7 @@ def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     from services.actor_profile import fetch_profile
     result = fetch_profile(actor.name, actor.name_en)
     if not result.get("ok"):
-        return {"ok": False, "source": None, "message": result.get("message", "minnano 与老师图鉴均未查询到")}
+        return {"ok": False, "source": None, "message": result.get("message", "minnano、WAPdB 与老师图鉴均未查询到")}
     for k, v in (result.get("fields") or {}).items():
         if hasattr(actor, k) and v:
             setattr(actor, k, v)
