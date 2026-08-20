@@ -39,7 +39,7 @@
 .poster-frame img.loaded{opacity:1;animation:focusIn .9s cubic-bezier(.23,1,.32,1)}
 .poster:hover .poster-frame img{transform:scale(1.12);transition:transform .28s cubic-bezier(.34,1.56,.64,1)}
 .poster:hover .poster-frame{transform:translateY(-6px);box-shadow:var(--shadow-float),inset 0 0 46px rgba(255,217,194,.09),0 0 0 1px rgba(255,143,179,.35)}
-.poster-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
+.poster-frame::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,122,156,0);transition:box-shadow .3s}
 .poster:hover .poster-frame::after{box-shadow:inset 0 0 0 1px rgba(255,122,156,.45)}
 .poster-grad-top{position:absolute;top:0;left:0;right:0;height:64px;background:linear-gradient(180deg,rgba(20,6,12,.55),transparent);display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px}
 .poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,143,179,.65),0 1px 3px rgba(0,0,0,.8)}

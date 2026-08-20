@@ -99,7 +99,8 @@
 [data-theme=boudoir] .stat-row .stat,[data-theme=boudoir] .dash-top-grid .card,
 [data-theme=boudoir] .dash-top-grid .panel,[data-theme=boudoir] .recent-panel,[data-theme=boudoir] .dash-grid .panel{
   background:rgba(38,18,30,.6);backdrop-filter:blur(12px)}
-[data-theme=boudoir] .btn--ghost{background:rgba(42,20,34,.6)}
+[data-theme=boudoir] .btn--ghost{background:rgba(42,20,34,.6);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-theme=boudoir] .btn--ghost:hover{background:rgba(70,30,52,.75);color:var(--gold-bright)}
 [data-theme=boudoir] .login-card{background:rgba(24,11,19,.9)}
 [data-theme=boudoir] .login-wall::after{background:radial-gradient(80% 70% at 50% 45%,transparent 26%,rgba(10,4,8,.72) 100%),
   linear-gradient(180deg,rgba(20,10,16,.35),rgba(10,4,8,.5))}
@@ -108,6 +109,17 @@
 [data-theme=boudoir] .wall-nav{color:#f6e3ee}
 [data-theme=boudoir] .wall-title{text-shadow:none}
 [data-theme=boudoir] .wall-title em{color:var(--gold-bright)}
+
+/* 密室模式下的浅色组件换暗底（浅字浅底会导致文字不可见） */
+[data-mode=mood] .btn--ghost{background:rgba(42,20,34,.62);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-mode=mood] .btn--ghost:hover{background:rgba(70,30,52,.78);color:var(--gold-bright);border-color:var(--gold-bright)}
+[data-mode=mood] .rc-nav{background:rgba(40,18,30,.6);color:#f6e3ee;border-color:rgba(255,143,179,.3)}
+[data-mode=mood] .rc-nav:hover{background:rgba(58,26,44,.8)}
+[data-mode=mood] .rank-badge{background:rgba(30,14,22,.94);color:#f6e3ee}
+[data-mode=mood] .login-card{background:rgba(24,11,19,.9);border-color:rgba(255,143,179,.25)}
+[data-mode=mood] .mood-toggle{color:var(--t-mute)}
+[data-mode=mood] .mood-toggle:hover,[data-mode=mood] .mood-toggle.on{color:var(--gold-bright);border-color:var(--gold-bright)}
+[data-mode=mood] .sidebar-foot{color:#c8a3b5}
 /* 密室模式（亮色主题下开密室）：玻璃元素同样换暗底 */
 [data-mode=mood] .wall-head,[data-mode=mood] .wall-nav,[data-mode=mood] .wslide-prog{
   background:rgba(26,10,18,.82);color:#f6e3ee;border-color:rgba(255,143,179,.3)}

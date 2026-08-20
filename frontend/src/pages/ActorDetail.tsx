@@ -20,9 +20,12 @@ export function ActorDetail() {
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [batchBusy, setBatchBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  const confirmBox = useStore((s) => s.confirm)
 
   const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all') => {
     if (!id) return
@@ -33,6 +36,7 @@ export function ActorDetail() {
       setPage(p)
       setSort(s)
       setInLib(lib)
+      setSelected(new Set())
     } catch {
       setMovies([]); setTotal(0)
     }
@@ -90,6 +94,45 @@ export function ActorDetail() {
       setAutoAdd(r.auto_add)
       toastOk(r.auto_add ? '已开启自动入库' : '已关闭自动入库')
     } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
+  // ── 作品列表多选批量操作 ──
+  const toggleSel = (id: number) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const allSelected = movies.length > 0 && movies.every((m) => selected.has(m.id))
+  const toggleAll = () => {
+    setSelected((prev) => {
+      const allOnPage = movies.every((m) => prev.has(m.id))
+      const n = new Set(prev)
+      if (allOnPage) movies.forEach((m) => n.delete(m.id))
+      else movies.forEach((m) => n.add(m.id))
+      return n
+    })
+  }
+  const batch = async (kind: 'favorite' | 'delete') => {
+    const ids = [...selected]
+    if (!ids.length) return
+    if (kind === 'delete') {
+      const ok = await confirmBox('批量删除', `将删除 ${ids.length} 个任务及其关联图片缓存，不可恢复。确定继续？`)
+      if (!ok) return
+    }
+    setBatchBusy(true)
+    try {
+      if (kind === 'favorite') await api.tasks.batchFavorite(ids)
+      else await api.tasks.batchDelete(ids)
+      toastOk(`已批量${kind === 'favorite' ? '收藏' : '删除'} ${ids.length} 项`)
+      setSelected(new Set())
+      loadMovies(page, sort, inLib)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setBatchBusy(false)
+    }
   }
 
   if (actor === undefined) return <div className="page"><Loading /></div>
@@ -225,6 +268,9 @@ export function ActorDetail() {
             <option value="in">✓ 在媒体库</option>
             <option value="out">✗ 不在媒体库</option>
           </select>
+          {movies.length > 0 && (
+            <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
+          )}
         </div>
       </div>
       {total === 0 ? (
@@ -246,9 +292,17 @@ export function ActorDetail() {
                     onLoad={(e) => { e.currentTarget.classList.add('loaded') }} />
                   <div className="poster-grad-top">
                     <span className="poster-code">{m.video_code || '—'}</span>
-                    {m.media_in_library === true && (
-                      <span className="badge-lib" title="已在 Emby 媒体库">库</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {m.media_in_library === true && (
+                        <span className="badge-lib" title="已在 Emby 媒体库">库</span>
+                      )}
+                      <div className={`poster-check${selected.has(m.id) ? ' on' : ''}`} role="checkbox"
+                        aria-checked={selected.has(m.id)} tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); toggleSel(m.id) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSel(m.id) } }}>
+                        {selected.has(m.id) ? '✓' : ''}
+                      </div>
+                    </div>
                   </div>
                   <div className="poster-info">
                     <div className="poster-title">{m.title || '未命名'}</div>
@@ -266,6 +320,14 @@ export function ActorDetail() {
         </div>
         </>
       )}
+
+      {/* 批量操作栏 */}
+      <div className={`batchbar${selected.size ? ' show' : ''}`}>
+        <span className="sel-count">已选 {selected.size} 项</span>
+        <button className="btn btn--gold btn--sm" onClick={() => batch('favorite')} disabled={batchBusy}>批量收藏</button>
+        <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
+        <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
+      </div>
     </div>
   )
 }

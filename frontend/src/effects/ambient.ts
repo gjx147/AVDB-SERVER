@@ -279,6 +279,11 @@ function initTilt() {
     })
   }
   document.addEventListener('pointermove', (e) => {
+    // 指针落在批量勾选框上时停用倾斜：卡片旋转会追着光标跑，勾选框永远点不中
+    if ((e.target as HTMLElement).closest('.poster-check, .actor-check')) {
+      if (current) { current.style.transform = ''; current.classList.remove('tilt'); current = null }
+      return
+    }
     const el = (e.target as HTMLElement).closest('.poster') as HTMLElement | null
     if (!el) {
       if (current) { current.style.transform = ''; current.classList.remove('tilt'); current = null }

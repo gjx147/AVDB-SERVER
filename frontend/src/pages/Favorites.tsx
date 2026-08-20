@@ -16,11 +16,14 @@ export function Favorites() {
   const [addingCol, setAddingCol] = useState(false)
   const [newColName, setNewColName] = useState('')
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [batchBusy, setBatchBusy] = useState(false)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  const confirmBox = useStore((s) => s.confirm)
 
   const load = (lib: 'all' | 'in' | 'out' = inLib) => {
-    setTasks(null); setError(null)
+    setTasks(null); setError(null); setSelected(new Set())
     const inLibrary = lib === 'all' ? undefined : lib === 'in'
     if (activeCol !== null) {
       api.collections.tasks(activeCol, inLibrary).then((r) => { setTasks(r.tasks); setError(null) }).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
@@ -48,6 +51,53 @@ export function Favorites() {
       toastOk('已删除')
     }
     catch (e) { toastErr(String((e as Error).message)) }
+  }
+
+  // ── 多选批量操作 ──
+  const toggleSel = (id: number) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const allSelected = tasks !== null && tasks.length > 0 && tasks.every((t) => selected.has(t.id))
+  const toggleAll = () => {
+    if (!tasks) return
+    setSelected((prev) => {
+      const allOnPage = tasks.every((t) => prev.has(t.id))
+      const n = new Set(prev)
+      if (allOnPage) tasks.forEach((t) => n.delete(t.id))
+      else tasks.forEach((t) => n.add(t.id))
+      return n
+    })
+  }
+  const batch = async (kind: 'unfavorite' | 'delete') => {
+    const ids = [...selected]
+    if (!ids.length) return
+    if (kind === 'delete') {
+      const ok = await confirmBox('批量删除', `将删除 ${ids.length} 个任务及其关联图片缓存，不可恢复。确定继续？`)
+      if (!ok) return
+    }
+    setBatchBusy(true)
+    try {
+      if (kind === 'unfavorite') {
+        let n = 0
+        for (const id of ids) {
+          try { await api.tasks.unfavorite(id); n++ } catch { /* 单个失败不中断 */ }
+        }
+        toastOk(`已取消收藏 ${n} 项`)
+      } else {
+        await api.tasks.batchDelete(ids)
+        toastOk(`已删除 ${ids.length} 项`)
+      }
+      setSelected(new Set())
+      load()
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setBatchBusy(false)
+    }
   }
 
   return (
@@ -83,7 +133,10 @@ export function Favorites() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }}>
+        {tasks && tasks.length > 0 && (
+          <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
+        )}
         <select className="select" value={inLib}
           onChange={(e) => setInLib(e.target.value as 'all' | 'in' | 'out')} aria-label="媒体库筛选">
           <option value="all">全部媒体库状态</option>
@@ -98,9 +151,17 @@ export function Favorites() {
           sub={activeCol !== null ? '在详情页将影片加入此分组' : '在影片库点击海报卡片上的收藏按钮即可加入。'} />
       ) : (
         <div className="gallery">
-          {tasks.map((t) => <PosterCard key={t.id} task={t} />)}
+          {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)} />)}
         </div>
       )}
+
+      {/* 批量操作栏 */}
+      <div className={`batchbar${selected.size ? ' show' : ''}`}>
+        <span className="sel-count">已选 {selected.size} 项</span>
+        <button className="btn btn--gold btn--sm" onClick={() => batch('unfavorite')} disabled={batchBusy}>批量取消收藏</button>
+        <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
+        <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
+      </div>
     </div>
   )
 }

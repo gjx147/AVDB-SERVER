@@ -31,8 +31,11 @@
 
 /* 海报卡批量选中态：描边 + 上浮 */
 .poster.selected .poster-frame{box-shadow:0 0 0 2px var(--gold),0 8px 24px rgba(255,20,147,.28);transform:translateY(-4px)}
-.poster-check{width:26px;height:26px;border-radius:6px;cursor:pointer;border:2.5px solid rgba(255,255,255,.85);background:rgba(0,0,0,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;transition:all .2s}
+.poster-check{position:relative;z-index:6;width:26px;height:26px;border-radius:6px;cursor:pointer;border:2.5px solid rgba(255,255,255,.85);background:rgba(0,0,0,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;transition:all .2s}
 .poster-check.on{border:none;background:var(--gold);box-shadow:0 0 8px rgba(255,20,147,.4);animation:popIn .3s cubic-bezier(.34,1.56,.64,1)}
+/* 演员卡批量勾选（演员库/演员榜头像左上角） */
+.actor-check{position:absolute;top:6px;left:6px;z-index:6;width:26px;height:26px;border-radius:6px;cursor:pointer;border:2.5px solid rgba(255,255,255,.85);background:rgba(0,0,0,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;transition:all .2s}
+.actor-check.on{border:none;background:var(--gold);box-shadow:0 0 8px rgba(255,20,147,.4);animation:popIn .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes popIn{from{transform:scale(0)}to{transform:scale(1)}}
 
 /* 入场动效铺开：行视图/演员卡错峰 */

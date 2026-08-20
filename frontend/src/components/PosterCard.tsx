@@ -108,7 +108,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           <div style={{ display: 'flex', gap: 6 }}>
             {selectable && (
               <div className={`poster-check${selected ? ' on' : ''}`} onClick={toggle} role="checkbox" aria-checked={selected} tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as unknown as React.MouseEvent) } }}>
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggle(e as unknown as React.MouseEvent) } }}>
                 {selected ? '✓' : ''}
               </div>
             )}

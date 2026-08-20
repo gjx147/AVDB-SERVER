@@ -170,6 +170,8 @@ export const api = {
       http.get<{ pending: number; fetched: number; failed: number }>('/api/actors/profile-queue/status').then((r) => r.data),
     crawlSearch: (actor_name: string) =>
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
+    remove: (actorId: number) =>
+      http.delete<ApiOk>(`/api/actors/${actorId}`).then((r) => r.data),
   },
 
   // ════════ Rankings ════════
@@ -183,7 +185,7 @@ export const api = {
     addTask: (ranking_id: number) =>
       http.post<ApiOk>(`/api/rankings/${ranking_id}/add-task`).then((r) => r.data),
     batchAddTasks: (ranking_ids: number[]) =>
-      http.post<{ ok: boolean; results: { ranking_id: number; task_id: number | null; error?: string }[] }>(
+      http.post<{ ok: boolean; added?: number; skipped?: number; results: { ranking_id: number; task_id: number | null; error?: string }[] }>(
         '/api/rankings/batch-add-tasks', { ranking_ids }
       ).then((r) => r.data),
   },

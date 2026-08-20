@@ -17,12 +17,16 @@ export function Actors() {
   const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set())
   const [onlyWithAvatar, setOnlyWithAvatar] = useState(true)  // 默认只显示有头像的演员
   const [onlyFollowed, setOnlyFollowed] = useState(false)  // 只看关注的
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [batchBusy, setBatchBusy] = useState(false)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  const confirmBox = useStore((s) => s.confirm)
 
   const load = useCallback((keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
     setActors(null)
     setError(null)
+    setSelected(new Set())
     const wa = opts?.withAvatar !== undefined ? opts.withAvatar : onlyWithAvatar
     const fd = opts?.followed !== undefined ? opts.followed : onlyFollowed
     const p = keyword?.trim()
@@ -75,6 +79,52 @@ export function Actors() {
       toastOk(`已开始补齐 ${a.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
+
+  // ── 多选批量操作 ──
+  const toggleSel = (id: number) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const allSelected = actors !== null && actors.length > 0 && actors.every((a) => selected.has(a.id))
+  const toggleAll = () => {
+    if (!actors) return
+    setSelected((prev) => {
+      const allOnPage = actors.every((a) => prev.has(a.id))
+      const n = new Set(prev)
+      if (allOnPage) actors.forEach((a) => n.delete(a.id))
+      else actors.forEach((a) => n.add(a.id))
+      return n
+    })
+  }
+  const batch = async (kind: 'follow' | 'delete') => {
+    const sels = (actors || []).filter((a) => selected.has(a.id))
+    if (!sels.length) return
+    if (kind === 'delete') {
+      const ok = await confirmBox('批量删除演员', `将删除 ${sels.length} 位演员记录（其作品任务不会被删除）。确定继续？`)
+      if (!ok) return
+    }
+    setBatchBusy(true)
+    try {
+      let n = 0
+      for (const a of sels) {
+        try {
+          if (kind === 'follow') await api.actors.follow(a.id)
+          else await api.actors.remove(a.id)
+          n++
+        } catch { /* 单个失败不中断 */ }
+      }
+      toastOk(kind === 'follow' ? `已关注 ${n} 位演员` : `已删除 ${n} 位演员`)
+      setSelected(new Set())
+      load(kw)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setBatchBusy(false)
+    }
+  }
   return (
     <div className="page">
       <PageHead eyebrow={`Actors · ${actors?.length ?? 0} 位`} title={<>演员<em>库</em></>}
@@ -109,6 +159,9 @@ export function Actors() {
           <input type="checkbox" checked={onlyFollowed} onChange={(e) => { setOnlyFollowed(e.target.checked); load(undefined, { followed: e.target.checked }) }} />
           只看关注
         </label>
+        {actors && actors.length > 0 && (
+          <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
+        )}
       </div>
 
       {error ? <ErrorEmpty message={error} onRetry={() => load(kw)} /> :
@@ -130,6 +183,13 @@ export function Actors() {
                     {a.name[0] || '?'}
                   </div>
                 )}
+                {/* 批量勾选（左上角） */}
+                <div className={`actor-check${selected.has(a.id) ? ' on' : ''}`} role="checkbox"
+                  aria-checked={selected.has(a.id)} tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); toggleSel(a.id) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSel(a.id) } }}>
+                  {selected.has(a.id) ? '✓' : ''}
+                </div>
                 {/* 关注按钮（关注 = actor 订阅） */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleFollow(a) }}
@@ -155,6 +215,14 @@ export function Actors() {
           ))}
         </div>
       )}
+
+      {/* 批量操作栏 */}
+      <div className={`batchbar${selected.size ? ' show' : ''}`}>
+        <span className="sel-count">已选 {selected.size} 项</span>
+        <button className="btn btn--gold btn--sm" onClick={() => batch('follow')} disabled={batchBusy}>批量关注</button>
+        <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
+        <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
+      </div>
     </div>
   )
 }

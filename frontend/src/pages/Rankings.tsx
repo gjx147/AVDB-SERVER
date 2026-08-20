@@ -16,6 +16,11 @@ const TABS: { key: RankType; label: string }[] = [
   { key: 'actor', label: '演员月榜' },
 ]
 
+/** 刷新顺序：日榜 → 周榜 → 月榜 → 演员月榜（scraper 全局锁，必须逐个等） */
+const REFRESH_ORDER: RankType[] = ['daily', 'weekly', 'monthly', 'actor']
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 /** 扩展 Task，携带排行榜特有展示字段 */
 type RankingTask = Task & {
   _ranking_id: number
@@ -93,8 +98,12 @@ export function Rankings() {
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [refreshing, setRefreshing] = useState<RankType | null>(null)  // 正在按序刷新的榜单
+  const [batchBusy, setBatchBusy] = useState(false)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  const confirmBox = useStore((s) => s.confirm)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const reqSeqRef = useRef(0)  // P1#6: 标签切换竞态防护
@@ -113,6 +122,7 @@ export function Rankings() {
     setList(null)
     setSearchQ('')
     setFilterStatus('all')
+    setSelected(new Set())
     setError(null)
     try {
       // 只读取排行榜数据（由 scraper ranking 命令完整爬取后写入）；非演员榜支持在库筛选
@@ -136,8 +146,44 @@ export function Rankings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inLib])
 
-  const crawl = async () => {
-    try { await api.rankings.crawl(tab); toastOk('今晚的新面孔正在赶来') } catch (e) { toastErr(String((e as Error).message)) }
+  /** 等待 scraper 全局锁空闲（后端同一时刻只允许一个爬取进程）。
+   *  每次触发后都要等它爬完再触发下一个，保证日→周→月→演员严格按序。 */
+  const waitIdle = async () => {
+    for (let i = 0; i < 240; i++) {  // 240 × 3s = 12 分钟上限
+      try {
+        const s = await api.crawl.status()
+        if (!s.running) return true
+      } catch { /* 状态查询失败不中断，继续等 */ }
+      await sleep(3000)
+    }
+    return false
+  }
+
+  /** 一键刷新：四个榜单按 日→周→月→演员 顺序逐个爬取，全程等待各自完成 */
+  const refreshAll = async () => {
+    if (refreshing) return
+    try {
+      for (const t of REFRESH_ORDER) {
+        setRefreshing(t)
+        if (!(await waitIdle())) { toastErr('已有爬取任务长时间未结束，刷新中止'); break }
+        try {
+          await api.rankings.crawl(t)
+        } catch (e) {
+          // 409 锁竞争：等空闲后重试一次
+          if (!String((e as Error).message).includes('已有爬取任务')) throw e
+          if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 刷新超时，刷新中止`); break }
+          await api.rankings.crawl(t)
+        }
+        if (!(await waitIdle())) { toastErr(`${TABS.find(x => x.key === t)?.label} 爬取超时，刷新中止`); break }
+      }
+      toastOk('四榜已按序刷新完成（日榜→周榜→月榜→演员月榜）')
+      api.rankingsNew.dates().then(setLatest).catch(() => {})
+      load(tab)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setRefreshing(null)
+    }
   }
 
   const openRank = (r: Ranking) => {
@@ -162,6 +208,68 @@ export function Rankings() {
     }
   }
 
+  // ── 多选 ──
+  const toggleSel = (id: number) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const allSelected = list !== null && list.length > 0 && list.every((r) => selected.has(r.id))
+  const toggleAll = () => {
+    if (!list) return
+    setSelected((prev) => {
+      const allOnPage = list.every((r) => prev.has(r.id))
+      const n = new Set(prev)
+      if (allOnPage) list.forEach((r) => n.delete(r.id))
+      else list.forEach((r) => n.add(r.id))
+      return n
+    })
+  }
+  const selRankings = (list || []).filter((r) => selected.has(r.id))
+
+  /** 批量操作（影片榜）：入库 / 收藏 / 删除 */
+  const batch = async (kind: 'add' | 'favorite' | 'delete' | 'follow') => {
+    const sels = selRankings
+    if (!sels.length) return
+    setBatchBusy(true)
+    try {
+      if (kind === 'add') {
+        const noTask = sels.filter((r) => !r.task_id)
+        if (!noTask.length) { toastErr('所选条目均已入库，无需再入库'); return }
+        const r = await api.rankings.batchAddTasks(noTask.map((x) => x.id))
+        toastOk(`已入库 ${r.added ?? r.results?.length ?? noTask.length} 项${r.skipped ? `，跳过 ${r.skipped} 项` : ''}`)
+      } else if (kind === 'favorite') {
+        const ids = sels.filter((r) => r.task_id).map((r) => r.task_id as number)
+        if (!ids.length) { toastErr('所选条目尚未入库，请先批量入库'); return }
+        await api.tasks.batchFavorite(ids)
+        toastOk(`已收藏 ${ids.length} 项`)
+      } else if (kind === 'delete') {
+        const ids = sels.filter((r) => r.task_id).map((r) => r.task_id as number)
+        if (!ids.length) { toastErr('所选条目尚未入库，无任务可删'); return }
+        const ok = await confirmBox('批量删除', `将删除 ${ids.length} 个任务及其关联图片缓存，不可恢复。确定继续？`)
+        if (!ok) return
+        await api.tasks.batchDelete(ids)
+        toastOk(`已删除 ${ids.length} 项`)
+      } else {
+        // actor 榜：批量关注（逐个创建 actor 订阅）
+        let n = 0
+        for (const r of sels) {
+          if (!r.actor_id) continue
+          try { await api.actors.follow(r.actor_id); n++ } catch { /* 单个失败不中断 */ }
+        }
+        toastOk(`已关注 ${n} 位演员`)
+      }
+      setSelected(new Set())
+      load(tab)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setBatchBusy(false)
+    }
+  }
+
   // ── 前端过滤 ──
   const isActorTab = tab === 'actor'
   const tasks: RankingTask[] = (list || []).map(r => toTask(r, isActorTab))
@@ -177,11 +285,15 @@ export function Rankings() {
   const podiumTasks = showPodium ? filtered.slice(0, 3) : []
   const restTasks = showPodium ? filtered.slice(3) : filtered
 
+  const refreshingLabel = refreshing ? TABS.find(x => x.key === refreshing)?.label : ''
+
   return (
     <div className="page">
       <PageHead eyebrow="Rankings" title={<>排<em>行榜</em></>}
         sub="今夜最热的她们，已经按心动值排好了队。">
-        <button className="btn btn--ghost btn--sm" onClick={crawl}><Icon.refresh />刷新排行</button>
+        <button className="btn btn--ghost btn--sm" onClick={refreshAll} disabled={!!refreshing}>
+          <Icon.refresh />{refreshing ? `刷新中 · ${refreshingLabel}…` : '刷新排行'}
+        </button>
       </PageHead>
 
       {/* Toolbar：Tab + 搜索 + 筛选 + 视图切换 */}
@@ -210,6 +322,9 @@ export function Rankings() {
           <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>画廊</button>
           <button className={view === 'row' ? 'on' : ''} onClick={() => setView('row')}>列表</button>
         </div>
+        {list && list.length > 0 && (
+          <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
+        )}
         {latest[tab]?.[0] && <span style={{ fontSize: 11, color: 'var(--t-faint)', whiteSpace: 'nowrap' }}>更新于 {latest[tab][0]}</span>}
       </div>
 
@@ -237,6 +352,13 @@ export function Rankings() {
                         <span className="crown-crown">♛</span>
                         <span className="crown-num">{t._rank_position}</span>
                       </span>
+                      <div className={`actor-check${selected.has(t._ranking_id) ? ' on' : ''}`} role="checkbox"
+                        style={{ left: 'auto', right: 6 }}
+                        aria-checked={selected.has(t._ranking_id)} tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); toggleSel(t._ranking_id) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSel(t._ranking_id) } }}>
+                        {selected.has(t._ranking_id) ? '✓' : ''}
+                      </div>
                       {t.poster_url
                         ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
                             onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
@@ -260,6 +382,13 @@ export function Rankings() {
                   style={{ cursor: 'pointer' }}>
                   <div className="actor-photo">
                     {t._rank_position <= 10 && <span className="rank-badge">{t._rank_position}</span>}
+                    <div className={`actor-check${selected.has(t._ranking_id) ? ' on' : ''}`} role="checkbox"
+                      style={{ left: 'auto', right: 6 }}
+                      aria-checked={selected.has(t._ranking_id)} tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); toggleSel(t._ranking_id) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSel(t._ranking_id) } }}>
+                      {selected.has(t._ranking_id) ? '✓' : ''}
+                    </div>
                     {t.poster_url
                       ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
                           onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
@@ -279,14 +408,18 @@ export function Rankings() {
             <div className="podium">
               {podiumTasks.map((t) => {
                 const r = list!.find((x) => x.id === t._ranking_id)!
-                return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position} onClick={() => openRank(r)} />
+                return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position}
+                  selected={selected.has(t._ranking_id)} selectable onToggle={() => toggleSel(t._ranking_id)}
+                  onClick={() => openRank(r)} />
               })}
             </div>
           )}
           <div className="gallery">
             {restTasks.map((t) => {
               const r = list!.find((x) => x.id === t._ranking_id)!
-              return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position <= 10 ? t._rank_position : undefined} onClick={() => openRank(r)} />
+              return <PosterCard key={t._ranking_id} task={t} rank={t._rank_position <= 10 ? t._rank_position : undefined}
+                selected={selected.has(t._ranking_id)} selectable onToggle={() => toggleSel(t._ranking_id)}
+                onClick={() => openRank(r)} />
             })}
           </div>
           </>
@@ -327,6 +460,21 @@ export function Rankings() {
           })}
         </div>
       )}
+
+      {/* 批量操作栏 */}
+      <div className={`batchbar${selected.size ? ' show' : ''}`}>
+        <span className="sel-count">已选 {selected.size} 项</span>
+        {isActorTab ? (
+          <button className="btn btn--gold btn--sm" onClick={() => batch('follow')} disabled={batchBusy}>批量关注</button>
+        ) : (
+          <>
+            <button className="btn btn--gold btn--sm" onClick={() => batch('add')} disabled={batchBusy}>批量入库</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => batch('favorite')} disabled={batchBusy}>批量收藏</button>
+            <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
+          </>
+        )}
+        <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
+      </div>
 
       {/* P3：队列进度条 */}
       {queueRunning && queueInfo && <QueueOverlay info={queueInfo} />}
