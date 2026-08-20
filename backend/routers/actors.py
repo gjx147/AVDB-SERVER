@@ -307,6 +307,9 @@ def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     else:
         for k, v in fields.items():
             if hasattr(actor, k) and v:
+                # 头像只填空缺：已有头像（含手动更换的）不覆盖
+                if k == "avatar_url" and actor.avatar_url:
+                    continue
                 setattr(actor, k, v)
     actor.profile_fetched = True
     actor.profile_fetch_failed = False

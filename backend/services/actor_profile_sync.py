@@ -19,6 +19,7 @@ _FIELDS = (
     "blood_type", "zodiac", "birthplace", "nationality", "active_years",
     "bio", "timeline", "alias", "birth_date", "height", "cup", "measurements", "debut_date",
     "agency", "hobbies", "debut_work", "twitter", "website", "tags",
+    "avatar_url",
 )
 
 # 进度钩子：一键提取后台任务通过它汇报当前演员名（其余场景为 None）
@@ -75,6 +76,9 @@ def run_cycle() -> dict:
                     if not actor.profile_locked:
                         for k, v in (result.get("fields") or {}).items():
                             if k in _FIELDS and v:
+                                # 头像只填空缺：已有头像（含手动更换的）不覆盖
+                                if k == "avatar_url" and actor.avatar_url:
+                                    continue
                                 setattr(actor, k, v)
                     actor.profile_fetched = True
                     actor.profile_fetch_failed = False
