@@ -140,8 +140,18 @@ export function ActorDetail() {
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={() => nav('/actors')} /></div>
 
   // 资料行（只显示有值的）
+  const ageStr = (() => {
+    const m = actor.birth_date?.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
+    if (!m) return null
+    const today = new Date()
+    let a = today.getFullYear() - +m[1]
+    const [mo, d] = [+m[2], +m[3]]
+    if (today.getMonth() + 1 < mo || (today.getMonth() + 1 === mo && today.getDate() < d)) a--
+    return a >= 0 ? `${a} 岁` : null
+  })()
   const meta: [string, string | null][] = [
     ['出生日期', actor.birth_date],
+    ['年龄', ageStr],
     ['身高', actor.height],
     ['三围', actor.measurements],
     ['罩杯', actor.cup],
@@ -151,7 +161,10 @@ export function ActorDetail() {
     ['国籍', actor.nationality],
     ['出道', actor.debut_date],
     ['活跃年限', actor.active_years],
+    ['事务所', actor.agency],
     ['别名', actor.alias],
+    ['出道作', actor.debut_work],
+    ['趣味特技', actor.hobbies],
     ['作品数', actor.movie_count != null ? String(actor.movie_count) : null],
   ]
   const metaVisible = meta.filter(([, v]) => v)
@@ -229,6 +242,33 @@ export function ActorDetail() {
                   <div className="dm-val">{v}</div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* 标签（minnano タグ）+ 社交链接 */}
+          {(actor.tags || actor.twitter || actor.website) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {actor.tags && (
+                <div className="tag-row">
+                  {actor.tags.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                    <span className="tag" key={t}>{t}</span>
+                  ))}
+                </div>
+              )}
+              {(actor.twitter || actor.website) && (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {actor.twitter && (
+                    <a className="btn btn--ghost btn--sm" href={actor.twitter} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                      𝕏 Twitter
+                    </a>
+                  )}
+                  {actor.website && (
+                    <a className="btn btn--ghost btn--sm" href={actor.website} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                      <Icon.link />官方网站
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

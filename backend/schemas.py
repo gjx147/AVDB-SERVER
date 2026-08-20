@@ -112,6 +112,13 @@ class ActorOut(BaseModel):
     timeline: Optional[str] = None
     alias: Optional[str] = None
     profile_fetched: bool = False
+    # minnano-av 完整资料扩展字段
+    agency: Optional[str] = None
+    hobbies: Optional[str] = None
+    debut_work: Optional[str] = None
+    twitter: Optional[str] = None
+    website: Optional[str] = None
+    tags: Optional[str] = None
 
 
 class ActorListResponse(BaseModel):

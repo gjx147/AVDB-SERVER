@@ -114,6 +114,12 @@ export interface Actor {
   timeline: string | null
   alias: string | null
   profile_fetched: boolean
+  // minnano-av 完整资料扩展字段
+  agency: string | null
+  hobbies: string | null
+  debut_work: string | null
+  twitter: string | null
+  website: string | null
 }
 
 // 订阅（关注 = sub_type='actor' 的订阅）

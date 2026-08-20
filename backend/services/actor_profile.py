@@ -70,14 +70,42 @@ def _get_retry(url: str, params: dict | None = None, tries: int = 3) -> httpx.Re
 
 
 # ── 源 1：minnano-av ──
+# 日文星座 → 中文（页面用日文星座名，如 やぎ座）
+_ZODIAC_JA2CN = {
+    "おひつじ座": "牡羊座", "おうし座": "金牛座", "ふたご座": "双子座", "かに座": "巨蟹座",
+    "しし座": "狮子座", "おとめ座": "处女座", "てんびん座": "天秤座", "さそり座": "天蝎座",
+    "いて座": "射手座", "やぎ座": "摩羯座", "みずがめ座": "水瓶座", "うお座": "双鱼座",
+}
+_ZODIAC_JA = "|".join(_ZODIAC_JA2CN)
+_ZODIAC_CN = "牡羊座|金牛座|双子座|巨蟹座|狮子座|处女座|天秤座|天蝎座|射手座|摩羯座|水瓶座|双鱼座"
+
+
+def _yy2year(yy: str) -> int:
+    """两位年份 → 四位：00-29 视为 20xx（出道/活跃期），30-99 视为 19xx。"""
+    n = int(yy)
+    return 2000 + n if n < 30 else 1900 + n
+
+
+def _strip_html(s: str) -> str:
+    """去 HTML 标签/实体并压缩空白。"""
+    s = re.sub(r"<[^>]+>", "", s)
+    s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&#039;", "'")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _row(html: str, label: str) -> str | None:
+    """资料表行：<td><span>LABEL</span><p>VALUE</p></td>，返回原始 VALUE（含可能的 <a>）。"""
+    m = re.search(r"<span>" + re.escape(label) + r"</span>\s*<p>(.*?)</p>", html, re.S)
+    return m.group(1) if m else None
+
+
 def fetch_minnano(name: str) -> dict:
-    """minnano-av：搜索（search_word）→ 详情页资料行（生日/三围/罩杯/身高/血型/星座）。
+    """minnano-av：搜索（search_word）→ 详情页完整资料行。
 
     精确匹配时搜索会直接跳到资料页；否则是结果列表，跟第一个 actressNNN.html。
     注意：判断依据是「页面是否含资料行标记」（birthday= / T-B-W-H 行）——
     结果列表里也会出现搜索词本身，仅凭名字在不在页面里判断会把列表误当资料页。
     """
-    fields: dict = {}
     try:
         r = _get_retry("https://www.minnano-av.com/search_result.php", {
             "search_scope": "actress", "search_word": name,
@@ -88,37 +116,114 @@ def fetch_minnano(name: str) -> dict:
             m = re.search(r"(actress\d+\.html)", html)
             if not m:
                 logger.info(f"minnano 无结果 {name}")
-                return fields
+                return {}
             html = _get_retry(f"https://www.minnano-av.com/{m.group(1)}").text
-        # 资料行：T158 / B96(Gカップ) / W56 / H82
-        m = re.search(r"T([\d.]+)\s*/\s*B([\d.]+)(?:\(([A-Z])?\))?", html)
-        if m:
-            fields["height"] = f"{m.group(1)}cm"
-            if m.group(3):
-                fields["cup"] = m.group(3)
-            m2 = re.search(r"B[\d.]+\s*/\s*W([\d.]+)\s*/\s*H([\d.]+)", html)
-            if m2:
-                fields["measurements"] = f"B{m.group(2)} / W{m2.group(1)} / H{m2.group(2)}"
-        # 生日
-        m = re.search(r"birthday=(\d{4}-\d{2}-\d{2})", html)
-        if m:
-            y, mo, d = m.group(1).split("-")
-            fields["birth_date"] = f"{y}年{int(mo):02d}月{int(d):02d}日"
-        # 血型/星座
-        m = re.search(r"(A型|B型|O型|AB型)", html)
-        if m:
-            fields["blood_type"] = m.group(1)
-        m = re.search(r"(牡羊座|金牛座|双子座|巨蟹座|狮子座|处女座|天秤座|天蝎座|射手座|摩羯座|水瓶座|双鱼座)", html)
-        if m:
-            fields["zodiac"] = m.group(1)
-        # 头像：详情页缩略图（p_actress_* 路径，去 query 后缀）
-        m = re.search(r"src=\"(/p_actress_[^\"?]+)", html)
-        if m:
-            fields["avatar_url"] = "https://www.minnano-av.com" + m.group(1)
-        return fields
+        return _parse_minnano_page(html)
     except Exception as e:
         logger.info(f"minnano 抓取失败 {name}: {e}")
-        return fields
+        return {}
+
+
+def _parse_minnano_page(html: str) -> dict:
+    """解析 minnano 演员详情页 → 完整资料字段。"""
+    fields: dict = {}
+    # 别名
+    row = _row(html, "別名")
+    if row:
+        alias = _strip_html(row)
+        if alias:
+            fields["alias"] = alias[:200]
+    # 生日
+    m = re.search(r"birthday=(\d{4}-\d{2}-\d{2})", html)
+    if m:
+        y, mo, d = m.group(1).split("-")
+        fields["birth_date"] = f"{y}年{int(mo):02d}月{int(d):02d}日"
+    # 身高三围（行内有 cup= 链接打断纯文本，需独立正则）
+    m = re.search(r"T([\d.]+)\s*/\s*B([\d.]+)", html)
+    if m:
+        fields["height"] = f"{m.group(1)}cm"
+        cup_m = re.search(r"cup=([A-Z])", html)
+        if cup_m:
+            fields["cup"] = cup_m.group(1)
+        m2 = re.search(r"/\s*W([\d.]+)\s*/\s*H([\d.]+)", html)
+        if m2:
+            fields["measurements"] = f"B{m.group(2)} / W{m2.group(1)} / H{m2.group(2)}"
+    # 血型
+    m = re.search(r"(A型|B型|O型|AB型)", html)
+    if m:
+        fields["blood_type"] = m.group(1)
+    # 星座：生年月日行尾部（日文名 → 中文）
+    row = _row(html, "生年月日")
+    if row:
+        txt = _strip_html(row)
+        m = re.search(_ZODIAC_JA, txt)
+        if m:
+            fields["zodiac"] = _ZODIAC_JA2CN[m.group(0)]
+        else:
+            m = re.search(_ZODIAC_CN, txt)
+            if m:
+                fields["zodiac"] = m.group(0)
+    # 出身地
+    row = _row(html, "出身地")
+    if row:
+        v = _strip_html(row)
+        if v:
+            fields["birthplace"] = v[:100]
+    # 所属事務所
+    row = _row(html, "所属事務所")
+    if row:
+        v = _strip_html(row)
+        if v:
+            fields["agency"] = v[:200]
+    # 趣味・特技
+    row = _row(html, "趣味・特技")
+    if row:
+        v = _strip_html(row)
+        if v:
+            fields["hobbies"] = v[:500]
+    # AV出演期間 → 出道年份 / 活跃年限
+    row = _row(html, "AV出演期間")
+    if row:
+        v = _strip_html(row)
+        m = re.search(r"(?:19|20)(\d{2})年\s*[-~〜]?\s*(?:(?:19|20)(\d{2})年)?", v)
+        if m:
+            start = _yy2year(m.group(1))
+            fields["debut_date"] = f"{start}年"
+            if m.group(2):
+                end = _yy2year(m.group(2))
+                if end > start:
+                    fields["active_years"] = f"{end - start} 年"
+    # デビュー作品
+    row = _row(html, "デビュー作品")
+    if row:
+        v = _strip_html(row)
+        if v:
+            fields["debut_work"] = v[:500]
+    # Twitter：优先「ブログ」行（演员本人链接），排除分享链接（intent/tweet、share）
+    row = _row(html, "ブログ")
+    if row:
+        m = re.search(r'href="(https?://(?:twitter|x)\.com/[^"]+)"', row)
+        if m and "intent" not in m.group(1) and "/share" not in m.group(1):
+            fields["twitter"] = m.group(1)[:300]
+    if not fields.get("twitter"):
+        m = re.search(r'href="(https?://(?:twitter|x)\.com/(?:[A-Za-z0-9_]+|intent)[^"]*)"', html)
+        if m and "intent" not in m.group(1) and "/share" not in m.group(1):
+            fields["twitter"] = m.group(1)[:300]
+    # 公式サイト
+    m = re.search(r"<span>公式サイト</span>\s*<p><a href=\"([^\"]+)\"", html)
+    if m:
+        fields["website"] = m.group(1).replace("&amp;", "&")[:500]
+    # タグ（芸能人/元AKB48 等）
+    m = re.search(r'<div class="tagarea">(.*?)</div>', html, re.S)
+    if m:
+        tags = [t.strip() for t in re.findall(r">([^<>]+)</a>", m.group(1)) if t.strip()]
+        if tags:
+            fields["tags"] = ",".join(tags)[:500]
+    # 头像：详情页缩略图（p_actress_* 路径，去 query 后缀）
+    m = re.search(r"src=\"(/p_actress_[^\"?]+)", html)
+    if m:
+        fields["avatar_url"] = "https://www.minnano-av.com" + m.group(1)
+    return fields
 
 
 # ── 源 2：laoshi.ink ──

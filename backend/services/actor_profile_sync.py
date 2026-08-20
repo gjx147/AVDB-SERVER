@@ -17,6 +17,7 @@ BATCH_SIZE = 5
 _FIELDS = (
     "blood_type", "zodiac", "birthplace", "nationality", "active_years",
     "bio", "timeline", "alias", "birth_date", "height", "cup", "measurements", "debut_date",
+    "agency", "hobbies", "debut_work", "twitter", "website", "tags",
 )
 
 

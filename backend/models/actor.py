@@ -59,6 +59,14 @@ class Actor(Base):
     profile_fetched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     profile_fetch_failed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
+    # ── minnano-av 完整资料扩展字段 ──
+    agency: Mapped[str | None] = mapped_column(String(200))     # 所属事務所
+    hobbies: Mapped[str | None] = mapped_column(String(500))    # 趣味・特技
+    debut_work: Mapped[str | None] = mapped_column(String(500)) # デビュー作品
+    twitter: Mapped[str | None] = mapped_column(String(300))    # Twitter 链接
+    website: Mapped[str | None] = mapped_column(String(500))    # 公式サイト
+    tags: Mapped[str | None] = mapped_column(String(500))       # タグ（芸能人/元AKB48 等，逗号分隔）
+
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()
