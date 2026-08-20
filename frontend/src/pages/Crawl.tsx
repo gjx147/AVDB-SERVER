@@ -8,6 +8,9 @@ import { useStore } from '../store/useStore'
 export function Crawl() {
   const [status, setStatus] = useState<CrawlStatus | null | undefined>(undefined)
   const [logs, setLogs] = useState<string[] | null>(null)
+  const [fileLines, setFileLines] = useState<Record<string, string[] | null>>({ app: null, scraper: null, downloaders: null })
+  const [logSrc, setLogSrc] = useState<'db' | 'app' | 'scraper' | 'downloaders'>('db')  // 日志来源
+  const [logFilter, setLogFilter] = useState('')
   const [sources, setSources] = useState<ListSourceWithStats[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selSource, setSelSource] = useState<number | ''>('')
@@ -21,11 +24,21 @@ export function Crawl() {
     const refresh = () => {
       api.crawl.status().then((s) => { setStatus(s); setError(null) }).catch(() => setError('无法获取爬取状态'))
       api.crawl.logs().then((l) => setLogs(l.lines)).catch(() => setLogs([]))
+      // 文件日志轮询（应用/爬虫子进程/下载器）
+      for (const f of ['app', 'scraper', 'downloaders'] as const) {
+        api.system.logs(f, 300).then((r) => setFileLines((prev) => ({ ...prev, [f]: r.lines }))).catch(() => {})
+      }
     }
     refresh()
     const t = setInterval(refresh, 3000)
     return () => clearInterval(t)
   }, [])
+
+  const displayLines = (() => {
+    if (logSrc === 'db') return logs ?? []
+    const ls = fileLines[logSrc] ?? []
+    return logFilter ? ls.filter((l) => l.toLowerCase().includes(logFilter.toLowerCase())) : ls
+  })()
 
   // WebSocket 实时进度（含指数退避重连）
   useEffect(() => {
@@ -68,7 +81,7 @@ export function Crawl() {
 
   useEffect(() => {
     if (logBodyRef.current) logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
-  }, [logs])
+  }, [logs, fileLines, logSrc, logFilter])
 
   const doScan = async () => {
     const sid = selSource || (sources ?? [])[0]?.id
@@ -143,16 +156,28 @@ export function Crawl() {
             <div className="term-dot" style={{ background: '#ff4d6d' }} />
             <div className="term-dot" style={{ background: '#ffb454' }} />
             <div className="term-dot" style={{ background: '#3ddc97' }} />
-            <div className="term-title">scraper.py — 实时日志</div>
+            <div className="term-title">实时日志</div>
+            {/* 日志来源切换：数据库 / 应用 app.log / 爬虫子进程 / 下载器 */}
+            <div className="seg" style={{ marginLeft: 10, background: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,143,179,.25)' }}>
+              {([['db', '数据库'], ['app', '应用'], ['scraper', '爬虫'], ['downloaders', '下载器']] as const).map(([k, label]) => (
+                <button key={k} className={logSrc === k ? 'on' : ''} onClick={() => setLogSrc(k)}
+                  style={{ color: logSrc === k ? 'var(--gold)' : 'rgba(243,219,230,.7)', fontSize: 11 }}>{label}</button>
+              ))}
+            </div>
+            <input
+              placeholder="过滤…" value={logFilter} onChange={(e) => setLogFilter(e.target.value)}
+              style={{ width: 110, marginLeft: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,143,179,.25)', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: '#f3dbe6', outline: 'none' }} />
             <div className="term-live">{running ? '运行中' : '已停止'}</div>
           </div>
           <div className="term-body" ref={logBodyRef}>
-            {(logs ?? []).length === 0 ? (
-              <div className="term-line"><span className="ts">--:--:--</span> 等待日志输出…</div>
-            ) : logs!.map((line, i) => (
+            {displayLines.length === 0 ? (
+              <div className="term-line"><span className="ts">--:--:--</span>
+                {logSrc === 'db' ? '等待数据库日志输出…' : '暂无该日志文件输出'}
+              </div>
+            ) : displayLines.map((line, i) => (
               <div className="term-line" key={i}>
-                <span className={line.includes('[ERR]') || line.toLowerCase().includes('error') ? 'lv-err'
-                  : line.includes('[WARN]') ? 'lv-warn'
+                <span className={line.includes('[ERR]') || line.includes('[ERROR]') || line.toLowerCase().includes('error') ? 'lv-err'
+                  : line.includes('[WARN]') || line.includes('[WARNING]') ? 'lv-warn'
                   : line.includes('[OK]') ? 'lv-ok' : 'lv-info'}>{line}</span>
               </div>
             ))}
