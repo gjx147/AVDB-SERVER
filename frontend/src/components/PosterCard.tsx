@@ -105,7 +105,8 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
         )}
         <div className="poster-grad-top">
           <span className="poster-code">{task.video_code || '—'}</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          {/* marginLeft:auto 始终贴右——排名海报番号被角标隐藏时，勾选框不会落回左侧盖住皇冠 */}
+          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
             {selectable && (
               <div className={`poster-check${selected ? ' on' : ''}`} onClick={toggle} role="checkbox" aria-checked={selected} tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggle(e as unknown as React.MouseEvent) } }}>
