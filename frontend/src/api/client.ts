@@ -319,6 +319,12 @@ export const api = {
       http.put<unknown>(`/api/subscriptions/${id}`, body).then((r) => r.data),
     delete: (id: number) => http.delete<{ ok: boolean }>(`/api/subscriptions/${id}`).then((r) => r.data),
     toggle: (id: number) => http.post<{ ok: boolean; enabled: boolean }>(`/api/subscriptions/${id}/toggle`).then((r) => r.data),
+    /** 启动「全部补齐作品」后台任务（串行爬取所有订阅演员的作品） */
+    fillAllWorks: (waitLimitMin: number) =>
+      http.post<{ ok: boolean; message: string }>('/api/subscriptions/fill-all-works', { wait_limit_min: waitLimitMin }).then((r) => r.data),
+    /** 查询「全部补齐作品」任务进度 */
+    fillWorksStatus: () =>
+      http.get<{ running: boolean; total: number; idx: number; current_actor_id: number | null; current_name: string | null; done: number; skipped: number; failed: number; wait_limit_min: number; last_summary: string | null }>('/api/subscriptions/fill-works-status').then((r) => r.data),
   },
 
   // ════════ New Releases（订阅巡检发现的新作品）════════

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from deps import CurrentUser, DbSession
@@ -12,6 +13,28 @@ from schemas import SubscriptionCreate, SubscriptionOut
 router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
 
 VALID_TYPES = {"ranking", "actor", "composite"}
+
+
+class FillAllWorksRequest(BaseModel):
+    """全部补齐作品：每演员等待上限（分钟，可选）。"""
+    wait_limit_min: int | None = None
+
+
+@router.post("/fill-all-works")
+def start_fill_all_works(payload: FillAllWorksRequest, _user: CurrentUser):
+    """启动「全部补齐作品」后台任务（串行爬取所有订阅演员的作品）。"""
+    from services import actor_works_batch
+    ok, msg = actor_works_batch.start(payload.wait_limit_min or 60)
+    if not ok:
+        raise HTTPException(status_code=409, detail=msg)
+    return {"ok": True, "message": msg}
+
+
+@router.get("/fill-works-status")
+def fill_works_status(_user: CurrentUser):
+    """「全部补齐作品」任务进度（前端轮询；切走页面任务继续跑）。"""
+    from services import actor_works_batch
+    return actor_works_batch.status()
 
 
 @router.get("", response_model=list[SubscriptionOut])
