@@ -186,15 +186,15 @@ export const api = {
     crawlWorks: (actorId: number) =>
       http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`).then((r) => r.data),
     refreshProfile: (actorId: number) =>
-      http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
+      http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string; locked_skipped?: string[] }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
     profileQueueStatus: () =>
       http.get<{ pending: number; fetched: number; failed: number }>('/api/actors/profile-queue/status').then((r) => r.data),
     crawlSearch: (actor_name: string) =>
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
     remove: (actorId: number) =>
       http.delete<ApiOk>(`/api/actors/${actorId}`).then((r) => r.data),
-    /** 手动编辑演员资料（bio / timeline，未传字段不更新） */
-    update: (actorId: number, patch: { bio?: string | null; timeline?: string | null }) =>
+    /** 手动编辑演员资料（intro/bio/timeline/profile_locked，未传字段不更新） */
+    update: (actorId: number, patch: { intro?: string | null; bio?: string | null; timeline?: string | null; profile_locked?: boolean }) =>
       http.patch<ApiOk>(`/api/actors/${actorId}`, patch).then((r) => r.data),
   },
 

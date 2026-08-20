@@ -119,6 +119,9 @@ class ActorOut(BaseModel):
     twitter: Optional[str] = None
     website: Optional[str] = None
     tags: Optional[str] = None
+    # 手动维护字段
+    intro: Optional[str] = None
+    profile_locked: bool = False
 
 
 class ActorListResponse(BaseModel):
@@ -130,8 +133,10 @@ class ActorListResponse(BaseModel):
 
 class ActorProfileUpdate(BaseModel):
     """演员简介/时间线手动编辑（未传字段不更新）。"""
+    intro: Optional[str] = None
     bio: Optional[str] = None
     timeline: Optional[str] = None
+    profile_locked: Optional[bool] = None
 
 
 class ActorDetailOut(ActorOut):

@@ -120,6 +120,9 @@ export interface Actor {
   debut_work: string | null
   twitter: string | null
   website: string | null
+  // 手动维护字段
+  intro: string | null
+  profile_locked: boolean
 }
 
 // 订阅（关注 = sub_type='actor' 的订阅）

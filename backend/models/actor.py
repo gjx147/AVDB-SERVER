@@ -67,6 +67,12 @@ class Actor(Base):
     website: Mapped[str | None] = mapped_column(String(500))    # 公式サイト
     tags: Mapped[str | None] = mapped_column(String(500))       # タグ（芸能人/元AKB48 等，逗号分隔）
 
+    # ── 手动维护字段 ──
+    intro: Mapped[str | None] = mapped_column(Text)             # 简介（纯手动编辑，不被自动抓取覆盖）
+    profile_locked: Mapped[bool] = mapped_column(              # 锁定简介/职业生涯，防误刷新
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()

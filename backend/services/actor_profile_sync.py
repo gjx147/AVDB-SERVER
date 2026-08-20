@@ -45,6 +45,9 @@ def run_cycle() -> dict:
                 if result.get("ok"):
                     for k, v in (result.get("fields") or {}).items():
                         if k in _FIELDS and v:
+                            # 锁定保护：不覆盖手动编辑的简介/职业生涯文本
+                            if actor.profile_locked and k in ("intro", "bio", "timeline"):
+                                continue
                             setattr(actor, k, v)
                     actor.profile_fetched = True
                     actor.profile_fetch_failed = False

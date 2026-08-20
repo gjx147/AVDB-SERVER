@@ -22,8 +22,10 @@ export function ActorDetail() {
   const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
-  // 人物简介/时间线手动编辑
-  const [editing, setEditing] = useState(false)
+  // 简介（intro）与职业生涯（bio/timeline）手动编辑
+  const [editingIntro, setEditingIntro] = useState(false)
+  const [introDraft, setIntroDraft] = useState('')
+  const [editingCareer, setEditingCareer] = useState(false)
   const [bioDraft, setBioDraft] = useState('')
   const [timelineDraft, setTimelineDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -101,20 +103,45 @@ export function ActorDetail() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  // ── 人物简介/时间线手动编辑 ──
-  const saveProfile = async () => {
+  // ── 简介/职业生涯手动编辑 ──
+  const saveIntro = async () => {
     if (!actor) return
     setSaving(true)
     try {
-      await api.actors.update(actor.id, { bio: bioDraft, timeline: timelineDraft })
+      await api.actors.update(actor.id, { intro: introDraft })
       toastOk('简介已保存')
-      setEditing(false)
-      const a = await api.actors.get(actor.id)
-      setActor(a)
+      setEditingIntro(false)
+      setActor(await api.actors.get(actor.id))
     } catch (e) {
       toastErr(String((e as Error).message))
     } finally {
       setSaving(false)
+    }
+  }
+  const saveCareer = async () => {
+    if (!actor) return
+    setSaving(true)
+    try {
+      await api.actors.update(actor.id, { bio: bioDraft, timeline: timelineDraft })
+      toastOk('职业生涯已保存')
+      setEditingCareer(false)
+      setActor(await api.actors.get(actor.id))
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setSaving(false)
+    }
+  }
+  // 锁定保护：锁定后「刷新资料」与自动任务不覆盖简介/职业生涯文本
+  const toggleLock = async () => {
+    if (!actor) return
+    const next = !actor.profile_locked
+    try {
+      await api.actors.update(actor.id, { profile_locked: next })
+      setActor(await api.actors.get(actor.id))
+      toastOk(next ? '已锁定——刷新资料不再覆盖简介/职业生涯' : '已解锁——刷新资料会更新简介/职业生涯')
+    } catch (e) {
+      toastErr(String((e as Error).message))
     }
   }
 
@@ -198,7 +225,9 @@ export function ActorDetail() {
       const r = await api.actors.refreshProfile(actor.id)
       if (r.ok) {
         const srcName = r.source === 'minnano' ? 'minnano-av' : r.source === 'warashi' ? 'WAPdB 百科' : r.source === 'laoshi' ? '老师图鉴' : r.source
-        toastOk(`资料已更新（来源：${srcName}）`)
+        toastOk(r.locked_skipped?.length
+          ? `资料已更新（来源：${srcName}；简介/职业生涯已锁定，本次未覆盖）`
+          : `资料已更新（来源：${srcName}）`)
         // 重新加载演员数据
         const a = await api.actors.get(actor.id)
         setActor(a)
@@ -253,6 +282,10 @@ export function ActorDetail() {
               title="整合 minnano-av（个人信息）、WAPdB 百科（别名/简介）、老师图鉴（中文简介）三源抓取资料（自动任务也会定期补齐）">
               <Icon.refresh />{refreshing ? '抓取中…' : '刷新资料'}
             </button>
+            <button className={`btn btn--sm ${actor.profile_locked ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleLock}
+              title={actor.profile_locked ? '已锁定：刷新资料/自动任务不会覆盖简介与职业生涯。点击解锁' : '点击锁定：防止刷新资料/自动任务覆盖手动编辑的简介与职业生涯'}>
+              {actor.profile_locked ? '🔒 已锁定' : '🔓 锁定保护'}
+            </button>
           </div>
 
           {/* 资料元数据 */}
@@ -296,29 +329,60 @@ export function ActorDetail() {
         </div>
       </div>
 
-      {/* 人物简介 + 职业时间线（三源聚合内容，支持手动编辑） */}
+      {/* 简介（手动编辑，自由文字，不被自动抓取覆盖） */}
       <div className="detail-main" style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div className="dm-label">人物简介 · 职业时间线</div>
-          {editing ? (
+          <div className="dm-label">简介</div>
+          {editingIntro ? (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn--gold btn--sm" onClick={saveProfile} disabled={saving}>
+              <button className="btn btn--gold btn--sm" onClick={saveIntro} disabled={saving}>
                 {saving ? '保存中…' : '保存'}
               </button>
-              <button className="btn btn--ghost btn--sm" onClick={() => setEditing(false)}>取消</button>
+              <button className="btn btn--ghost btn--sm" onClick={() => setEditingIntro(false)}>取消</button>
             </div>
           ) : (
-            <button className="btn btn--ghost btn--sm" onClick={() => { setBioDraft(actor.bio || ''); setTimelineDraft(actor.timeline || ''); setEditing(true) }}>
+            <button className="btn btn--ghost btn--sm" onClick={() => { setIntroDraft(actor.intro || ''); setEditingIntro(true) }}>
               <Icon.edit />编辑
             </button>
           )}
         </div>
-        {editing ? (
+        {editingIntro ? (
+          <textarea className="input" rows={5} value={introDraft}
+            onChange={(e) => setIntroDraft(e.target.value)}
+            placeholder="用一段文字介绍这位演员…（自由编辑，不会被自动抓取覆盖）"
+            style={{ resize: 'vertical', fontFamily: 'var(--ff-sans)', lineHeight: 1.8 }} />
+        ) : actor.intro ? (
+          <p style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--t-body)', whiteSpace: 'pre-wrap' }}>{actor.intro}</p>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--t-faint)' }}>
+            暂无简介——点右上角「编辑」手动添加。
+          </div>
+        )}
+      </div>
+
+      {/* 职业生涯 + 职业时间线（三源聚合内容，支持手动编辑与锁定） */}
+      <div className="detail-main" style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className="dm-label">职业生涯 · 职业时间线</div>
+          {editingCareer ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn--gold btn--sm" onClick={saveCareer} disabled={saving}>
+                {saving ? '保存中…' : '保存'}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => setEditingCareer(false)}>取消</button>
+            </div>
+          ) : (
+            <button className="btn btn--ghost btn--sm" onClick={() => { setBioDraft(actor.bio || ''); setTimelineDraft(actor.timeline || ''); setEditingCareer(true) }}>
+              <Icon.edit />编辑
+            </button>
+          )}
+        </div>
+        {editingCareer ? (
           <>
-            <div className="dm-label" style={{ marginBottom: 6 }}>人物简介</div>
+            <div className="dm-label" style={{ marginBottom: 6 }}>职业生涯</div>
             <textarea className="input" rows={4} value={bioDraft}
               onChange={(e) => setBioDraft(e.target.value)}
-              placeholder="演员的生平简介（自动抓取或手动填写）…"
+              placeholder="演员的职业生涯（自动抓取或手动填写）…"
               style={{ marginBottom: 14, resize: 'vertical', fontFamily: 'var(--ff-sans)', lineHeight: 1.7 }} />
             <div className="dm-label" style={{ marginBottom: 6 }}>职业时间线</div>
             <textarea className="input" rows={4} value={timelineDraft}
@@ -330,7 +394,7 @@ export function ActorDetail() {
           <>
             {actor.bio && (
               <>
-                <div className="dm-label" style={{ marginBottom: 8 }}>人物简介</div>
+                <div className="dm-label" style={{ marginBottom: 8 }}>职业生涯</div>
                 <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-body)', marginBottom: 18, whiteSpace: 'pre-wrap' }}>{actor.bio}</p>
               </>
             )}
@@ -345,7 +409,7 @@ export function ActorDetail() {
           </>
         ) : (
           <div style={{ fontSize: 13, color: 'var(--t-faint)' }}>
-            暂无简介——点右上角「编辑」手动添加，或点「刷新资料」从三源自动抓取。
+            暂无职业生涯资料——点右上角「编辑」手动添加，或点「刷新资料」从三源自动抓取。
           </div>
         )}
       </div>

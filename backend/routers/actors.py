@@ -150,14 +150,17 @@ def delete_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 
 @router.patch("/{actor_id}")
 def update_actor_profile(actor_id: int, body: ActorProfileUpdate, db: DbSession, _user: CurrentUser):
-    """手动编辑演员资料（当前支持 bio / timeline，未传字段不更新）。"""
+    """手动编辑演员资料（intro/bio/timeline/profile_locked，未传字段不更新）。"""
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():
         if hasattr(actor, k):
-            setattr(actor, k, (v or "").strip() or None)
+            if isinstance(v, str):
+                setattr(actor, k, v.strip() or None)
+            else:
+                setattr(actor, k, v)
     db.commit()
     logger.info("演员资料已手动更新: %s (id=%d) %s", actor.name, actor_id, ",".join(data))
     return {"ok": True}
@@ -238,7 +241,11 @@ def crawl_actor_works(actor_id: int, db: DbSession, _user: CurrentUser):
 
 @router.post("/{actor_id}/refresh-profile")
 def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
-    """手动触发双源资料抓取（minnano-av + laoshi），成功后重置队列标记。"""
+    """手动触发三源资料抓取（minnano-av + WAPdB + laoshi），成功后重置队列标记。
+
+    profile_locked 时跳过 intro/bio/timeline 文本字段（防误刷新覆盖手动编辑内容），
+    其它结构化字段（生日/身高/头像等）照常更新。
+    """
     actor = db.get(Actor, actor_id)
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
@@ -246,13 +253,18 @@ def refresh_actor_profile(actor_id: int, db: DbSession, _user: CurrentUser):
     result = fetch_profile(actor.name, actor.name_en)
     if not result.get("ok"):
         return {"ok": False, "source": None, "message": result.get("message", "minnano、WAPdB 与老师图鉴均未查询到")}
+    locked_skipped: list[str] = []
     for k, v in (result.get("fields") or {}).items():
         if hasattr(actor, k) and v:
+            if actor.profile_locked and k in ("intro", "bio", "timeline"):
+                locked_skipped.append(k)
+                continue
             setattr(actor, k, v)
     actor.profile_fetched = True
     actor.profile_fetch_failed = False
     db.commit()
-    return {"ok": True, "source": result.get("source"), "fields": result.get("fields")}
+    return {"ok": True, "source": result.get("source"), "fields": result.get("fields"),
+            "locked_skipped": locked_skipped}
 
 
 @router.get("/profile-queue/status")
