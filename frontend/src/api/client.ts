@@ -141,6 +141,27 @@ export const api = {
         const d = r.data as unknown
         return Array.isArray(d) ? d : (d as { items?: Actor[] }).items || []
       }),
+    /** 自动翻页拉取全部演员（后端 page_size 上限 200；订阅页建头像映射用） */
+    listAll: (withAvatar?: boolean, pageSize = 200): Promise<Actor[]> => {
+      const fetchPage = async (page: number): Promise<{ items: Actor[]; total: number }> =>
+        http.get<unknown>('/api/actors', { params: { page, page_size: pageSize, with_avatar: withAvatar } }).then((r) => {
+          const d = r.data as { items?: Actor[]; total?: number } | Actor[]
+          return Array.isArray(d)
+            ? { items: d as Actor[], total: (d as Actor[]).length }
+            : { items: d.items || [], total: d.total ?? 0 }
+        })
+      return (async () => {
+        const out: Actor[] = []
+        let page = 1
+        for (;;) {
+          const r = await fetchPage(page)
+          out.push(...r.items)
+          if (r.items.length < pageSize || out.length >= r.total) break
+          page++
+        }
+        return out
+      })()
+    },
     search: (keyword: string) =>
       http.get<Actor[]>('/api/actors', { params: { q: keyword, page: 1, page_size: 120 } }).then((r) => {
         const d = r.data as unknown

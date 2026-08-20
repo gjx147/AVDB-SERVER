@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import type { NewRelease, Actor } from '../api/types'
+import type { NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
@@ -41,8 +41,8 @@ export function Subscriptions() {
       setSubs((r as Subscription[]) || [])
     }).catch((e) => { setError(String((e as Error).message)); setSubs([]) })
     api.newReleases.list({ limit: 100 }).then((r) => setReleases(r.items || [])).catch(() => setReleases([]))
-    // 演员订阅头像映射（一次拉全量演员，建 actor_id → avatar_url）
-    api.actors.list(0, 500, true).then((list: Actor[]) => {
+    // 演员订阅头像映射：自动翻页拉全量有头像演员，建 actor_id → avatar_url
+    api.actors.listAll(true).then((list) => {
       const m = new Map<number, string>()
       for (const a of list) if (a.avatar_url) m.set(a.id, a.avatar_url)
       setAvatars(m)
