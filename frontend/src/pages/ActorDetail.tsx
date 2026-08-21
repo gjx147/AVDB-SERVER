@@ -118,7 +118,7 @@ export function ActorDetail() {
       } else {
         await api.actors.follow(actor.id)
         setSubscribed(true); setAutoAdd(false)
-        toastOk(`已关注 ${actor.name}，有新作将通知你`)
+        toastOk(`已关注 ${actor.name}，正在后台自动爬取其 JavDB 作品入库`)
       }
     } catch (e) { toastErr(String((e as Error).message)) }
   }
