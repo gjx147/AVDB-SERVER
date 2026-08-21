@@ -99,6 +99,14 @@ export function ActorDetail() {
       toastOk(maxCoStar > 0 ? `已开始补齐 ${actor.name} 的作品（最大共演 ${maxCoStar} 人）` : `已开始补齐 ${actor.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
+  const crawlSoloWorks = async () => {
+    if (!actor) return
+    if (!actor.source_url) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
+    try {
+      await api.actors.crawlWorks(actor.id, maxCoStar, true)
+      toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
   // 关注 = 创建 actor 订阅（定时检测+通知）；已关注则取消
   const toggleFollow = async () => {
     if (!actor) return
@@ -395,6 +403,10 @@ export function ActorDetail() {
             <button className="btn btn--ghost" onClick={crawlWorks} disabled={!actor.source_url}
               title={actor.source_url ? '爬取该演员全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐作品
+            </button>
+            <button className="btn btn--ghost" onClick={crawlSoloWorks} disabled={!actor.source_url}
+              title={actor.source_url ? '只爬取单体作品（javdb 演员页 t=s 过滤，?sort_type=0&t=s）' : '无 JavDB URL（需先通过 URL 添加）'}>
+              <Icon.download />补齐单体作品
             </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
               title="最大共演人数：作品女演员数超过此值则跳过，0=不限（共演人数=1部作品的女演员数量，仅保存在本机浏览器）">

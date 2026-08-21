@@ -2005,6 +2005,7 @@ def main():
     actor_parser.add_argument("--actor-name", type=str, default="", help="演员名字（自动搜索匹配）")
     actor_parser.add_argument("--actor-id", type=int, default=None, help="已知演员 ID（补齐作品时按 id 关联，不靠名字匹配，杜绝重复演员）")
     actor_parser.add_argument("--max-co-star", type=int, default=0, help="最大共演人数限制（作品女演员数超过则跳过；0=不限）")
+    actor_parser.add_argument("--solo-only", action="store_true", help="只爬单体作品（javdb 演员页 t=s 过滤）")
     actor_parser.add_argument("--no-extract", action="store_true", help="只入库作品列表，不提取详情（磁力/元数据/图片）；巡检用")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
@@ -2181,9 +2182,11 @@ def main():
                         break
                     _actor_id = getattr(args, "actor_id", None)
                     _max_co = int(getattr(args, "max_co_star", 0) or 0)
+                    _solo = bool(getattr(args, "solo_only", False))
                     logger.info(f"执行演员爬取: {actor_url}" + (f"（actor_id={_actor_id}）" if _actor_id else "")
-                                + (f"（最大共演 {_max_co} 人）" if _max_co > 0 else ""))
-                    result = a.crawl_actor_full(actor_url, actor_id=_actor_id, max_co_star=_max_co)
+                                + (f"（最大共演 {_max_co} 人）" if _max_co > 0 else "")
+                                + ("（仅单体作品）" if _solo else ""))
+                    result = a.crawl_actor_full(actor_url, actor_id=_actor_id, max_co_star=_max_co, solo_only=_solo)
                     logger.info(f"演员爬取完成: {result}")
                     # 默认提取详情（磁力/元数据/图片），与其他任务一致；--no-extract 跳过（巡检用，避免长时阻塞）
                     if not getattr(args, "no_extract", False):

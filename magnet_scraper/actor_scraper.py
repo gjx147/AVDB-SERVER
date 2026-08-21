@@ -225,11 +225,12 @@ class ActorScraper:
             logger.error(f"搜索演员失败: {e}")
             return []
 
-    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0) -> dict:
+    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0, solo_only: bool = False) -> dict:
         """完整爬取演员信息 + 作品列表。
 
         1. 爬取演员详情页（姓名/头像/身高/罩杯等）
-        2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过）
+        2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过；
+           solo_only=True 只爬单体作品：javdb 演员页 t=s 过滤，如 ?sort_type=0&t=s）
         3. 入库演员 + 创建 pending task
 
         actor_id：若调用方已知目标演员（如演员库"补齐作品"），直接按 id 更新
@@ -241,7 +242,8 @@ class ActorScraper:
         self._ensure_browser()
 
         logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else "")
-                    + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else ""))
+                    + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else "")
+                    + ("（仅单体作品）" if solo_only else ""))
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
@@ -251,7 +253,7 @@ class ActorScraper:
 
         # 1. 爬取演员信息 + 2. 作品列表
         info = self.crawl_actor_info(actor_url)
-        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star)
+        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star, solo_only=solo_only)
         logger.info(f"演员作品列表: {len(movies)} 部")
 
         # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
@@ -395,18 +397,26 @@ class ActorScraper:
 
         return info
 
-    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0) -> list:
+    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0, solo_only: bool = False) -> list:
         """翻页爬取演员作品列表，返回详情页 URL 列表。
 
         max_co_star > 0 时开启共演人数限制：逐部访问作品详情页统计女演员数，
         超过上限的作品跳过（大共演/総集編不拉进库）。
+        solo_only=True 只爬单体作品：javdb 演员页 t=s 过滤
+        （第 1 页 ?sort_type=0&t=s，第 N 页 ?page=N&sort_type=0&t=s）。
         """
         all_urls = []
         page_num = 1
         base_url = actor_url.rstrip("/")
 
+        def page_url(n: int) -> str:
+            if solo_only:
+                q = "sort_type=0&t=s"
+                return f"{base_url}?{q}" if n == 1 else f"{base_url}?page={n}&{q}"
+            return base_url if n == 1 else f"{base_url}?page={n}"
+
         while page_num <= max_pages:
-            url = base_url if page_num == 1 else f"{base_url}?page={page_num}"
+            url = page_url(page_num)
             logger.info(f"爬取演员作品第 {page_num} 页: {url}")
 
             try:
@@ -454,7 +464,8 @@ class ActorScraper:
         all_urls = list(dict.fromkeys(all_urls))
 
         # 共演人数限制：逐部访问详情页统计女演员数，超过上限跳过
-        if max_co_star > 0 and all_urls:
+        # （单体作品模式下全部为 1 人，无需核对，直接跳过该环节省时间）
+        if max_co_star > 0 and not solo_only and all_urls:
             logger.info(f"开始共演人数核对（上限 {max_co_star} 人），共 {len(all_urls)} 部")
             kept: list[str] = []
             skipped = 0
