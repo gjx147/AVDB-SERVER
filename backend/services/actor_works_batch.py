@@ -24,6 +24,7 @@ _state = {
     "done": 0,
     "skipped": 0,
     "failed": 0,
+    "marked_skipped": 0,
     "wait_limit_min": 60,
     "max_co_star": 0,
     "last_summary": None,
@@ -48,7 +49,7 @@ def start(wait_limit_min: int = 60, max_co_star: int = 0) -> tuple[bool, str]:
             "running": True,
             "total": 0, "idx": 0,
             "current_actor_id": None, "current_name": None,
-            "done": 0, "skipped": 0, "failed": 0,
+            "done": 0, "skipped": 0, "failed": 0, "marked_skipped": 0,
             "wait_limit_min": max(1, min(2880, int(wait_limit_min or 60))),
             "max_co_star": max(0, int(max_co_star or 0)),
             "last_summary": None,
@@ -79,7 +80,7 @@ def _bump(key: str) -> None:
 
 
 def _run() -> None:
-    from sqlalchemy import select
+    from sqlalchemy import func, or_, select
 
     from database import SessionLocal
     from models import Actor, Subscription
@@ -89,18 +90,30 @@ def _run() -> None:
     try:
         rows = db.execute(
             select(Subscription.actor_id, Subscription.name)
-            .where(Subscription.sub_type == "actor", Subscription.actor_id.isnot(None))
+            .join(Actor, Actor.id == Subscription.actor_id)
+            .where(
+                Subscription.sub_type == "actor",
+                Subscription.actor_id.isnot(None),
+                or_(Actor.works_fetched.is_(None), Actor.works_fetched == False),  # noqa: E712
+            )
         ).all()
+        # 已补齐标记的演员计数（跳过并计入总结）
+        marked = db.execute(
+            select(func.count(Actor.id))
+            .join(Subscription, Subscription.actor_id == Actor.id)
+            .where(Subscription.sub_type == "actor", Actor.works_fetched == True)  # noqa: E712
+        ).scalar_one()
         sub_list = [(r[0], r[1]) for r in rows]
     finally:
         db.close()
 
     with _lock:
         _state["total"] = len(sub_list)
+        _state["marked_skipped"] = int(marked)
     wait_min = _state["wait_limit_min"]
     max_co = _state["max_co_star"]
-    logger.info("全部补齐作品开始: %d 位演员（每演员等待上限 %d 分钟，最大共演 %s）",
-                len(sub_list), wait_min, f"{max_co} 人" if max_co > 0 else "不限")
+    logger.info("全部补齐作品开始: %d 位演员（已补齐跳过 %d 位；每演员等待上限 %d 分钟，最大共演 %s）",
+                len(sub_list), marked, wait_min, f"{max_co} 人" if max_co > 0 else "不限")
 
     for i, (actor_id, name) in enumerate(sub_list, start=1):
         with _lock:
@@ -158,6 +171,7 @@ def _run() -> None:
         _state["current_actor_id"] = None
         _state["current_name"] = None
         _state["last_summary"] = (
-            f"全部补齐完成：成功 {_state['done']}，跳过 {_state['skipped']}（无 JavDB URL），失败 {_state['failed']}"
+            f"全部补齐完成：成功 {_state['done']}，跳过 {_state['skipped']}（无 JavDB URL），"
+            f"已补齐跳过 {_state['marked_skipped']}，失败 {_state['failed']}"
         )
     logger.info("全部补齐作品结束: %s", _state["last_summary"])

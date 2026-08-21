@@ -72,6 +72,9 @@ class Actor(Base):
     profile_locked: Mapped[bool] = mapped_column(              # 锁定简介/职业生涯，防误刷新
         Boolean, nullable=False, default=False, server_default="0"
     )
+    works_fetched: Mapped[bool] = mapped_column(               # 作品已补齐标记：「全部补齐」下次跳过
+        Boolean, nullable=False, default=False, server_default="0"
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

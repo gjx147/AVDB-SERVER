@@ -44,6 +44,7 @@ export function Subscriptions() {
   const [subs, setSubs] = useState<Subscription[] | null>(null)
   const [releases, setReleases] = useState<NewRelease[] | null>(null)
   const [avatars, setAvatars] = useState<Map<number, string>>(new Map())  // actor_id → avatar_url
+  const [filledIds, setFilledIds] = useState<Set<number>>(new Set())  // 已补齐作品的演员 id
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   // 全部补齐作品：后台任务（后端线程串行执行，切走页面/刷新不中断），前端只轮询进度
@@ -108,11 +109,16 @@ export function Subscriptions() {
       setSubs((r as Subscription[]) || [])
     }).catch((e) => { setError(String((e as Error).message)); setSubs([]) })
     api.newReleases.list({ limit: 100 }).then((r) => setReleases(r.items || [])).catch(() => setReleases([]))
-    // 演员订阅头像映射：自动翻页拉全量有头像演员，建 actor_id → avatar_url
-    api.actors.listAll(true).then((list) => {
+    // 演员头像/补齐标记映射：自动翻页拉全量演员，建 actor_id → avatar_url / works_fetched
+    api.actors.listAll().then((list) => {
       const m = new Map<number, string>()
-      for (const a of list) if (a.avatar_url) m.set(a.id, a.avatar_url)
+      const f = new Set<number>()
+      for (const a of list) {
+        if (a.avatar_url) m.set(a.id, a.avatar_url)
+        if (a.works_fetched) f.add(a.id)
+      }
       setAvatars(m)
+      setFilledIds(f)
     }).catch(() => {})
   }
   useEffect(() => { load() }, [])
@@ -210,7 +216,7 @@ export function Subscriptions() {
             onBlur={(e) => { if (!e.target.value) setMaxCoStarVal(0) }} />
         </label>
         <button className="btn btn--gold btn--sm" onClick={fillAllWorks} disabled={filling}
-          title="后台逐位为所有订阅演员补齐作品（串行执行，切走页面/刷新不中断）">
+          title="后台逐位为未补齐的订阅演员补齐作品（已补齐标记的演员自动跳过；串行执行，切走页面/刷新不中断）">
           <Icon.download />{filling
             ? `补齐中 · ${fillStatus?.current_name || '准备中'} (${fillStatus?.idx || 0}/${fillStatus?.total || '…'})…`
             : '全部补齐作品'}
@@ -245,6 +251,7 @@ export function Subscriptions() {
                 <div className="sub-meta">
                   <span className="chip chip-rose">{TYPE_LABEL[s.sub_type] || s.sub_type}</span>
                   {s.auto_add && <span className="chip chip-amber">自动下载</span>}
+                  {s.actor_id != null && filledIds.has(s.actor_id) && <span className="chip chip-green">已补齐</span>}
                   {filling && s.actor_id != null && fillStatus?.current_actor_id === s.actor_id && <span className="chip chip-blue">补齐中…</span>}
                 </div>
                 <div className="sub-check">每 {s.check_interval_hours}h 检查 · {fmtTime(s.last_checked_at)}</div>

@@ -268,6 +268,7 @@ class ActorScraper:
                 "measurements": info.get("measurements"),
                 "debut_date": info.get("debut_date"),
                 "movie_count": len(movies),
+                "works_fetched": 1,  # 作品已补齐标记：「全部补齐」下次跳过该演员
             }.items() if v is not None
         }
 

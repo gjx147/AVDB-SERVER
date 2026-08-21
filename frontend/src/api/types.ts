@@ -123,6 +123,7 @@ export interface Actor {
   // 手动维护字段
   intro: string | null
   profile_locked: boolean
+  works_fetched: boolean
 }
 
 // 订阅（关注 = sub_type='actor' 的订阅）

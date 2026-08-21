@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS actors (
     measurements TEXT,
     debut_date TEXT,
     movie_count INTEGER,
+    works_fetched INTEGER NOT NULL DEFAULT 0,
     is_blacklisted INTEGER NOT NULL DEFAULT 0,
     source_url TEXT,
     note TEXT,
@@ -379,6 +380,7 @@ class SqliteTaskStore:
         allowed = {
             "name", "name_en", "avatar_url", "gender", "birth_date", "height",
             "cup", "measurements", "debut_date", "movie_count", "source_url", "note",
+            "works_fetched",
         }
         safe = {k: v for k, v in fields.items() if k in allowed}
         if not safe:
