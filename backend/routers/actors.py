@@ -81,7 +81,7 @@ def get_actor(actor_id: int, db: DbSession, _user: CurrentUser):
 
 @router.post("/{actor_id}/follow")
 async def follow(actor_id: int, db: DbSession, _user: CurrentUser):
-    """关注演员 = 创建 actor 订阅（auto_add=false：定时检测+通知，不入库）。
+    """关注演员 = 创建 actor 订阅（auto_add=True：新作自动入库+下载，无需手动）。
 
     新建订阅后立即在后台触发一次新作巡检：爬取该演员 javdb 作品入库 + 新作检测。
     已存在则 no-op（不重复触发）。
@@ -98,7 +98,7 @@ async def follow(actor_id: int, db: DbSession, _user: CurrentUser):
     if not existing:
         sub = Subscription(
             name=actor.name, sub_type="actor", actor_id=actor_id,
-            auto_add=False, enabled=True, check_interval_hours=6,
+            auto_add=True, enabled=True, check_interval_hours=6,
         )
         db.add(sub)
         db.commit()
@@ -107,8 +107,8 @@ async def follow(actor_id: int, db: DbSession, _user: CurrentUser):
     if immediate:
         import asyncio
         from services.new_works_monitor import check_actor_new_works
-        logger.info("关注演员 %s：后台触发首次巡检（自动爬取 javdb 作品）", actor.name)
-        task = asyncio.create_task(check_actor_new_works(actor_id, subscription_id=sub.id, auto_add=False))
+        logger.info("关注演员 %s：后台触发首次巡检（自动爬取 javdb 作品，auto_add=True）", actor.name)
+        task = asyncio.create_task(check_actor_new_works(actor_id, subscription_id=sub.id, auto_add=True))
 
         def _done(t):
             try:
@@ -117,7 +117,7 @@ async def follow(actor_id: int, db: DbSession, _user: CurrentUser):
                 logger.warning("关注后首次巡检异常 %s: %s", actor.name, e)
 
         task.add_done_callback(_done)
-    return {"ok": True, "actor_id": actor_id, "subscribed": True, "immediate_check": immediate}
+    return {"ok": True, "actor_id": actor_id, "subscribed": True, "auto_add": True, "immediate_check": immediate}
 
 
 @router.post("/{actor_id}/unfollow")

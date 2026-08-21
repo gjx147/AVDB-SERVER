@@ -153,6 +153,7 @@ const NAV_WHISPER: Record<string, string> = {
   '系统': '闺房',
   /* 导航项与页面标题（中文） */
   '首页': '今夜的她',
+  '订阅上新': '新夜来客',
   '仪表盘': '心跳记录',
   '影片库': '群芳谱',
   '收藏': '心尖上',
@@ -177,6 +178,7 @@ const NAV_WHISPER: Record<string, string> = {
   'Crawl': '潜入暗房',
   'Crawl Console': '潜入暗房',
   'Subscriptions': '挂念的人',
+  'New Releases': '新夜来客',
   'Downloads': '收入囊中',
   'Downloaders': '接她回家',
   'Settings': '闺房布置',

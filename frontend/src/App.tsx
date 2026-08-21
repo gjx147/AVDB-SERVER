@@ -21,6 +21,7 @@ const Rankings    = lazy(() => import('./pages/Rankings').then(m => ({ default: 
 const ListSources = lazy(() => import('./pages/ListSources').then(m => ({ default: m.ListSources })))
 const Crawl       = lazy(() => import('./pages/Crawl').then(m => ({ default: m.Crawl })))
 const Subscriptions = lazy(() => import('./pages/Subscriptions').then(m => ({ default: m.Subscriptions })))
+const NewReleases  = lazy(() => import('./pages/NewReleases').then(m => ({ default: m.NewReleases })))
 const Downloaders = lazy(() => import('./pages/Downloaders').then(m => ({ default: m.Downloaders })))
 const Downloads   = lazy(() => import('./pages/Downloads').then(m => ({ default: m.Downloads })))
 const Settings    = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
@@ -120,6 +121,7 @@ export default function App() {
             <Route path="/sources" element={<ListSources />} />
             <Route path="/crawl" element={<Crawl />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
+            <Route path="/new-releases" element={<NewReleases />} />
             <Route path="/downloaders" element={<Downloaders />} />
             <Route path="/downloads" element={<Downloads />} />
             <Route path="/settings" element={<Settings />} />

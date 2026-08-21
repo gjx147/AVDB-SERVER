@@ -120,7 +120,7 @@ export function Actors() {
       } else {
         await api.actors.follow(a.id)
         setSubscribedIds((prev) => new Set(prev).add(a.id))
-        toastOk(`已关注 ${a.name}，正在后台自动爬取其 JavDB 作品入库`)
+        toastOk(`已关注 ${a.name}，已开启新作自动入库，正在后台爬取其 JavDB 作品`)
       }
     } catch (e) { toastErr(String((e as Error).message)) }
   }

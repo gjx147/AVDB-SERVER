@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, coverFileUrl } from '../api/client'
-import type { Actor, ActorMovie } from '../api/types'
+import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
@@ -41,6 +41,8 @@ export function ActorDetail() {
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  // 该演员的新作发现列表（与「订阅上新」页同一份数据）
+  const [actorReleases, setActorReleases] = useState<NewRelease[] | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
   // 简介（intro）与职业生涯（bio/timeline）手动编辑
@@ -89,6 +91,9 @@ export function ActorDetail() {
       setAutoAdd((sub as { autoAdd: boolean }).autoAdd)
     })
     loadMovies(1, 'added')
+    // 该演员的新作发现列表
+    setActorReleases(null)
+    api.newReleases.list({ actor_id: +id, limit: 50 }).then((r) => setActorReleases(r.items || [])).catch(() => setActorReleases([]))
   }, [id, loadMovies])
 
   const crawlWorks = async () => {
@@ -107,7 +112,7 @@ export function ActorDetail() {
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
-  // 关注 = 创建 actor 订阅（定时检测+通知）；已关注则取消
+  // 关注 = 创建 actor 订阅（自动入库默认开启，关注后立即后台爬取 javdb 作品）
   const toggleFollow = async () => {
     if (!actor) return
     try {
@@ -117,8 +122,8 @@ export function ActorDetail() {
         toastOk('已取消关注')
       } else {
         await api.actors.follow(actor.id)
-        setSubscribed(true); setAutoAdd(false)
-        toastOk(`已关注 ${actor.name}，正在后台自动爬取其 JavDB 作品入库`)
+        setSubscribed(true); setAutoAdd(true)
+        toastOk(`已关注 ${actor.name}，已开启新作自动入库，正在后台爬取其 JavDB 作品`)
       }
     } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -502,6 +507,58 @@ export function ActorDetail() {
           )}
         </div>
       </div>
+
+      {/* 该演员的新作发现（与「订阅上新」页同一份数据） */}
+      {actorReleases !== null && actorReleases.length > 0 && (
+        <div className="detail-main" style={{ marginBottom: 28 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div className="dm-label">新作发现（{actorReleases.length}）</div>
+            <button className="btn btn--ghost btn--sm" onClick={() => nav('/new-releases')}>订阅上新</button>
+          </div>
+          <div>
+            {actorReleases.map((nr) => (
+              <div key={nr.id} className="recent-item" style={{
+                alignItems: 'center',
+                opacity: nr.is_read ? 0.55 : 1,
+                background: nr.is_read ? 'transparent' : 'var(--gold-wash)',
+              }}>
+                <img
+                  src={nr.cover_url || ''}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                  style={{ width: 44, height: 60, borderRadius: 6, objectFit: 'cover', objectPosition: 'right center', background: 'var(--bg-page)', display: 'block', flex: 'none' }}
+                />
+                <div className="recent-meta">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="recent-code">{nr.video_code}</span>
+                    {nr.added_to_library && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74,138,90,.15)', color: 'var(--green)' }}>已入库</span>}
+                  </div>
+                  <div className="recent-title" style={{ WebkitLineClamp: 1 }}>{nr.title || '—'}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {!nr.is_read && (
+                    <button onClick={() => { api.newReleases.markRead(nr.id).then(() => setActorReleases((p) => p ? p.map((x) => x.id === nr.id ? { ...x, is_read: true } : x) : p)).catch(() => {}) }}
+                      className="btn btn--sm btn--ghost" style={{ fontSize: 11 }}>已读</button>
+                  )}
+                  {!nr.added_to_library && (
+                    <button onClick={async () => {
+                      try {
+                        const r = await api.newReleases.addToLibrary(nr.id)
+                        toastOk(r.task_id ? '已入库' : '该作品已入库')
+                        setActorReleases((p) => p ? p.map((x) => x.id === nr.id ? { ...x, added_to_library: true, is_read: true, task_id: r.task_id ?? x.task_id } : x) : p)
+                      } catch (e) { toastErr(String((e as Error).message)) }
+                    }} className="btn btn--sm btn--gold" style={{ fontSize: 11 }}>入库</button>
+                  )}
+                  {nr.task_id && (
+                    <button onClick={() => nav(`/task/${nr.task_id}`)} className="btn btn--sm btn--ghost" style={{ fontSize: 11 }}>详情</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 简介（手动编辑，自由文字，不被自动抓取覆盖） */}
       <div className="detail-main" style={{ marginBottom: 28 }}>
