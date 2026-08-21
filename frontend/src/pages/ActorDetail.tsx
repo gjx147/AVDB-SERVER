@@ -401,11 +401,11 @@ export function ActorDetail() {
               <Icon.heart />{subscribed ? '已关注' : '关注'}
             </button>
             <button className="btn btn--ghost" onClick={crawlWorks} disabled={!actor.source_url}
-              title={actor.source_url ? '爬取该演员全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}>
+              title={actor.source_url ? '爬取该演员作品列表并入库——已入库的作品自动跳过，只补新作（与「全部补齐」的跳过标记无关）' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐作品
             </button>
             <button className="btn btn--ghost" onClick={crawlSoloWorks} disabled={!actor.source_url}
-              title={actor.source_url ? '只爬取单体作品（javdb 演员页 t=s 过滤，?sort_type=0&t=s）' : '无 JavDB URL（需先通过 URL 添加）'}>
+              title={actor.source_url ? '只爬取单体作品（javdb 演员页 t=s 过滤）——已入库的作品自动跳过，只补新作' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐单体作品
             </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
