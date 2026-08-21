@@ -253,19 +253,29 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             except Exception as e:
                 logger.warning(f"通知发送失败（不影响主流程）: {e}")
 
-        # ── auto_add：自动创建 task + 爬详情 + push 下载 ──
-        pushed = 0
-        if auto_add and truly_new:
+        # ── 自动入库：新作默认自动建 task 入影片库（无需手动点入库）──
+        if truly_new:
             for nr in truly_new:
                 try:
-                    task_id = await _create_task_and_extract(nr)
+                    task_id = add_to_library(nr.id, db)
                     if task_id:
                         nr.task_id = task_id
                         nr.added_to_library = True
-                        pushed += 1
+                except Exception as e:
+                    logger.warning(f"新作自动入库失败 {nr.video_code}: {e}")
+            db.commit()
+
+        # ── auto_add：自动入库的基础上，额外抓磁力 + 自动推送下载 ──
+        pushed = 0
+        if auto_add and truly_new:
+            for nr in truly_new:
+                if not nr.task_id:
+                    continue
+                try:
+                    await _trigger_extract_and_push(nr.task_id, nr.video_code)
+                    pushed += 1
                 except Exception as e:
                     logger.warning(f"自动下载 {nr.video_code} 失败: {e}")
-            db.commit()
 
         total_unread = len(db.execute(
             select(NewRelease).where(
@@ -289,73 +299,55 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
         db.close()
 
 
-async def _create_task_and_extract(nr: NewRelease) -> int | None:
-    """为新作品创建 task，触发 scraper 爬详情拿磁力，延迟 push 下载。返回 task_id。
+async def _trigger_extract_and_push(task_id: int, video_code: str) -> None:
+    """为新入库的 task 触发 scraper 爬详情拿磁力，延迟自动 push 下载。
 
-    nr 对象需已 flush（有 id）。本函数不改 nr 状态（由调用方提交）。
+    task 已由「自动入库」（add_to_library）创建，这里只补磁力抓取与下载推送。
     """
     db = SessionLocal()
     try:
-        # 1. 创建 task（pending，关联 RANKING list_source）
-        src = db.execute(
-            select(ListSource).where(ListSource.list_code == "RANKING")
-        ).scalar_one_or_none()
-        if not src:
-            src = ListSource(list_code="RANKING", list_path="/rankings")
-            db.add(src)
-            db.flush()
-        # task.url：有 detail_url 用真实 URL，否则用 pending:// 番号
-        task_url = nr.detail_url or f"pending://{nr.video_code}"
-        task = Task(
-            list_source_id=src.id,
-            url=task_url,
-            video_code=nr.video_code,
-            status="pending",
-        )
-        db.add(task)
-        db.flush()
-        task_id = task.id
-        db.commit()
-        logger.info(f"[新作监控] 创建 task {task_id} for {nr.video_code}")
-
-        # 2. 触发 scraper extract-single（subprocess，非阻塞 fire-and-forget）
-        import sys as _sys, os as _os
-        from services import scraper_lock as _lock
-        if _lock.is_running():
-            logger.info(f"[新作监控] scraper 忙，task {task_id} 排队等 auto_retry")
-        else:
-            try:
-                # 关键修复：注入 http_proxy + javdb_url 到子进程 env（同 _trigger_crawl_actor）
-                _env = dict(_os.environ)
-                _proxy = _get_db_setting("http_proxy")
-                if _proxy:
-                    _env["HTTP_PROXY"] = _proxy
-                    _env["HTTPS_PROXY"] = _proxy
-                    _env["http_proxy"] = _proxy
-                    _env["https_proxy"] = _proxy
-                _javdb_url = _get_db_setting("javdb_url")
-                if _javdb_url:
-                    _env["JAVDB_URL"] = _javdb_url
-                proc = await asyncio.create_subprocess_exec(
-                    _sys.executable, "/app/magnet_scraper/scraper.py",
-                    "extract-single", "--url", task_url,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                    env=_env,
-                )
-                # 注册 scraper_lock 防止并发
-                _lock.set_proc(proc, {"mode": "extract-single", "pid": proc.pid, "auto": True})
-                logger.info(f"[新作监控] 触发 scraper extract-single task {task_id} (pid={proc.pid})")
-                # 启动后台任务等 proc 完成后 clear lock
-                asyncio.create_task(_wait_and_clear_lock(proc))
-            except Exception as e:
-                logger.warning(f"[新作监控] 触发 scraper 失败（task {task_id} 保留 pending）: {e}")
-
-        # 3. 延迟检查 task 是否拿到磁力，有则自动 push
-        asyncio.create_task(_delayed_push_if_ready(task_id, nr.video_code, delay=180))
-        return task_id
+        task = db.get(Task, task_id)
+        if not task:
+            return
+        task_url = task.url or f"pending://{video_code}"
     finally:
         db.close()
+
+    # 触发 scraper extract-single（subprocess，非阻塞 fire-and-forget）
+    import sys as _sys, os as _os
+    from services import scraper_lock as _lock
+    if _lock.is_running():
+        logger.info(f"[新作监控] scraper 忙，task {task_id} 排队等 auto_retry")
+    else:
+        try:
+            # 关键修复：注入 http_proxy + javdb_url 到子进程 env（同 _trigger_crawl_actor）
+            _env = dict(_os.environ)
+            _proxy = _get_db_setting("http_proxy")
+            if _proxy:
+                _env["HTTP_PROXY"] = _proxy
+                _env["HTTPS_PROXY"] = _proxy
+                _env["http_proxy"] = _proxy
+                _env["https_proxy"] = _proxy
+            _javdb_url = _get_db_setting("javdb_url")
+            if _javdb_url:
+                _env["JAVDB_URL"] = _javdb_url
+            proc = await asyncio.create_subprocess_exec(
+                _sys.executable, "/app/magnet_scraper/scraper.py",
+                "extract-single", "--url", task_url,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=_env,
+            )
+            # 注册 scraper_lock 防止并发
+            _lock.set_proc(proc, {"mode": "extract-single", "pid": proc.pid, "auto": True})
+            logger.info(f"[新作监控] 触发 scraper extract-single task {task_id} (pid={proc.pid})")
+            # 启动后台任务等 proc 完成后 clear lock
+            asyncio.create_task(_wait_and_clear_lock(proc))
+        except Exception as e:
+            logger.warning(f"[新作监控] 触发 scraper 失败（task {task_id} 保留 pending）: {e}")
+
+    # 延迟检查 task 是否拿到磁力，有则自动 push
+    asyncio.create_task(_delayed_push_if_ready(task_id, video_code, delay=180))
 
 
 async def _wait_and_clear_lock(proc) -> None:
@@ -384,6 +376,16 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
                 f"[新作监控] task {task_id} {video_code} 暂无磁力（scraper 可能未完成），跳过自动 push"
             )
             return
+
+        # 推送前复核 Emby：建任务到推送之间有 180s 窗口，作品可能刚进媒体库
+        try:
+            from services.media_server import check_in_library
+            in_lib = await check_in_library(video_code)
+            if in_lib is True:
+                logger.info(f"[新作监控] 推送前复核：{video_code} 已在 Emby 媒体库，跳过自动 push")
+                return
+        except Exception as e:
+            logger.warning(f"[新作监控] 推送前 Emby 复核失败（继续推送）: {e}")
 
         # 读下载器配置
         from routers.downloaders import _get_setting, _push_clouddrive, _push_qbittorrent, _extract_hash
