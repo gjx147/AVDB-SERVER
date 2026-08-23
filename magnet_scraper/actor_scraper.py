@@ -443,8 +443,6 @@ class ActorScraper:
                 if not page_urls:
                     break
 
-                # 去重（当前页内）
-                seen = set(page_urls)
                 all_urls.extend(page_urls)
                 logger.info(f"第 {page_num} 页提取 {len(page_urls)} 部作品，累计 {len(all_urls)} 部")
 
