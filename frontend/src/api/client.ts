@@ -8,7 +8,7 @@ import type {
   Actor, ActorMovie, CastMember, Ranking, RankType, DashboardStats, MonthlyStat,
   CrawlStatus, CrawlLogLine, Settings, SettingsUpdate, ApiOk,
   ThumbnailsResponse, DownloadImagesResult, Magnet,
-  DownloadRecord, DiskInfo, NotifyTestResult, NewRelease,
+  DownloadRecord, DiskInfo, NotifyTestResult, NewRelease, Subscription,
 } from './types'
 
 const http = axios.create({ baseURL: '', timeout: 60000 })
@@ -333,7 +333,7 @@ export const api = {
   // ════════ Subscriptions（Phase 3：多维订阅）════════
   subscriptions: {
     list: (enabled?: boolean) =>
-      http.get<unknown[]>('/api/subscriptions', { params: { enabled } }).then((r) => r.data),
+      http.get<Subscription[]>('/api/subscriptions', { params: { enabled } }).then((r) => r.data),
     create: (body: Record<string, unknown>) =>
       http.post<unknown>('/api/subscriptions', body).then((r) => r.data),
     get: (id: number) => http.get<unknown>(`/api/subscriptions/${id}`).then((r) => r.data),

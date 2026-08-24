@@ -239,7 +239,7 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
         actor_url = actor.source_url or ""
         if not actor_url:
             note = actor.note or ""
-            if note.startswith("source_url:"):
+            if note.startswith("source_url: "):
                 actor_url = note.split(":", 1)[1].strip()
 
         logger.info(f"[新作监控] {actor.name} 触发 scraper crawl-actor ({actor_url or '按名字搜索'})")
@@ -373,7 +373,17 @@ async def _trigger_extract_and_push(task_id: int, video_code: str) -> None:
     import sys as _sys, os as _os
     from services import scraper_lock as _lock
     if _lock.is_running():
-        logger.info(f"[新作监控] scraper 忙，task {task_id} 排队等 auto_retry")
+        # P1 修复：锁忙时把 task 标记 failed，让 auto_retry 的 extract --failed-only 接管重试
+        # （原"排队"只是日志——pending 任务不会被 auto_retry 处理，磁力抓取会静默丢失）
+        logger.info(f"[新作监控] scraper 忙，task {task_id} 标记 failed 交 auto_retry 重试")
+        _db2 = SessionLocal()
+        try:
+            _t2 = _db2.get(Task, task_id)
+            if _t2:
+                _t2.status = "failed"
+                _db2.commit()
+        finally:
+            _db2.close()
     else:
         try:
             # 关键修复：注入 http_proxy + javdb_url 到子进程 env（同 _trigger_crawl_actor）
@@ -548,8 +558,15 @@ def add_to_library(new_release_id: int, db) -> int | None:
         src = ListSource(list_code="RANKING", list_path="/rankings")
         db.add(src)
         db.flush()
-    t = Task(list_source_id=src.id, url=nr.detail_url or f"/v/{nr.video_code}",
-             video_code=nr.video_code)
+    task_url = nr.detail_url or f"/v/{nr.video_code}"
+    # P2 修复：同一作品可能被多个演员订阅同时检出，url 唯一约束先查重复用 task
+    existing = db.execute(select(Task).where(Task.url == task_url)).scalar_one_or_none()
+    if existing:
+        nr.added_to_library = True
+        nr.task_id = existing.id
+        nr.is_read = True
+        return existing.id
+    t = Task(list_source_id=src.id, url=task_url, video_code=nr.video_code)
     db.add(t)
     db.flush()
     nr.added_to_library = True

@@ -103,8 +103,8 @@ export function Subscriptions() {
 
   const load = () => {
     setSubs(null); setError(null)
-    api.subscriptions.list(undefined).then((r: unknown) => {
-      setSubs((r as Subscription[]) || [])
+    api.subscriptions.list(undefined).then((r) => {
+      setSubs(r || [])
     }).catch((e) => { setError(String((e as Error).message)); setSubs([]) })
     // 演员头像/补齐标记映射：自动翻页拉全量演员，建 actor_id → avatar_url / works_fetched
     api.actors.listAll().then((list) => {
