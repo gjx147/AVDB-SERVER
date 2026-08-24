@@ -35,7 +35,9 @@ http.interceptors.response.use(
     const detail = rawDetail !== undefined && rawDetail !== null && rawDetail !== ''
       ? (typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail))
       : (err?.message || '请求失败')
-    return Promise.reject(new Error(detail))
+    // 保留原错误对象（err.response/status 对下游可用），只统一 message 文本
+    err.message = detail
+    return Promise.reject(err)
   },
 )
 
@@ -305,8 +307,8 @@ export const api = {
       status?: string; list_source_id?: number; actor?: string; tag?: string; date_from?: string; date_to?: string;
       min_rating?: number; in_library?: boolean; sort?: string; limit?: number; offset?: number;
     }) => http.get<{ tasks: Task[]; total: number }>('/api/v2/tasks', { params }).then((r) => r.data),
-    searchFts: (q: string, limit = 48) =>
-      http.get<{ tasks: Task[]; total: number; engine: string }>('/api/v2/tasks/search-fts', { params: { q, limit } }).then((r) => r.data),
+    searchFts: (q: string, limit = 48, offset = 0) =>
+      http.get<{ tasks: Task[]; total: number; engine: string }>('/api/v2/tasks/search-fts', { params: { q, limit, offset } }).then((r) => r.data),
     analytics: () =>
       http.get<{ top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; rating_dist: { bucket: string; count: number }[]; download_stats: Record<string, number>; daily_added: { day: string; count: number }[] }>('/api/v2/dashboard/analytics').then((r) => r.data),
     similar: (taskId: number) =>

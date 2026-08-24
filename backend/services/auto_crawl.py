@@ -33,6 +33,14 @@ logger = logging.getLogger("avdb.auto_crawl")
 # 运行状态（内存）
 _state = {"running": False, "current": None, "last_run": None, "errors": 0}
 
+# 批量任务超时（秒）＝ 4 小时。
+# 计算依据（F08）：单任务 extract 约 90-120s；单个列表源一轮 extract 可达 100+
+# pending/failed 任务，约 2.5-3.5 小时；scan/ranking 又按源/榜串行叠加。
+# 旧默认 1800s（30 分钟）会常规性杀断 extract/ranking 长任务，故提到 4 小时留足余量。
+# 手动/交互路径不经过本函数（见 routers/crawl.py 的 _DEFAULT_TIMEOUT=1800，
+# 由前端可见的 30 分钟超时回收兜底）。调用方仍可传 timeout= 覆盖。
+_BATCH_TIMEOUT = 14400  # 4 小时
+
 
 def _scraper_path() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "magnet_scraper" / "scraper.py"
@@ -42,7 +50,7 @@ def _python_exe() -> str:
     return get_settings().SCRAPER_PYTHON or sys.executable
 
 
-async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
+async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
     """非阻塞执行 scraper 子进程。返回是否成功(exit 0)。
 
     架构修复：start_new_session 创建进程组，超时时整组 kill（Chromium 子树不残留）。
@@ -128,8 +136,13 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
             )
             return False
         except asyncio.TimeoutError:
+            # 先给 scraper 优雅退出机会（flush/清理浏览器会话），等 10s 未退出再整树强杀
+            await _graceful_terminate(proc, grace=10.0)
             _kill_process_tree(proc)
-            logger.warning("scraper 超时(%ds)被kill整树: %s", timeout, " ".join(args))
+            logger.warning(
+                "scraper 超时(%ds)已尝试优雅退出，随后 kill 整树: %s",
+                timeout, " ".join(args),
+            )
             return False
     except Exception as e:
         logger.error("scraper 执行异常: %s", e)
@@ -160,6 +173,27 @@ def _kill_process_tree(proc) -> None:
             pass
 
 
+async def _graceful_terminate(proc, grace: float = 10.0) -> None:
+    """超时后先尝试优雅退出：Unix 发 SIGTERM 到进程组，Windows 发 CTRL_BREAK_EVENT。
+
+    等 grace 秒让进程自行清理；未退出则由调用方继续 _kill_process_tree 强杀兜底。
+    """
+    if proc.returncode is not None:
+        return
+    try:
+        if sys.platform == "win32":
+            # CREATE_NEW_PROCESS_GROUP 启动的进程组可收 CTRL_BREAK_EVENT
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except Exception:
+        return
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=grace)
+    except Exception:
+        pass
+
+
 async def run_scan_cycle() -> dict:
     """对所有列表源执行一轮 scan。"""
     if _state["running"]:
@@ -185,7 +219,8 @@ async def run_scan_cycle() -> dict:
                 continue
             _state["current"] = f"scan:{src.list_code}"
             ok = await _run_scraper(
-                ["scan", "--list-source-id", str(src.id), "-p", str(src.max_pages or 100)]
+                ["scan", "--list-source-id", str(src.id), "-p", str(src.max_pages or 100)],
+                timeout=_BATCH_TIMEOUT,  # 串行扫全部源，一轮可能远超 30 分钟
             )
             results.append({"source": src.list_code, "scan_ok": ok})
         _state["last_run"] = "scan"
@@ -215,7 +250,10 @@ async def run_extract_cycle() -> dict:
 
         for src in sources:
             _state["current"] = f"extract:{src.list_code}"
-            ok = await _run_scraper(["extract", "--list-source-id", str(src.id), "--failed-only"])
+            ok = await _run_scraper(
+                ["extract", "--list-source-id", str(src.id), "--failed-only"],
+                timeout=_BATCH_TIMEOUT,  # 单源 extract 100+ 任务约 2.5-3.5h，见模块常量注释
+            )
             results.append({"source": src.list_code, "extract_ok": ok})
         _state["last_run"] = "extract"
         return {"ok": True, "results": results}

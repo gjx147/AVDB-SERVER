@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import Counter
 
 from fastapi import APIRouter, Query
@@ -14,6 +15,10 @@ from deps import CurrentUser, DbSession
 from models import Task
 
 router = APIRouter(prefix="/api/v2", tags=["v2"])
+
+# analytics 全库统计缓存：TTL 300 秒，避免 Dashboard 高频加载时反复全表扫描
+_analytics_cache: dict = {"ts": 0.0, "data": None}
+_ANALYTICS_TTL = 300.0
 
 
 @router.get("/tasks")
@@ -83,6 +88,7 @@ def search_fts(
     _user: CurrentUser,
     q: str = Query(..., min_length=1),
     limit: int = Query(48, le=200),
+    offset: int = Query(0, ge=0),
 ):
     """FTS 全文搜索（兼容前端，实际用 LIKE 降级）。"""
     from sqlalchemy import or_
@@ -90,7 +96,7 @@ def search_fts(
         or_(Task.title.like(f"%{q}%"), Task.video_code.like(f"%{q}%"))
     )
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    tasks = db.execute(stmt.order_by(Task.id.desc()).limit(limit)).scalars().all()
+    tasks = db.execute(stmt.order_by(Task.id.desc()).offset(offset).limit(limit)).scalars().all()
     return {"tasks": tasks, "total": total, "engine": "like"}
 
 
@@ -162,6 +168,10 @@ def analytics(db: DbSession, _user: CurrentUser):
     actors/tags/maker 是逗号分隔字段，SQLite 无法直接 UNNEST，
     仍需 Python 聚合，但只 SELECT 需要的列（不加载全文 magnets_json/synopsis 等大字段）。
     """
+    now = time.monotonic()
+    if _analytics_cache["data"] is not None and now - _analytics_cache["ts"] < _ANALYTICS_TTL:
+        return _analytics_cache["data"]
+
     # 只查需要的列（不加载 magnets_json/synopsis 等大字段，减少 IO）
     rows = db.execute(
         select(Task.actors, Task.tags, Task.maker, Task.rating)
@@ -188,9 +198,12 @@ def analytics(db: DbSession, _user: CurrentUser):
             elif rating < 9: rating_buckets["8-9"] += 1
             else: rating_buckets["9-10"] += 1
 
-    return {
+    result = {
         "top_actors": _top_from_values([r[0] for r in rows if r[0]]),
         "top_tags": _top_from_values([r[1] for r in rows if r[1]]),
         "top_makers": _top_from_values([r[2] for r in rows if r[2]]),
         "rating_dist": [{"bucket": k, "count": v} for k, v in rating_buckets.items()],
     }
+    _analytics_cache["ts"] = now
+    _analytics_cache["data"] = result
+    return result

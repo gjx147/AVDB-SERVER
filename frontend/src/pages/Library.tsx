@@ -100,7 +100,7 @@ export function Library() {
       const skip = p * PAGE
       // F11/F12: 使用 v2 API 支持排序 + FTS 搜索
       if (searchQ) {
-        const r = await api.v2.searchFts(searchQ, PAGE)
+        const r = await api.v2.searchFts(searchQ, PAGE, skip)
         if (reqId !== reqSeqRef.current) return
         setTasks(r.tasks)
         setTotal(r.total)

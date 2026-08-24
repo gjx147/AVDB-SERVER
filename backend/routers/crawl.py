@@ -203,22 +203,10 @@ def start_extract(req: CrawlRequest, _user: CurrentUser):
 @router.get("/status")
 def crawl_status(_user: CurrentUser):
     """查询爬取状态：进程级（内存）+ 任务级（crawl_status.json）。"""
-    proc = scraper_lock.get_proc()
+    # 超时检查 + 僵尸进程回收（懒触发；另有 scheduler watchdog 每 60s 主动兜底）
+    reap_result = reap_timed_out_crawl()
+    proc_running = reap_result["running"]
     info = scraper_lock.get_info()
-    proc_running = proc is not None and proc.poll() is None
-
-    # 检查超时（清理僵尸进程）
-    if proc_running and _is_timed_out(info):
-        _kill_process_tree(proc)  # type: ignore
-        if scraper_lock.get_proc() is proc:
-            scraper_lock.clear()
-        proc_running = False
-
-    # 进程已退出但锁未清理
-    if proc is not None and proc.poll() is not None:
-        if scraper_lock.get_proc() is proc:
-            scraper_lock.clear()
-        proc_running = False
 
     # 读任务级状态文件
     task_status = {}
@@ -356,6 +344,27 @@ def _is_timed_out(info: dict) -> bool:
         return datetime.utcnow() - start > timedelta(seconds=_DEFAULT_TIMEOUT)
     except Exception:
         return False
+
+
+def reap_timed_out_crawl() -> dict:
+    """主动回收超时/僵死的爬取进程（含进程已退出但锁未清理的情况）。
+
+    供 crawl_status（懒触发）与 scheduler 的 watchdog 定时任务共用，
+    保证前端不轮询时僵尸进程也能被回收。
+    幂等：每次重查 poll()，且按身份（get_proc() is proc）clear，防 ABA。
+    """
+    proc = scraper_lock.get_proc()
+    reaped = False
+    if proc is not None and proc.poll() is None and _is_timed_out(scraper_lock.get_info()):
+        _kill_process_tree(proc)  # type: ignore
+        reaped = True
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
+    elif proc is not None and proc.poll() is not None:
+        # 进程已退出但锁未清理（僵尸锁）
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
+    return {"running": proc is not None and proc.poll() is None, "reaped": reaped}
 
 
 # ── Phase 1 补端点：日志查询 ──

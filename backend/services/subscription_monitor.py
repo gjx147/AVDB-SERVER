@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 
 from database import SessionLocal
 from models import ListSource, Subscription, Task
@@ -76,15 +76,36 @@ def _task_matches_filters(task: Task, filters: dict) -> bool:
 async def _check_composite(sub: Subscription, db) -> dict:
     """composite 订阅：扫描已有任务，统计匹配数。"""
     filters = _parse_filters(sub.filters_json)
-    tasks = db.execute(select(Task).where(Task.status == "visited")).scalars().all()
+    # 只 SELECT 过滤/更新所需列，避免整行加载 magnets_json/synopsis 等大字段
+    tasks = db.execute(
+        select(
+            Task.id,
+            Task.video_code,
+            Task.maker,
+            Task.label,
+            Task.series,
+            Task.tags,
+            Task.rating,
+            Task.release_date,
+            Task.view_status,
+        ).where(Task.status == "visited")
+    ).all()
     matched = [t for t in tasks if _task_matches_filters(t, filters)]
-    # auto_add 时把命中的标记为想看
+    # auto_add 时把命中的标记为想看（批量 UPDATE，不再依赖 ORM 对象回写）
     added = 0
     if sub.auto_add:
-        for t in matched:
-            if not t.view_status:
-                t.view_status = "want"
-                added += 1
+        want_ids = [t.id for t in matched if not t.view_status]
+        if want_ids:
+            db.execute(
+                update(Task)
+                .where(
+                    Task.id.in_(want_ids),
+                    or_(Task.view_status.is_(None), Task.view_status == ""),
+                )
+                .values(view_status="want")
+                .execution_options(synchronize_session=False)
+            )
+            added = len(want_ids)
     return {
         "type": "composite",
         "scanned": len(tasks),

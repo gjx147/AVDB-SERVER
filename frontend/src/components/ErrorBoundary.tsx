@@ -1,12 +1,22 @@
 import { Component, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 
-interface Props { children: ReactNode }
-interface State { error: Error | null }
+interface Props { children: ReactNode; resetKey?: string }
+interface State { error: Error | null; resetKey?: string }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryBase extends Component<Props, State> {
   state: State = { error: null }
 
   static getDerivedStateFromError(error: Error) { return { error } }
+
+  // 路由路径变化（resetKey 变化）时清除错误态，避免单页偶发错误把整个应用锁死在错误屏
+  static getDerivedStateFromProps(props: Props, state: State) {
+    if (props.resetKey !== state.resetKey) {
+      // 记录当前路径；若正处于错误态则一并清除（等价于监听路径变化 setState({ error: null })）
+      return state.error ? { error: null, resetKey: props.resetKey } : { resetKey: props.resetKey }
+    }
+    return null
+  }
 
   render() {
     if (this.state.error) {
@@ -27,4 +37,9 @@ export class ErrorBoundary extends Component<Props, State> {
     }
     return this.props.children
   }
+}
+// 对外包装：监听路由路径，路径变化时重置错误态（不卸载子树）
+export function ErrorBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  return <ErrorBoundaryBase resetKey={location.pathname}>{children}</ErrorBoundaryBase>
 }

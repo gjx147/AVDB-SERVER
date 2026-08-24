@@ -22,8 +22,27 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 logger = logging.getLogger("avdb.scheduler")
 
+# 爬取僵尸进程 watchdog 间隔（秒）：主动回收超时/僵死的 scraper 子进程，
+# 不依赖前端轮询 crawl_status 的懒触发（F09）。
+_WATCHDOG_INTERVAL = 60
+
 # 全局单例（lifespan 启动时创建，shutdown 时关闭）
 _scheduler: AsyncIOScheduler | None = None
+
+
+def _watchdog_reap_crawl() -> None:
+    """回收超时/僵死的爬取进程（watchdog job 回调）。
+
+    函数内 import：routers.crawl 依赖 services.scraper_lock 等模块，
+    虽然不反向依赖本模块（无循环依赖），惰性导入可彻底避免 import 顺序耦合。
+    """
+    try:
+        from routers.crawl import reap_timed_out_crawl
+        result = reap_timed_out_crawl()
+        if result.get("reaped"):
+            logger.warning("watchdog: 已回收超时爬取进程")
+    except Exception as e:
+        logger.warning("watchdog: 回收爬取进程失败: %s", e)
 
 
 def get_scheduler() -> AsyncIOScheduler:
@@ -45,6 +64,9 @@ async def start_scheduler() -> None:
     """启动调度器（在 lifespan startup 调用）。"""
     sched = get_scheduler()
     if not sched.running:
+        # 爬取僵尸进程 watchdog：每 60s 主动回收超时进程（F09）。
+        # job_defaults 已含 coalesce=True + max_instances=1；replace_existing 防重复注册。
+        add_interval_job(_watchdog_reap_crawl, "crawl-reap-watchdog", seconds=_WATCHDOG_INTERVAL)
         sched.start()
         logger.info("调度中心已启动 (jobs=%d)", len(sched.get_jobs()))
 
