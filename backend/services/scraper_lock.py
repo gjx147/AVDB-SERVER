@@ -40,6 +40,19 @@ def get_callback_token() -> str:
     return _callback_token
 
 
+def is_proc_alive(proc) -> bool:
+    """判断子进程是否存活：兼容 subprocess.Popen（同步）与 asyncio.subprocess.Process（异步）。
+
+    asyncio Process 没有 .poll() 方法，改用 returncode（await wait() 后更新；None = 存活）。
+    修复生产报错: 'Process' object has no attribute 'poll'（new_works_monitor 等异步路径注册的进程）。
+    """
+    if proc is None:
+        return False
+    if hasattr(proc, "poll"):
+        return proc.poll() is None
+    return proc.returncode is None
+
+
 def try_acquire() -> bool:
     """尝试获取锁（非阻塞）。
 
@@ -47,7 +60,7 @@ def try_acquire() -> bool:
     返回 False = 已有 scraper 在跑，调用方应跳过。
     """
     with _lock:
-        if _proc is not None and _proc.poll() is None:
+        if is_proc_alive(_proc):
             return False
         return True
 
@@ -62,7 +75,7 @@ def try_acquire_and_set(proc: subprocess.Popen, info: dict) -> bool:
     """
     with _lock:
         global _proc, _info
-        if _proc is not None and _proc.poll() is None:
+        if is_proc_alive(_proc):
             return False
         _proc = proc
         _info = info
@@ -80,7 +93,7 @@ def set_proc(proc: subprocess.Popen, info: dict) -> None:
 def is_running() -> bool:
     """当前是否有 scraper 在跑。"""
     with _lock:
-        return _proc is not None and _proc.poll() is None
+        return is_proc_alive(_proc)
 
 
 def get_proc() -> subprocess.Popen | None:

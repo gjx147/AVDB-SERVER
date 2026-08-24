@@ -128,7 +128,7 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
 
 def _kill_process_tree(proc: subprocess.Popen) -> None:
     """杀整个进程树（包括 Chromium 子进程）。"""
-    if proc.poll() is not None:
+    if not scraper_lock.is_proc_alive(proc):
         return  # 已退出
     try:
         if sys.platform == "win32":
@@ -285,7 +285,7 @@ def refresh_metadata(_user: CurrentUser, body: dict | None = None):
 def stop_crawl(_user: CurrentUser):
     """停止当前爬取进程（杀整个进程树）。"""
     proc = scraper_lock.get_proc()
-    if proc and proc.poll() is None:
+    if proc and scraper_lock.is_proc_alive(proc):
         _kill_process_tree(proc)
         try:
             proc.wait(timeout=10)
@@ -323,7 +323,7 @@ def unregister(authorization: str | None = Header(None)):
         raise HTTPException(status_code=401, detail="未授权")
     proc = scraper_lock.get_proc()
     # 进程结束，清理引用
-    if proc and proc.poll() is not None:
+    if proc and not scraper_lock.is_proc_alive(proc):
         scraper_lock.clear()
     return {"ok": True}
 
@@ -355,16 +355,16 @@ def reap_timed_out_crawl() -> dict:
     """
     proc = scraper_lock.get_proc()
     reaped = False
-    if proc is not None and proc.poll() is None and _is_timed_out(scraper_lock.get_info()):
+    if proc is not None and scraper_lock.is_proc_alive(proc) and _is_timed_out(scraper_lock.get_info()):
         _kill_process_tree(proc)  # type: ignore
         reaped = True
         if scraper_lock.get_proc() is proc:
             scraper_lock.clear()
-    elif proc is not None and proc.poll() is not None:
+    elif proc is not None and not scraper_lock.is_proc_alive(proc):
         # 进程已退出但锁未清理（僵尸锁）
         if scraper_lock.get_proc() is proc:
             scraper_lock.clear()
-    return {"running": proc is not None and proc.poll() is None, "reaped": reaped}
+    return {"running": scraper_lock.is_proc_alive(proc), "reaped": reaped}
 
 
 # ── Phase 1 补端点：日志查询 ──

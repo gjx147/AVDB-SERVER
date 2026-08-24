@@ -23,7 +23,8 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 def _kill_process_tree(proc: subprocess.Popen) -> None:
     """杀整个进程树（包括 Playwright Chromium 子进程）。对齐 auto_crawl._kill_process_tree。"""
-    if proc.poll() is not None:
+    from services import scraper_lock
+    if not scraper_lock.is_proc_alive(proc):
         return  # 已退出
     try:
         if sys.platform == "win32":
