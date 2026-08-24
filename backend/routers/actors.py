@@ -73,8 +73,15 @@ def get_actor(actor_id: int, db: DbSession, _user: CurrentUser):
             select(actor_movies.c.task_id).where(actor_movies.c.actor_id == actor_id)
         ).all()
     ]
+    # 兼容旧数据：source_url 为空但 note 存了 "source_url: <url>" 时归一化返回
+    # （历史版本把 JavDB 链接存在 note 字段；crawl_actor_works 已有同款 fallback，
+    # 详情接口补齐后前端「补齐作品/补齐单体作品」按钮恢复可点。
+    # 根治方案：scripts/migrate_actor_source_url.py 一次性迁移到 source_url 列）
+    _actor_data = {c.name: getattr(actor, c.name) for c in actor.__table__.columns}
+    if not _actor_data.get("source_url") and str(_actor_data.get("note") or "").startswith("source_url: "):
+        _actor_data["source_url"] = str(_actor_data["note"])[len("source_url: "):].strip()
     return ActorDetailOut(
-        **{c.name: getattr(actor, c.name) for c in actor.__table__.columns},
+        **_actor_data,
         movie_ids=movie_ids,
     )
 
