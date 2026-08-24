@@ -2231,6 +2231,7 @@ def main():
         
         if restart_count >= max_restarts:
             logger.error("已达最大重启次数，请检查网络或更换 IP")
+            sys.exit(2)
     finally:
         logger.info("清理资源...")
         _notify_backend_unregister()

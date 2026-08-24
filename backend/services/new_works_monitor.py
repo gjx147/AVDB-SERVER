@@ -19,8 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import signal
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 from sqlalchemy import select
@@ -69,7 +74,6 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
         logger.warning("[新作监控] scraper 忙，跳过 crawl-actor")
         return False
 
-    import subprocess, sys, os
     if actor_url:
         cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
                "crawl-actor", "--actor-url", actor_url]
@@ -96,36 +100,78 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
     if _javdb_url:
         env["JAVDB_URL"] = _javdb_url
 
+    # P0 修复: stdout/stderr 落盘日志文件（不 PIPE，避免管道写满死锁 + 不阻塞事件循环）。
+    # 命名/位置对齐 routers/crawl.py 的 scraper_stderr.log 风格（DATA_DIR 下），追加模式。
+    log_path = Path(get_settings().DATA_DIR) / "scraper_actor_crawl.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+    except Exception as e:
+        log_file = None
+        logger.warning(f"[新作监控] 打开日志文件失败({log_path})，scraper 输出将丢弃: {e}")
+
+    popen_kwargs: dict = {
+        "env": env,
+        "cwd": "/app/magnet_scraper",
+        "stdout": log_file if log_file is not None else asyncio.subprocess.DEVNULL,
+        "stderr": asyncio.subprocess.STDOUT,  # stderr 合并到 stdout 同一落盘文件
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+
     proc = None
     try:
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            cwd="/app/magnet_scraper", env=env,
-        )
+        proc = await asyncio.create_subprocess_exec(*cmd, **popen_kwargs)
         # 注册 scraper_lock 防止其他路径并发启动 Chromium
         scraper_lock.set_proc(proc, {"mode": "crawl-actor", "pid": proc.pid})
-        stdout, _ = proc.communicate(timeout=300)
-        stdout_text = stdout.decode("utf-8", errors="replace") if stdout else ""
-        # 记录 scraper 子进程输出到 app.log（成功和失败都记，排查用）
-        # 截取最后 1000 字符（避免日志太长）
-        logger.info(f"[新作监控] scraper crawl-actor 输出 (rc={proc.returncode}):\n{stdout_text[-1000:]}")
+        logger.info(f"[新作监控] scraper crawl-actor 输出落盘: {log_path}")
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=300)
+        except asyncio.TimeoutError:
+            _kill_process_tree(proc)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=10)
+            except Exception:
+                pass
+            logger.warning(f"[新作监控] scraper crawl-actor 超时(300s)，已杀进程树: {actor_name}")
+            return False
         if proc.returncode == 0:
             logger.info(f"[新作监控] scraper crawl-actor 完成: {actor_name}")
             return True
         else:
-            logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode})")
+            logger.warning(f"[新作监控] scraper crawl-actor 失败(rc={proc.returncode})，日志见 {log_path}")
             return False
-    except subprocess.TimeoutExpired:
-        if proc:
-            proc.kill()
-            proc.communicate()
-        logger.warning(f"[新作监控] scraper crawl-actor 超时(300s): {actor_name}")
-        return False
     except Exception as e:
         logger.warning(f"[新作监控] scraper crawl-actor 异常: {e}")
         return False
     finally:
-        scraper_lock.clear()
+        if log_file is not None:
+            try:
+                log_file.close()
+            except Exception:
+                pass
+        # 仅当锁仍指向本进程才 clear（防 ABA：避免误清别人新持有的锁）
+        if proc is not None and scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
+
+
+def _kill_process_tree(proc) -> None:
+    """杀整个进程树（包括 Playwright Chromium 子进程）。对齐 auto_crawl._kill_process_tree。"""
+    if proc.returncode is not None:
+        return  # 已退出
+    pid = proc.pid
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=10)
+        else:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 async def _get_actor_works_from_db(db, actor_id: int) -> list[dict]:

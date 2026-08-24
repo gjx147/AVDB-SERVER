@@ -73,6 +73,11 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
 
     logger.info("启动 scraper: %s", " ".join(args))
 
+    # stdout+stderr 写入日志文件（追加模式保留历史；风格与 crawl.py _start_scraper 一致）
+    log_path = Path(get_settings().DATA_DIR) / "scraper_auto_stderr.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_path, "a", encoding="utf-8")
+
     # 创建子进程：进程组隔离（支持整树杀）
     popen_kwargs: dict = {"env": env}
     if sys.platform == "win32":
@@ -83,8 +88,8 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=log_file,
             **popen_kwargs,
         )
         try:
@@ -92,7 +97,11 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
             if proc.returncode == 0:
                 logger.info("scraper 完成: %s", " ".join(args))
                 return True
-            logger.warning("scraper 退出码 %d: %s", proc.returncode, " ".join(args))
+            _state["errors"] += 1
+            logger.error(
+                "scraper 退出码 %d（累计错误 %d），stderr 见 %s: %s",
+                proc.returncode, _state["errors"], log_path, " ".join(args),
+            )
             return False
         except asyncio.TimeoutError:
             _kill_process_tree(proc)
@@ -101,6 +110,8 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
     except Exception as e:
         logger.error("scraper 执行异常: %s", e)
         return False
+    finally:
+        log_file.close()
 
 
 def _kill_process_tree(proc) -> None:

@@ -95,10 +95,12 @@ def ensure_admin_exists() -> None:
         else:
             new_key = secrets.token_urlsafe(48)
             secret_file.parent.mkdir(parents=True, exist_ok=True)
-            secret_file.write_text(new_key)
+            # 原子写：先写 .secret_key.tmp 再 os.replace，避免写一半崩溃留下残缺密钥文件
+            tmp_secret_file = secret_file.with_name(".secret_key.tmp")
+            tmp_secret_file.write_text(new_key)
+            _os.replace(tmp_secret_file, secret_file)
             settings.SECRET_KEY = new_key
-            # 清除 lru_cache 使后续 get_settings() 返回新值
-            get_settings.cache_clear()
+            # 不要调用 cache_clear：Settings 不读此文件，清除后 SECRET_KEY 会回到空值
             import logging as _log
             _log.getLogger("avdb.auth").info("已自动生成随机 SECRET_KEY 并持久化到 %s", secret_file)
 
