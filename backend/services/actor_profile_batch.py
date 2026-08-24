@@ -56,6 +56,14 @@ def _run() -> None:
     from models import Actor
     from services import actor_profile_sync
 
+    # 互斥：定时同步正在运行时，手动一键提取不启动（非阻塞获取锁，失败则跳过并记日志）
+    if not actor_profile_sync.acquire_cycle_lock():
+        logger.warning("演员信息一键提取跳过：定时同步正在运行")
+        with _lock:
+            _state["running"] = False
+            _state["last_summary"] = "提取已跳过：定时同步正在运行"
+        return
+
     def _hook(name: str) -> None:
         with _lock:
             _state["current_name"] = name
@@ -79,7 +87,7 @@ def _run() -> None:
 
         while True:
             try:
-                r = actor_profile_sync.run_cycle()
+                r = actor_profile_sync.run_cycle(_lock_held=True)
             except Exception as e:
                 logger.warning("演员信息提取轮次异常: %s", e)
                 with _lock:
@@ -97,6 +105,7 @@ def _run() -> None:
             time.sleep(3)  # 轮间稍歇，避免长时间连续轰炸三源
     finally:
         actor_profile_sync.set_progress_hook(None)
+        actor_profile_sync.release_cycle_lock()
 
     with _lock:
         _state["running"] = False

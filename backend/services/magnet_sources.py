@@ -151,15 +151,16 @@ _SOURCES = {
 async def search_all(code: str, sources: list[str] | None = None) -> dict:
     """多源并发搜索 + 去重 + 排序。返回按源分组的结果。"""
     active_sources = sources or list(_SOURCES.keys())
-    coros = [_SOURCES[s](code) for s in active_sources if s in _SOURCES]
-    results = await asyncio.gather(*coros, return_exceptions=True)
+    # 过滤未知源并保留 (源名, coroutine) 配对，遍历用配对名，
+    # 避免 sources 含未知源（如 "foo,sukebei"）时结果归属错位
+    pairs = [(s, _SOURCES[s](code)) for s in active_sources if s in _SOURCES]
+    results = await asyncio.gather(*(coro for _, coro in pairs), return_exceptions=True)
 
     # 合并去重（按 info_hash）
     seen_hashes: dict[str, MagnetResult] = {}
     by_source: dict[str, list[dict]] = {}
     total = 0
-    for i, result in enumerate(results):
-        source_name = active_sources[i] if i < len(active_sources) else f"src{i}"
+    for (source_name, _coro), result in zip(pairs, results):
         if isinstance(result, Exception):
             by_source[source_name] = []
             continue

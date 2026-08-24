@@ -25,11 +25,15 @@ export function Downloads() {
   }, [filter])
 
   useEffect(() => { load() }, [load])
-  // 自动刷新（下载中状态会更新）
+  // 自动刷新：仅页面可见且存在下载中任务时轮询（空闲/后台不请求）
   useEffect(() => {
-    const t = setInterval(load, 15000)
+    const t = setInterval(() => {
+      if (document.hidden) return
+      const hasActive = (data?.downloads ?? []).some((d) => (d as { status?: string }).status === 'downloading')
+      if (hasActive) load()
+    }, 15000)
     return () => clearInterval(t)
-  }, [load])
+  }, [load, data])
 
   return (
     <div className="page">

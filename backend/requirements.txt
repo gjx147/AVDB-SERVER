@@ -5,8 +5,8 @@
 
 # --- Web framework ---
 fastapi>=0.110,<0.116
-uvicorn[standard]>=0.29,<0.32
-python-multipart>=0.0.9        # FastAPI form parsing
+uvicorn[standard]>=0.29,<0.35
+python-multipart>=0.0.18       # FastAPI form parsing（CVE-2024-53981 修复于 0.0.18）
 websockets>=12.0               # crawl progress WS
 
 # --- Database (SQLAlchemy ORM, SQLite default / PG optional) ---
@@ -18,7 +18,7 @@ alembic>=1.13,<1.15            # migrations
 APScheduler>=3.10,<3.12
 
 # --- Auth ---
-python-jose[cryptography]>=3.3,<4.0   # JWT
+python-jose[cryptography]>=3.4,<4.0   # JWT（CVE-2024-33663 修复于 3.4.0）
 bcrypt>=4.0,<6.0                         # password hashing
 
 # --- HTTP / scraping ---
@@ -48,3 +48,5 @@ openai>=1.30,<2.0
 python-dotenv>=1.0,<2.0
 pydantic>=2.7,<3.0
 pydantic-settings>=2.2,<3.0
+
+# 依赖锁文件见 requirements.lock（pip freeze 生成，可复现构建参考）

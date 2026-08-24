@@ -165,12 +165,15 @@ export function Actors() {
     setBatchBusy(true)
     try {
       let n = 0
-      for (const a of sels) {
-        try {
-          if (kind === 'follow') await api.actors.follow(a.id)
-          else await api.actors.remove(a.id)
-          n++
-        } catch { /* 单个失败不中断 */ }
+      const B = 5
+      for (let i = 0; i < sels.length; i += B) {
+        await Promise.all(sels.slice(i, i + B).map(async (a) => {
+          try {
+            if (kind === 'follow') await api.actors.follow(a.id)
+            else await api.actors.remove(a.id)
+            n++
+          } catch { /* 单个失败不中断 */ }
+        }))
       }
       toastOk(kind === 'follow' ? `已关注 ${n} 位演员` : `已删除 ${n} 位演员`)
       setSelected(new Set())
@@ -238,7 +241,7 @@ export function Actors() {
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/actor/${a.id}`) } }}
               style={{ cursor: 'pointer' }}>
               <div className="actor-photo">
-                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" /> : (
+                {a.avatar_url ? <img src={a.avatar_url} alt={a.name} referrerPolicy="no-referrer" loading="lazy" decoding="async" fetchPriority="low" /> : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'linear-gradient(160deg, var(--bg-raised), var(--bg-page))',
                     color: 'var(--t-faint)', fontFamily: 'var(--ff-display)', fontStyle: 'italic', fontSize: 52 }}>

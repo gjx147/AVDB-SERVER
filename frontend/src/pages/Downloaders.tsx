@@ -133,7 +133,7 @@ export function Downloaders() {
           <input
             id="cd2-rename-delay" type="number" min={0} className="input"
             value={s.cd2_rename_delay_seconds ?? 300}
-            onChange={(e) => upd({ cd2_rename_delay_seconds: +e.target.value })}
+            onChange={(e) => { const v = e.target.value; if (v !== '') upd({ cd2_rename_delay_seconds: +v }) }}
           />
           <div className="hint">CD2 离线下载大文件慢，建议 300-600 秒；超时未下完会跳过（下次推送另一番号不会误伤）</div>
         </div>

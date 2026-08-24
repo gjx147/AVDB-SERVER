@@ -269,9 +269,12 @@ export function Rankings() {
       } else {
         // actor 榜：批量关注（逐个创建 actor 订阅）
         let n = 0
-        for (const r of sels) {
-          if (!r.actor_id) continue
-          try { await api.actors.follow(r.actor_id); n++ } catch { /* 单个失败不中断 */ }
+        const targets = sels.filter((r) => r.actor_id).map((r) => r.actor_id as number)
+        const B = 5
+        for (let i = 0; i < targets.length; i += B) {
+          await Promise.all(targets.slice(i, i + B).map(async (id) => {
+            try { await api.actors.follow(id); n++ } catch { /* 单个失败不中断 */ }
+          }))
         }
         toastOk(`已关注 ${n} 位演员`)
       }
@@ -383,7 +386,7 @@ export function Rankings() {
                         {selected.has(t._ranking_id) ? '✓' : ''}
                       </div>
                       {t.poster_url
-                        ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
+                        ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
                             onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
                         : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
                     </div>
@@ -413,7 +416,7 @@ export function Rankings() {
                       {selected.has(t._ranking_id) ? '✓' : ''}
                     </div>
                     {t.poster_url
-                      ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer"
+                      ? <img src={t.poster_url} alt={t.video_code || ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
                           onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
                       : <div style={{ width: '100%', height: '100%', background: 'var(--bg-page)' }} />}
                   </div>

@@ -27,7 +27,12 @@ export function Library() {
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(
     searchParams.get('inlib') === 'in' ? 'in' : searchParams.get('inlib') === 'out' ? 'out' : 'all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [page, setPage] = useState(searchParams.get('page') ? Math.max(0, +(searchParams.get('page') as string)) : 0)
+  // 无效页码（如 ?page=abc）回退 0，避免 NaN 污染请求参数
+  const [page, setPage] = useState(() => {
+    const p = searchParams.get('page')
+    const n = p ? Number(p) : NaN
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+  })
   const [total, setTotal] = useState(0)
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
@@ -259,7 +264,7 @@ export function Library() {
             <div className="row-item" key={t.id} onClick={() => navigate(`/task/${t.id}`)}
               role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/task/${t.id}`) } }}>
-              <img className="row-thumb" src={withImageAuth(coverFileUrl(t.id))} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
+              <img className="row-thumb" src={withImageAuth(coverFileUrl(t.id))} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer" loading="lazy" decoding="async"
                 onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
               <div>
                 <div className="row-code">{t.video_code || '—'}</div>

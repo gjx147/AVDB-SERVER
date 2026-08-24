@@ -21,8 +21,11 @@ export function Crawl() {
 
   useEffect(() => {
     api.listSources.list().then(setSources).catch(() => setSources([]))
+    // 轮询降频：爬取运行中 3s 高频，空闲 30s；页面隐藏时暂停（避免无谓请求）
+    let running = false
     const refresh = () => {
-      api.crawl.status().then((s) => { setStatus(s); setError(null) }).catch(() => setError('无法获取爬取状态'))
+      if (document.hidden) return
+      api.crawl.status().then((s) => { setStatus(s); setError(null); running = !!((s as { running?: boolean }).running) }).catch(() => setError('无法获取爬取状态'))
       api.crawl.logs().then((l) => setLogs(l.lines)).catch(() => setLogs([]))
       // 文件日志轮询（应用/爬虫子进程/下载器/演员资料）
       for (const f of ['app', 'scraper', 'downloaders', 'actor_profile'] as const) {
@@ -30,8 +33,15 @@ export function Crawl() {
       }
     }
     refresh()
-    const t = setInterval(refresh, 3000)
-    return () => clearInterval(t)
+    let timer: ReturnType<typeof setInterval>
+    const tick = () => {
+      if (document.hidden) return
+      refresh()
+      clearInterval(timer)
+      timer = setInterval(tick, running ? 3000 : 30000)
+    }
+    timer = setInterval(tick, 3000)
+    return () => clearInterval(timer)
   }, [])
 
   const displayLines = (() => {

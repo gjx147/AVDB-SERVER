@@ -83,8 +83,11 @@ export function Favorites() {
     try {
       if (kind === 'unfavorite') {
         let n = 0
-        for (const id of ids) {
-          try { await api.tasks.unfavorite(id); n++ } catch { /* 单个失败不中断 */ }
+        const B = 5
+        for (let i = 0; i < ids.length; i += B) {
+          await Promise.all(ids.slice(i, i + B).map(async (id) => {
+            try { await api.tasks.unfavorite(id); n++ } catch { /* 单个失败不中断 */ }
+          }))
         }
         toastOk(`已取消收藏 ${n} 项`)
       } else {

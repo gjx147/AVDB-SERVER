@@ -1,6 +1,6 @@
 /* ══ 设计令牌：字体/色板/曲线/时长（含双主题覆盖，见末尾 data-theme 块）══ */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Noto+Serif+SC:wght@400;600;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* 字体自托管化：移除 Google Fonts 外链（内网/国内环境超时白屏 + 隐私暴露），改用系统字体栈 */
 
 :root{
   /* ── 色板 ── */
@@ -39,8 +39,8 @@
   --t-faint: #9c7282;
 
   /* 字体 */
-  --ff-serif: "Playfair Display", "Noto Serif SC", Georgia, serif;
-  --ff-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --ff-serif: "Songti SC", "SimSun", Georgia, "Times New Roman", serif;
+  --ff-sans: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   --ff-mono: "JetBrains Mono", "Source Code Pro", monospace;
 
   /* 圆角（两档为主） */

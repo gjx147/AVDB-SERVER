@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { NewRelease } from '../api/types'
-import { PageHead, Loading, Empty } from '../components/States'
+import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -11,12 +11,14 @@ export function NewReleases() {
   const nav = useNavigate()
   const [releases, setReleases] = useState<NewRelease[] | null>(null)
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
   const load = () => {
     setReleases(null)
-    api.newReleases.list({ limit: 200 }).then((r) => setReleases(r.items || [])).catch(() => setReleases([]))
+    setError(null)
+    api.newReleases.list({ limit: 200 }).then((r) => setReleases(r.items || [])).catch((e) => { setError(String((e as Error).message)); setReleases([]) })
   }
   useEffect(() => { load() }, [])
 
@@ -62,7 +64,8 @@ export function NewReleases() {
       </PageHead>
 
       <div className="card">
-        {releases === null ? <Loading /> :
+        {error ? <ErrorEmpty message={error} onRetry={load} /> :
+         releases === null ? <Loading /> :
          shown.length === 0 ? (
           <Empty icon="◌" title={unreadOnly ? '没有未读的新作' : '暂无新作品'}
             sub="订阅演员后系统自动巡检，新作品会出现在这里；也可到订阅页点「立即巡检全部」。" />

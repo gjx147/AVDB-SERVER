@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi import status as http_status
@@ -37,7 +38,7 @@ logging.basicConfig(
 # 全局应用日志文件（data/app.log），记录所有 avdb.* + uvicorn 日志
 _app_log_path = Path(get_settings().DATA_DIR) / "app.log"
 _app_log_path.parent.mkdir(parents=True, exist_ok=True)
-_app_file_handler = logging.FileHandler(_app_log_path, encoding="utf-8")
+_app_file_handler = RotatingFileHandler(_app_log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
 _app_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
 _app_file_handler.setLevel(logging.DEBUG if get_settings().DEBUG else logging.INFO)
 # 挂到 avdb 根 logger（所有 avdb.* 子 logger 都会继承）
@@ -53,7 +54,7 @@ for _third_name in ("httpx", "httpcore", "apscheduler", "apscheduler.scheduler",
 # 下载器专用日志文件（data/downloaders.log），记录所有推送/测试操作
 _dl_log_path = Path(get_settings().DATA_DIR) / "downloaders.log"
 _dl_log_path.parent.mkdir(parents=True, exist_ok=True)
-_dl_file_handler = logging.FileHandler(_dl_log_path, encoding="utf-8")
+_dl_file_handler = RotatingFileHandler(_dl_log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
 _dl_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 for _dl_logger_name in ("avdb.downloaders", "avdb.downloaders.cd2", "avdb.downloaders.cms"):
     _dl_l = logging.getLogger(_dl_logger_name)
@@ -61,7 +62,7 @@ for _dl_logger_name in ("avdb.downloaders", "avdb.downloaders.cd2", "avdb.downlo
 
 # 演员资料聚合专用日志（data/actor_profile.log），前端爬取控制台「演员资料」标签页读取
 _ap_log_path = Path(get_settings().DATA_DIR) / "actor_profile.log"
-_ap_file_handler = logging.FileHandler(_ap_log_path, encoding="utf-8")
+_ap_file_handler = RotatingFileHandler(_ap_log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
 _ap_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
 _ap_file_handler.setLevel(logging.DEBUG if get_settings().DEBUG else logging.INFO)
 for _ap_logger_name in ("avdb.actor_profile", "avdb.actor_profile_sync"):

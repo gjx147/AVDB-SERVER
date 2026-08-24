@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS list_sources (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS magnet_hashes (
+    hash TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     list_source_id INTEGER NOT NULL,
@@ -202,12 +206,17 @@ class SqliteTaskStore:
                 sql += f" LIMIT {int(limit)}"
             return [r[0] for r in conn.execute(sql, (list_source_id,)).fetchall()]
 
-    def get_failed_urls(self, list_source_id: int, limit: int = None) -> List[str]:
+    def get_failed_urls(self, list_source_id: int, limit: int = None, max_retry_count: int = None) -> List[str]:
         with self._conn() as conn:
-            sql = "SELECT url FROM tasks WHERE list_source_id=? AND status='failed' ORDER BY id"
+            sql = "SELECT url FROM tasks WHERE list_source_id=? AND status='failed'"
+            params: list = [list_source_id]
+            if max_retry_count is not None:
+                sql += " AND retry_count < ?"
+                params.append(max_retry_count)
+            sql += " ORDER BY id"
             if limit:
                 sql += f" LIMIT {int(limit)}"
-            return [r[0] for r in conn.execute(sql, (list_source_id,)).fetchall()]
+            return [r[0] for r in conn.execute(sql, tuple(params)).fetchall()]
 
     def add_pending_urls(self, list_source_id: int, urls: List[str]) -> int:
         if not urls:
@@ -281,14 +290,36 @@ class SqliteTaskStore:
 
     # ---------- 磁力去重 ----------
     def is_magnet_duplicate(self, magnet: str) -> bool:
-        """检查该磁力链是否已存在于任意任务的 magnets_json 中。"""
+        """检查该磁力链是否已存在（基于 magnet_hashes 索引表，替代全表 LIKE 扫描）。"""
         h = _extract_magnet_hash(magnet)
         if not h:
             return False
         with self._conn() as conn:
+            if not self._magnet_hashes_ready:
+                self._backfill_magnet_hashes(conn)
             cur = conn.execute(
-                "SELECT 1 FROM tasks WHERE magnets_json LIKE ? LIMIT 1", (f"%{h}%",))
-            return cur.fetchone() is not None
+                "SELECT 1 FROM magnet_hashes WHERE hash=? LIMIT 1", (h,))
+            if cur.fetchone() is not None:
+                return True
+            conn.execute("INSERT OR IGNORE INTO magnet_hashes (hash) VALUES (?)", (h,))
+            return False
+
+    def _backfill_magnet_hashes(self, conn) -> None:
+        """存量回填：magnet_hashes 为空时，从 tasks.magnets_json 提取 40 位 hash 一次性回填。"""
+        self._magnet_hashes_ready = True
+        cur = conn.execute("SELECT COUNT(*) FROM magnet_hashes")
+        if cur.fetchone()[0] > 0:
+            return
+        rows = conn.execute(
+            "SELECT magnets_json FROM tasks WHERE magnets_json IS NOT NULL AND magnets_json != ''"
+        ).fetchall()
+        found = set()
+        for (mj,) in rows:
+            found.update(re.findall(r"[A-Fa-f0-9]{40}", mj or ""))
+        for h in found:
+            conn.execute("INSERT OR IGNORE INTO magnet_hashes (hash) VALUES (?)", (h,))
+        if found:
+            logger.info("magnet_hashes 存量回填: %d 个 hash", len(found))
 
     # ---------- 结果写入 ----------
     def mark_visited(self, url: str, *, best_magnet: str = None,

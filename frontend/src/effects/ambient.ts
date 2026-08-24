@@ -20,7 +20,7 @@ const prefersReduced = typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const coarse = typeof window !== 'undefined' &&
   window.matchMedia('(pointer: coarse)').matches
-const lowPower = coarse || (typeof navigator !== 'undefined' && (navigator as any).deviceMemory <= 4)
+const lowPower = coarse || (typeof navigator !== 'undefined' && 'deviceMemory' in navigator && (navigator as any).deviceMemory <= 4)
 const enabled = !prefersReduced && !coarse
 
 export function initAmbientEffects() {

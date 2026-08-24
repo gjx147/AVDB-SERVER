@@ -18,6 +18,10 @@ jobs:
         run: |
           pip install -r backend/requirements.txt
           pip install pytest
+      - name: Dependency vulnerability scan
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
       - name: Run tests
         run: pytest tests/ -v
         env:

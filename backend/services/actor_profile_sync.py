@@ -8,12 +8,26 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from typing import Callable
 
 logger = logging.getLogger("avdb.actor_profile_sync")
 
 BATCH_SIZE = 5
+
+# 定时同步与手动一键提取的互斥锁：两入口非阻塞获取，被占用则跳过本轮并记日志
+_CYCLE_LOCK = threading.Lock()
+
+
+def acquire_cycle_lock() -> bool:
+    """非阻塞获取演员资料任务互斥锁（占用中返回 False）。"""
+    return _CYCLE_LOCK.acquire(blocking=False)
+
+
+def release_cycle_lock() -> None:
+    """释放演员资料任务互斥锁（仅持有者调用）。"""
+    _CYCLE_LOCK.release()
 
 _FIELDS = (
     "blood_type", "zodiac", "birthplace", "nationality", "active_years",
@@ -31,15 +45,23 @@ def set_progress_hook(hook: Callable[[str], None] | None) -> None:
     _PROGRESS_HOOK = hook
 
 
-def run_cycle() -> dict:
+def run_cycle(_lock_held: bool = False) -> dict:
     """抓取一批待处理演员（最多 BATCH_SIZE 个）。返回统计。
 
     男演员（gender='male'）不抓取资料：直接标记已处理，避免一直滞留队列。
+
+    _lock_held 仅供 actor_profile_batch 内部使用：批量任务已持有互斥锁时
+    传入 True，避免与自身锁冲突导致每轮都跳过。
     """
     from database import SessionLocal
     from models import Actor
     from sqlalchemy import or_, select, update as sa_update
     from services.actor_profile import fetch_profile
+
+    # 互斥：与手动一键提取共用一把锁；被占用时跳过本轮并记日志，避免重复抓取同一批演员
+    if not _lock_held and not acquire_cycle_lock():
+        logger.info("演员资料任务互斥：另一任务正在运行，本轮跳过")
+        return {"fetched": 0, "skipped": 0, "reason": "busy"}
 
     db = SessionLocal()
     try:
@@ -99,6 +121,8 @@ def run_cycle() -> dict:
                 time.sleep(random.uniform(5, 10))
         return {"fetched": done, "skipped": skipped}
     finally:
+        if not _lock_held:
+            release_cycle_lock()
         db.close()
 
 

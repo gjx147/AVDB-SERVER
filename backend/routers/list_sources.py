@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from deps import CurrentUser, DbSession
@@ -41,6 +42,11 @@ def delete_source(source_id: int, db: DbSession, _user: CurrentUser):
     src = db.get(ListSource, source_id)
     if not src:
         raise HTTPException(status_code=404, detail="列表源不存在")
-    db.delete(src)
-    db.commit()
+    try:
+        db.delete(src)
+        db.commit()
+    except IntegrityError:
+        # 列表源被任务引用时 FK RESTRICT 触发 IntegrityError → 返回 409 而非 500
+        db.rollback()
+        raise HTTPException(status_code=409, detail="该列表源下仍有任务，无法删除")
     return {"ok": True, "message": "已删除"}

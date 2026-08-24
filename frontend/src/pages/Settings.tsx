@@ -41,7 +41,7 @@ export function Settings() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = `avdb-backup-${new Date().toISOString().slice(0, 10)}.db`
-      a.click(); URL.revokeObjectURL(url)
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)  // Firefox 下延迟回收，避免下载中断
       toastOk('备份已导出')
     } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -97,11 +97,11 @@ export function Settings() {
                 <div className="hint">用于访问 JavDB（格式：http://host:port 或 http://user:pass@host:port）。留空则不走代理。保存后爬取自动生效。</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div className="field"><label htmlFor="crawl-delay-min">爬取延迟下限 (秒)</label><input id="crawl-delay-min" className="input" type="number" value={s.crawl_delay_min} onChange={(e) => upd({ crawl_delay_min: +e.target.value })} /></div>
-                <div className="field"><label htmlFor="crawl-delay-max">爬取延迟上限 (秒)</label><input id="crawl-delay-max" className="input" type="number" value={s.crawl_delay_max} onChange={(e) => upd({ crawl_delay_max: +e.target.value })} /></div>
+                <div className="field"><label htmlFor="crawl-delay-min">爬取延迟下限 (秒)</label><input id="crawl-delay-min" className="input" type="number" value={s.crawl_delay_min} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_delay_min: +v }) }} /></div>
+                <div className="field"><label htmlFor="crawl-delay-max">爬取延迟上限 (秒)</label><input id="crawl-delay-max" className="input" type="number" value={s.crawl_delay_max} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_delay_max: +v }) }} /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div className="field"><label htmlFor="max-pages">默认最大页数</label><input id="max-pages" className="input" type="number" value={s.max_pages_default} onChange={(e) => upd({ max_pages_default: +e.target.value })} /></div>
+                <div className="field"><label htmlFor="max-pages">默认最大页数</label><input id="max-pages" className="input" type="number" value={s.max_pages_default} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ max_pages_default: +v }) }} /></div>
                 <div className="field"><label htmlFor="preferred-suffixes">磁力后缀优先级</label>
                   <select id="preferred-suffixes" className="input" value={s.preferred_suffixes} onChange={(e) => upd({ preferred_suffixes: e.target.value })}>
                     <option value="-UC,-C,-U">无码有字 → 有字 → 无码</option>
@@ -126,8 +126,8 @@ export function Settings() {
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div className="field"><label htmlFor="retry-interval">重试间隔 (秒)</label><input id="retry-interval" className="input" type="number" value={s.auto_retry_interval} onChange={(e) => upd({ auto_retry_interval: +e.target.value })} /></div>
-                <div className="field"><label htmlFor="retry-max-count">最大重试次数</label><input id="retry-max-count" className="input" type="number" value={s.auto_retry_max_count} onChange={(e) => upd({ auto_retry_max_count: +e.target.value })} /></div>
+                <div className="field"><label htmlFor="retry-interval">重试间隔 (秒)</label><input id="retry-interval" className="input" type="number" value={s.auto_retry_interval} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ auto_retry_interval: +v }) }} /></div>
+                <div className="field"><label htmlFor="retry-max-count">最大重试次数</label><input id="retry-max-count" className="input" type="number" value={s.auto_retry_max_count} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ auto_retry_max_count: +v }) }} /></div>
               </div>
             </div>
           )}

@@ -416,6 +416,7 @@ class MagnetScraper:
             temp_dir = config.OUTPUT_DIR / f"browser_profile_{random.randint(1000, 9999)}"
             logger.info(f"浏览器配置文件目录: {temp_dir}")
             temp_dir.mkdir(parents=True, exist_ok=True)
+            self.profile_dir = temp_dir
             
             # User-Agent
             user_agents = [
@@ -480,6 +481,10 @@ class MagnetScraper:
             if self.playwright:
                 self.playwright.stop()
                 self.playwright = None
+            # 清理临时 profile 目录，避免磁盘持续膨胀（F10）
+            if getattr(self, "profile_dir", None):
+                shutil.rmtree(self.profile_dir, ignore_errors=True)
+                self.profile_dir = None
             logger.info("浏览器已关闭")
         except Exception as e:
             logger.warning(f"关闭浏览器时出错: {e}")
@@ -941,9 +946,9 @@ class MagnetScraper:
                     if h:
                         seen_hashes.add(h)
                     deduped.append(m)
-                if deduped:
-                    magnets_info = deduped
-                    logger.info(f"去重后剩余 {len(magnets_info)} 个磁力链接")
+                # 全重复时也使用去重结果（deduped 为空 = 全部重复，不再回退到原始列表）
+                magnets_info = deduped
+                logger.info(f"去重后剩余 {len(magnets_info)} 个磁力链接")
 
             logger.debug("按优先级排序磁力链接...")
             # 从 DB 读 preferred_suffixes（覆盖 config 硬编码值）
@@ -1719,7 +1724,19 @@ class MagnetScraper:
         if self.store is not None:
             logger.debug("从数据库获取任务列表...")
             if failed_only:
-                pending = self.store.get_failed_urls(self.list_source_id, limit=limit)
+                # 达到重试上限的任务不再顺带重试（上限来自 DB settings，默认 3）
+                _max_retry = 3
+                try:
+                    with self.store._conn() as conn:
+                        _row = conn.execute(
+                            "SELECT value FROM settings WHERE key='auto_retry_max_count' LIMIT 1"
+                        ).fetchone()
+                        if _row and _row[0]:
+                            _max_retry = int(_row[0])
+                except Exception:
+                    pass
+                pending = self.store.get_failed_urls(
+                    self.list_source_id, limit=limit, max_retry_count=_max_retry)
                 logger.info(f"从数据库获取失败任务: {len(pending)} 个")
             else:
                 pending = self.store.get_pending_urls(self.list_source_id, limit=limit)
@@ -1749,13 +1766,14 @@ class MagnetScraper:
         else:
             logger.info("使用现有浏览器实例")
         try:
+            # visited 集合循环外查一次（避免每任务重复全量查询）
+            visited = self.store.get_visited_urls(self.list_source_id) if self.store is not None else set()
             for i, url in enumerate(pending):
                 logger.info("-" * 60)
                 logger.info(f"任务进度: {i+1}/{total_tasks}")
                 logger.info(f"处理URL: {url}")
                 
                 if self.store is not None:
-                    visited = self.store.get_visited_urls(self.list_source_id)
                     if url in visited:
                         logger.debug(f"URL已访问过，跳过: {url}")
                         continue

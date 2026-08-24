@@ -61,15 +61,13 @@ def _hash_prompt(prompt: str) -> str:
 
 
 def _get_cached(prompt_hash: str) -> str | None:
+    from sqlalchemy import select
+
     from database import SessionLocal
     from models import LLMCache
     db = SessionLocal()
     try:
-        row = db.get(LLMCache, prompt_hash) or db.execute(
-            __import__("sqlalchemy").select(LLMCache).where(LLMCache.prompt_hash == prompt_hash)
-        ).scalar_one_or_none()
-        # get by pk 不行（pk 是 id），用 prompt_hash 查
-        from sqlalchemy import select
+        # LLMCache 主键是 id，prompt_hash 需按列查询（原 get(pk) 死代码与 __import__ 反模式已删除）
         row = db.execute(select(LLMCache).where(LLMCache.prompt_hash == prompt_hash)).scalar_one_or_none()
         return row.response if row else None
     finally:
@@ -120,25 +118,32 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
     extra_body = {}
     if use_model.startswith("MiniMax-M3"):
         extra_body["thinking"] = {"type": "disabled"}
-    # 重试：空响应 + 可重试错误
-    for attempt in range(3):
-        try:
-            resp = await client.chat.completions.create(
-                model=use_model, messages=messages, temperature=temperature, max_tokens=1000,
-                extra_body=extra_body or None,
-            )
-            content = _strip_thinking(resp.choices[0].message.content or "")
-            if content.strip():
-                if use_cache:
-                    _save_cache(prompt_hash, task_type, use_model, prompt_text, content)
-                return content.strip()
-            logger.warning("AI 空响应(attempt %d)", attempt + 1)
-        except Exception as e:
-            logger.warning("AI 调用失败(attempt %d): %s", attempt + 1, e)
-        if attempt < 2:
-            wait = 2 ** attempt  # 1s, 2s 指数退避
-            await asyncio.sleep(wait)
-    return ""
+    async def _call_with_retry() -> str:
+        """重试：空响应 + 可重试错误（指数退避 1s/2s），整体由外层 90s 限时兜底。"""
+        for attempt in range(3):
+            try:
+                resp = await client.chat.completions.create(
+                    model=use_model, messages=messages, temperature=temperature, max_tokens=1000,
+                    extra_body=extra_body or None,
+                )
+                content = _strip_thinking(resp.choices[0].message.content or "")
+                if content.strip():
+                    if use_cache:
+                        _save_cache(prompt_hash, task_type, use_model, prompt_text, content)
+                    return content.strip()
+                logger.warning("AI 空响应(attempt %d)", attempt + 1)
+            except Exception as e:
+                logger.warning("AI 调用失败(attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)  # 1s, 2s 指数退避
+        return ""
+
+    # 整体限时 90s：单请求 60s × 3 重试最坏 183s，会拖死请求方（P2-13）
+    try:
+        return await asyncio.wait_for(_call_with_retry(), timeout=90)
+    except asyncio.TimeoutError:
+        logger.error("AI 调用整体超时(>90s): task=%s model=%s base_url=%s", task_type, use_model, base_url)
+        return ""
 
 
 async def test_connection() -> dict:
