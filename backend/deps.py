@@ -58,6 +58,43 @@ def get_current_user(
 CurrentUser = Annotated[str, Depends(get_current_user)]
 
 
+def get_current_user_header_or_query(
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> str:
+    """解析当前用户名：优先 Authorization: Bearer <token>，其次 ?token=<JWT>。
+
+    ?token= 供 <img> 等无法携带 Header 的浏览器标签直接拼接 token 访问图片；
+    两者均缺失/无效时返回 401。AUTH_DISABLED 时直接放行（与 get_current_user 一致）。
+    """
+    from config import get_settings
+
+    settings = get_settings()
+    if settings.AUTH_DISABLED:
+        return "anonymous"
+
+    # 优先 Authorization 头，其次 query 参数 token
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="缺少有效的 Authorization 头或 token 参数",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    username = decode_token(token)
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token 无效或已过期",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return username
+
+
+CurrentUserHeaderOrQuery = Annotated[str, Depends(get_current_user_header_or_query)]
+
+
 def get_current_admin(
     current_user: CurrentUser,
     db: DbSession,

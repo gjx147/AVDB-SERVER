@@ -268,7 +268,24 @@ from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
 
 @app.websocket("/ws/crawl-progress")
 async def crawl_progress_ws(websocket: WebSocket):
-    """爬取进度 WebSocket：每 2 秒推送一次 crawl status。"""
+    """爬取进度 WebSocket：每 2 秒推送一次 crawl status。
+
+    安全修复（安全F6）：浏览器 WebSocket API 无法携带自定义 header，
+    前端握手时拼 ?token=<JWT>；无效/缺失 token 直接 close(4401) 拒绝，不 accept。
+    """
+    # 握手时校验 query 参数 token（复用 auth.decode_token；无效/缺失 → close 4401）。
+    # AUTH_DISABLED 开发模式下跳过校验（与 deps.get_current_user 行为一致），
+    # 避免本地开发无 token 时爬取控制台 WebSocket 连不上。
+    from config import get_settings
+    if not get_settings().AUTH_DISABLED:
+        _token = websocket.query_params.get("token", "")
+        if not _token:
+            await websocket.close(code=4401)
+            return
+        from auth import decode_token
+        if decode_token(_token) is None:
+            await websocket.close(code=4401)
+            return
     await websocket.accept()
     try:
         import asyncio

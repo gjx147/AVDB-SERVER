@@ -51,7 +51,8 @@ export function Crawl() {
     const connect = () => {
       if (closed) return  // P1-5: 卸载后不再重连
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const ws = new WebSocket(`${proto}://${location.host}/ws/crawl-progress`)
+      const token = localStorage.getItem('apiToken') || ''
+      const ws = new WebSocket(`${proto}://${location.host}/ws/crawl-progress${token ? `?token=${encodeURIComponent(token)}` : ''}`)
       wsRef.current = ws
       wsRefLocal = ws
       ws.onmessage = (ev) => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
@@ -677,7 +677,7 @@ export function ActorDetail() {
                 style={{ cursor: 'pointer' }} role="button" tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${m.id}`) } }}>
                 <div className="poster-frame">
-                  <img src={coverFileUrl(m.id)} alt={m.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
+                  <img src={withImageAuth(coverFileUrl(m.id))} alt={m.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center' }}
                     onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.2' }}
                     onLoad={(e) => { e.currentTarget.classList.add('loaded') }} />

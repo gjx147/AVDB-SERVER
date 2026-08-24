@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task, ListSourceWithStats } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { QueueOverlay } from '../components/QueueOverlay'
@@ -259,7 +259,7 @@ export function Library() {
             <div className="row-item" key={t.id} onClick={() => navigate(`/task/${t.id}`)}
               role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/task/${t.id}`) } }}>
-              <img className="row-thumb" src={coverFileUrl(t.id)} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
+              <img className="row-thumb" src={withImageAuth(coverFileUrl(t.id))} alt={`${t.video_code || '作品'} 封面`} referrerPolicy="no-referrer"
                 onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
               <div>
                 <div className="row-code">{t.video_code || '—'}</div>

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { coverFileUrl } from '../api/client'
+import { coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { Icon } from './Icons'
 
@@ -47,7 +47,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
   })()
 
   // 图片源：先试本地缓存，失败后 fallback 到远程
-  const [imgSrc, setImgSrc] = useState(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`)
+  const [imgSrc, setImgSrc] = useState(withImageAuth(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`))
   const [triedRemote, setTriedRemote] = useState(false)
 
   // 深悬停预览薄纱层：远程样品图（Boudoir 解扣式披露第 3 层）

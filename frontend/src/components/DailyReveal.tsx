@@ -3,7 +3,7 @@
  *  种子 = 当日日期哈希：同一天打开是同一位；「换一位」加盐重掷。 */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { useWhisper } from '../i18n/whisper'
 import { audio } from '../audio/engine'
@@ -94,7 +94,7 @@ export function DailyReveal() {
         <div className={`reveal-cover ${cls}`} onClick={() => nav(`/task/${pick.id}`)} style={{ cursor: 'pointer' }}
           role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') nav(`/task/${pick.id}`) }}>
           <span className="reveal-candle" aria-hidden="true">🕯</span>
-          <img src={coverFileUrl(pick.id)} alt="" referrerPolicy="no-referrer"
+          <img src={withImageAuth(coverFileUrl(pick.id))} alt="" referrerPolicy="no-referrer"
             onError={(e) => {
               const r = pick.poster_url || (() => { try { return JSON.parse(pick.thumbnail_urls || '[]')[0] } catch { return null } })()
               if (r && e.currentTarget.src !== r) e.currentTarget.src = r

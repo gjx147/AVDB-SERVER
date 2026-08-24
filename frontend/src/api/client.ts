@@ -457,6 +457,21 @@ export const api = {
   },
 }
 
+/**
+ * 给图片 URL 追加鉴权 token（query 参数 token=<JWT>）。
+ *
+ * 后端 /api/images/* 要求鉴权；浏览器 <img> 无法携带 Authorization header，
+ * 只能通过 query 传 token（参数名固定为 token）。URL 已含 query 时用 & 连接；
+ * 未登录（无 token）时原样返回，保证登录页等免鉴权场景不受影响。
+ */
+export const withImageAuth = (url: string): string => {
+  if (!url) return url
+  const token = localStorage.getItem('apiToken')
+  if (!token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}token=${encodeURIComponent(token)}`
+}
+
 /** 本地缓存高清预览图文件 URL（download-hires 下载的） */
 export const thumbFileUrl = (taskId: number, index: number) => `/api/images/hires/thumb-file/${taskId}/${index}`
 

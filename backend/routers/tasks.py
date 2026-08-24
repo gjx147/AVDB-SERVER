@@ -221,6 +221,9 @@ def extract_single(task_id: int, db: DbSession, _user: CurrentUser):
         # 关键修复：从 DB 注入 http_proxy + javdb_url 到子进程 env
         # （否则 scraper 的 os.environ.get("HTTP_PROXY") 为空，Chromium 无代理被 Cloudflare 拦截）
         _env = dict(os.environ)
+        # Phase 2 F07：注入回调共享密钥（register/unregister 回调鉴权）
+        from services import scraper_lock
+        _env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.get_callback_token()
         from models import Setting
         for _key in ("http_proxy",):
             _row = db.get(Setting, _key)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { DailyReveal } from '../components/DailyReveal'
@@ -123,7 +123,7 @@ export function Wall() {
       }}>
       {/* 全屏模糊背景（图片加载期/失败时的氛围兜底） */}
       <div className="wbg" aria-hidden="true">
-        <img key={index} src={coverFileUrl(t.id)} alt="" referrerPolicy="no-referrer"
+        <img key={index} src={withImageAuth(coverFileUrl(t.id))} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0' }} />
       </div>
 
@@ -143,7 +143,7 @@ export function Wall() {
         style={tallGeom ? ({ '--tall-left': `${tallGeom.left}px`, '--tall-w': `${tallGeom.w}px` } as React.CSSProperties) : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
         <div className={`wfull ${move}`}>
-          <img src={coverFileUrl(t.id)} alt={t.video_code || ''} referrerPolicy="no-referrer"
+          <img src={withImageAuth(coverFileUrl(t.id))} alt={t.video_code || ''} referrerPolicy="no-referrer"
             style={{ objectFit: tall ? 'contain' : 'cover' }}
             onLoad={(e) => { const im = e.currentTarget; const isTall = im.naturalHeight > im.naturalWidth; setTall(isTall); setTallRatio(isTall ? im.naturalWidth / im.naturalHeight : null) }}
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />

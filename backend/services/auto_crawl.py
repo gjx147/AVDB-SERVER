@@ -51,6 +51,11 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
     cmd = [_python_exe(), str(_scraper_path())] + args
     env = dict(os.environ)
 
+    # Phase 2 F07：注入回调共享密钥（与 crawl.py _start_scraper 一致，
+    # 否则子进程 register/unregister 回调被 401 拒绝）
+    from services import scraper_lock
+    env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.get_callback_token()
+
     # 从 DB settings 读 proxy + javdb_url（与 crawl.py _start_scraper 一致）
     try:
         db = SessionLocal()

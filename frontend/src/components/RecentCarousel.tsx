@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { coverFileUrl } from '../api/client'
+import { coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 
 const GAP = 14 // 与 CSS .rc-track 的 gap 保持一致
@@ -61,7 +61,7 @@ export function RecentCarousel({ tasks }: { tasks: Task[] }) {
               role="button" tabIndex={0} aria-label={`查看 ${t.video_code || '作品'} 详情`}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
               <div className="rc-imgbox">
-                <img src={coverFileUrl(t.id)} alt={t.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
+                <img src={withImageAuth(coverFileUrl(t.id))} alt={t.video_code || ''} loading="lazy" referrerPolicy="no-referrer"
                   onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
                 {t.is_favorite ? <span className="rc-fav">♥</span> : null}
               </div>

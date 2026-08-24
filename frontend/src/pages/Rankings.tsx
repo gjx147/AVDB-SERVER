@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, coverFileUrl } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Ranking, RankType, Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { QueueOverlay } from '../components/QueueOverlay'
@@ -456,7 +456,7 @@ export function Rankings() {
                 role="button" tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRank(r) } }}>
                 <img className="row-thumb" referrerPolicy="no-referrer"
-                  src={t._task_id ? coverFileUrl(t._task_id) : (t.poster_url || '')}
+                  src={t._task_id ? withImageAuth(coverFileUrl(t._task_id)) : (t.poster_url || '')}
                   alt={`${t.video_code || '作品'} 封面`}
                   onError={(e) => { const r = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })(); if (r && e.currentTarget.src !== r) { e.currentTarget.src = r } else { e.currentTarget.style.visibility = 'hidden' } }} />
                 <div>

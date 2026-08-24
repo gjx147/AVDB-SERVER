@@ -31,9 +31,8 @@ router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 # 默认超时（30 分钟）
 _DEFAULT_TIMEOUT = 1800
 
-# Phase 2 F07：scraper 回调共享密钥（每次启动 scraper 时重新生成；
-# 未配置时 register/unregister 一律 401（fail closed））
-_callback_token: str | None = None
+# Phase 2 F07：scraper 回调共享密钥已移至 services.scraper_lock
+# （rotate_callback_token / get_callback_token），所有触发路径共用。
 
 
 class CrawlRequest(BaseModel):
@@ -90,11 +89,9 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     settings = get_settings()
     env = dict(os.environ)
 
-    # Phase 2 F07：生成回调共享密钥，注入子进程 env
+    # Phase 2 F07：轮换回调共享密钥，注入子进程 env
     # （register/unregister 端点校验 Authorization: Bearer <token>）
-    global _callback_token
-    _callback_token = secrets.token_urlsafe(32)
-    env["SCRAPER_CALLBACK_TOKEN"] = _callback_token
+    env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.rotate_callback_token()
 
     # 从 DB 读运行时代理配置，覆盖 env（让 scraper 子进程的 Playwright 生效）
     proxy = _get_proxy_from_db()
@@ -319,7 +316,8 @@ def _verify_callback_token(authorization: str | None) -> bool:
     if not authorization or not authorization.startswith("Bearer "):
         return False
     token = authorization[len("Bearer "):].strip()
-    return bool(_callback_token) and secrets.compare_digest(token, _callback_token)
+    _expected = scraper_lock.get_callback_token()
+    return bool(_expected) and secrets.compare_digest(token, _expected)
 
 
 @router.post("/register")

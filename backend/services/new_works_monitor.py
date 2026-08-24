@@ -61,6 +61,12 @@ def _get_db_setting(key: str) -> str | None:
         db.close()
 
 
+def _scraper_path() -> Path:
+    """scraper 脚本绝对路径：相对项目根解析（对齐 routers/crawl.py），
+    兼容 Docker（/app/magnet_scraper/scraper.py）与非 Docker 部署。"""
+    return Path(__file__).resolve().parent.parent.parent / "magnet_scraper" / "scraper.py"
+
+
 async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: int | None = None) -> bool:
     """触发 scraper 子进程 crawl-actor（跟演员库"补齐作品"完全一样）。
 
@@ -74,11 +80,12 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
         logger.warning("[新作监控] scraper 忙，跳过 crawl-actor")
         return False
 
+    _scraper = str(_scraper_path())
     if actor_url:
-        cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
+        cmd = [sys.executable, _scraper,
                "crawl-actor", "--actor-url", actor_url]
     else:
-        cmd = [sys.executable, "/app/magnet_scraper/scraper.py",
+        cmd = [sys.executable, _scraper,
                "crawl-actor", "--actor-name", actor_name]
     if actor_id is not None:
         cmd += ["--actor-id", str(actor_id)]
@@ -100,6 +107,9 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
     if _javdb_url:
         env["JAVDB_URL"] = _javdb_url
 
+    # Phase 2 F07：注入回调共享密钥（register/unregister 回调鉴权）
+    env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.get_callback_token()
+
     # P0 修复: stdout/stderr 落盘日志文件（不 PIPE，避免管道写满死锁 + 不阻塞事件循环）。
     # 命名/位置对齐 routers/crawl.py 的 scraper_stderr.log 风格（DATA_DIR 下），追加模式。
     log_path = Path(get_settings().DATA_DIR) / "scraper_actor_crawl.log"
@@ -112,7 +122,7 @@ async def _trigger_crawl_actor(actor_name: str, actor_url: str = "", actor_id: i
 
     popen_kwargs: dict = {
         "env": env,
-        "cwd": "/app/magnet_scraper",
+        "cwd": str(_scraper_path().parent),
         "stdout": log_file if log_file is not None else asyncio.subprocess.DEVNULL,
         "stderr": asyncio.subprocess.STDOUT,  # stderr 合并到 stdout 同一落盘文件
     }
@@ -377,8 +387,10 @@ async def _trigger_extract_and_push(task_id: int, video_code: str) -> None:
             _javdb_url = _get_db_setting("javdb_url")
             if _javdb_url:
                 _env["JAVDB_URL"] = _javdb_url
+            # Phase 2 F07：注入回调共享密钥（register/unregister 回调鉴权）
+            _env["SCRAPER_CALLBACK_TOKEN"] = _lock.get_callback_token()
             proc = await asyncio.create_subprocess_exec(
-                _sys.executable, "/app/magnet_scraper/scraper.py",
+                _sys.executable, str(_scraper_path()),
                 "extract-single", "--url", task_url,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,

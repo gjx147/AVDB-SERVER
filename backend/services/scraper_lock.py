@@ -12,12 +12,32 @@
 
 from __future__ import annotations
 
+import secrets
 import subprocess
 from threading import Lock
 
 _proc: subprocess.Popen | None = None
 _info: dict = {}
 _lock = Lock()
+
+# ── Phase 2 回调共享密钥 ──
+# scraper 子进程 register/unregister 回调的共享密钥（原 crawl.py 模块级变量）。
+# 移到本模块后，所有触发路径（HTTP 手动 crawl.py / 定时 auto_crawl /
+# 单任务 tasks / 新作监控 new_works_monitor）启动子进程时都从同一处取密钥注入 env，
+# 修复 auto_crawl / new_works_monitor / tasks 路径子进程回调被 401 拒绝的问题。
+_callback_token: str = secrets.token_urlsafe(32)
+
+
+def rotate_callback_token() -> str:
+    """生成新回调密钥并返回（crawl.py 每次启动 scraper 时调用轮换）。"""
+    global _callback_token
+    _callback_token = secrets.token_urlsafe(32)
+    return _callback_token
+
+
+def get_callback_token() -> str:
+    """返回当前回调密钥（所有启动路径注入子进程 env 用）。"""
+    return _callback_token
 
 
 def try_acquire() -> bool:

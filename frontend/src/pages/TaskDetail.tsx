@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, thumbFileUrl, coverFileUrl, backdropUrl } from '../api/client'
+import { api, thumbFileUrl, coverFileUrl, backdropUrl, withImageAuth } from '../api/client'
 import type { TaskDetail as Task, ThumbnailsResponse } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
@@ -233,7 +233,7 @@ export function TaskDetail() {
     <div className="page detail-enter" key={id}>
       {/* emby 风格背景：gallery-1（index 0）全屏模糊（暗主题换黑纱+玫紫调色） */}
       <div className="detail-bg">
-        <img src={`${backdropUrl(task.id)}?v=${imgVersion}`} alt="" referrerPolicy="no-referrer"
+        <img src={withImageAuth(`${backdropUrl(task.id)}?v=${imgVersion}`)} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remoteBackdrop) e.currentTarget.src = remoteBackdrop; else e.currentTarget.style.opacity = '0' }} />
       </div>
 
@@ -248,7 +248,7 @@ export function TaskDetail() {
           <div className="detail-side">
             <div className={`detail-cover${favBeat ? ' beat' : ''}`} onAnimationEnd={() => setFavBeat(false)}>
               <img
-                src={`${coverFileUrl(task.id)}?v=${imgVersion}`}
+                src={withImageAuth(`${coverFileUrl(task.id)}?v=${imgVersion}`)}
                 alt={`${task.video_code || '作品'} 海报`}
                 referrerPolicy="no-referrer"
                 onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
@@ -347,7 +347,7 @@ export function TaskDetail() {
                 marginBottom: 10, background: 'var(--bg-surface)',
               }}>
                 <img
-                  src={hasLocal ? `${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}` : thumbs[activeThumb]}
+                  src={hasLocal ? withImageAuth(`${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}`) : thumbs[activeThumb]}
                   alt={`${task.video_code || '作品'} 预览图 ${activeThumb + 1}`}
                   referrerPolicy="no-referrer"
                   style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'cover', imageRendering: 'auto' }}
@@ -379,7 +379,7 @@ export function TaskDetail() {
               {thumbs.length > 1 && (
                 <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
                   {thumbs.map((u, i) => (
-                    <img key={i} src={hasLocal ? `${thumbFileUrl(task.id, i)}?v=${imgVersion}` : u} alt={`${task.video_code || '作品'} 预览图 ${i + 1}`} loading="lazy" referrerPolicy="no-referrer" onClick={() => setActiveThumb(i)}
+                    <img key={i} src={hasLocal ? withImageAuth(`${thumbFileUrl(task.id, i)}?v=${imgVersion}`) : u} alt={`${task.video_code || '作品'} 预览图 ${i + 1}`} loading="lazy" referrerPolicy="no-referrer" onClick={() => setActiveThumb(i)}
                       style={{
                         width: 72, height: 48, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', flex: 'none',
                         border: i === activeThumb ? '2px solid var(--gold)' : '2px solid transparent', opacity: i === activeThumb ? 1 : .6,
@@ -501,7 +501,7 @@ export function TaskDetail() {
                 style={{ cursor: 'pointer', transition: 'transform .2s' }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = ''}>
-                <img src={`${coverFileUrl(s.id)}?v=0`} alt={s.video_code || ''} referrerPolicy="no-referrer"
+                <img src={withImageAuth(`${coverFileUrl(s.id)}?v=0`)} alt={s.video_code || ''} referrerPolicy="no-referrer"
                   style={{ width: '100%', aspectRatio: '7/10', objectFit: 'cover', objectPosition: 'right center', borderRadius: 'var(--r-md)' }}
                   onError={(e) => { if (sRemote && e.currentTarget.src !== sRemote) e.currentTarget.src = sRemote; else e.currentTarget.style.opacity = '0.2' }} />
                 <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--t-mute)' }}>{s.video_code}</div>

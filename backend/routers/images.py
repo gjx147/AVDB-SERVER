@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from config import get_settings
-from deps import DbSession
+from deps import CurrentUserHeaderOrQuery, DbSession
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def _task_dir(task_id: int) -> Path:
 
 
 @router.get("/poster/{task_id}")
-def get_poster(task_id: int):
+def get_poster(task_id: int, _user: CurrentUserHeaderOrQuery):
     """获取海报。"""
     d = _task_dir(task_id)
     for name in ("poster.jpg", "cover.jpg", "gallery-1.jpg"):
@@ -43,7 +43,7 @@ def get_poster(task_id: int):
 
 
 @router.get("/backdrop/{task_id}")
-def get_backdrop(task_id: int):
+def get_backdrop(task_id: int, _user: CurrentUserHeaderOrQuery):
     """获取背景图。"""
     d = _task_dir(task_id)
     for name in ("backdrop.jpg", "gallery-2.jpg"):
@@ -54,7 +54,7 @@ def get_backdrop(task_id: int):
 
 
 @router.get("/thumbnails/{task_id}")
-def list_thumbnails(task_id: int, db: DbSession):
+def list_thumbnails(task_id: int, db: DbSession, _user: CurrentUserHeaderOrQuery):
     """列出该任务的所有缩略图。
 
     优先返回本地缓存的高清图；无缓存时 fallback 到 task.thumbnail_urls 远程 URL。
@@ -84,7 +84,7 @@ def list_thumbnails(task_id: int, db: DbSession):
 
 
 @router.get("/thumb/{task_id}/{index}")
-def get_thumb(task_id: int, index: int):
+def get_thumb(task_id: int, index: int, _user: CurrentUserHeaderOrQuery):
     """获取单张缩略图（按索引）。"""
     d = _task_dir(task_id)
     p = d / f"thumb_{index}.jpg"
@@ -96,7 +96,7 @@ def get_thumb(task_id: int, index: int):
 # ── Phase 1 补端点：头像 + hires 简化适配 ──
 
 @router.get("/avatar/{actor_id}")
-def get_avatar(actor_id: int):
+def get_avatar(actor_id: int, _user: CurrentUserHeaderOrQuery):
     """演员头像（查找本地缓存，未找到返回默认占位）。"""
     d = _images_dir() / "avatars"
     for ext in (".jpg", ".png", ".webp"):
@@ -109,25 +109,25 @@ def get_avatar(actor_id: int):
 # hires 系列端点（Phase 1 简化版：复用 images 端点，路径映射）
 
 @router.get("/hires/thumb-file/{task_id}/{index}")
-def hires_thumb_file(task_id: int, index: int):
+def hires_thumb_file(task_id: int, index: int, _user: CurrentUserHeaderOrQuery):
     """hires 兼容：重定向到 /images/thumb/..."""
-    return get_thumb(task_id, index)
+    return get_thumb(task_id, index, _user)
 
 
 @router.get("/hires/poster-file/{task_id}")
-def hires_poster_file(task_id: int):
+def hires_poster_file(task_id: int, _user: CurrentUserHeaderOrQuery):
     """hires 兼容：重定向到 /images/poster/..."""
-    return get_poster(task_id)
+    return get_poster(task_id, _user)
 
 
 @router.get("/hires/backdrop-file/{task_id}")
-def hires_backdrop_file(task_id: int):
+def hires_backdrop_file(task_id: int, _user: CurrentUserHeaderOrQuery):
     """hires 兼容：重定向到 /images/backdrop/..."""
-    return get_backdrop(task_id)
+    return get_backdrop(task_id, _user)
 
 
 @router.get("/hires/has-local-thumbs/{task_id}")
-def hires_has_local_thumbs(task_id: int):
+def hires_has_local_thumbs(task_id: int, _user: CurrentUserHeaderOrQuery):
     """检查是否有本地缩略图缓存。返回前端期望的 {has_local, count}。"""
     d = _task_dir(task_id)
     if not d.exists():
@@ -138,7 +138,7 @@ def hires_has_local_thumbs(task_id: int):
 
 
 @router.post("/hires/download-hires/{task_id}")
-def hires_download(task_id: int, db: DbSession):
+def hires_download(task_id: int, db: DbSession, _user: CurrentUserHeaderOrQuery):
     """下载高清预览图/封面/背景到本地缓存。
 
     数据源：task.thumbnail_urls（高清预览图，scraper 从 .tile-item href 提取）
@@ -191,6 +191,9 @@ def hires_download(task_id: int, db: DbSession):
 
     def _download(url: str, dest: Path) -> bool:
         try:
+            # 安全提示：verify=False 关闭 TLS 证书校验（沿用 scraper 对 javdb 的既有行为），
+            # 存在中间人篡改风险；此处仅下载公开图片到本地缓存，风险相对可控。
+            # 如需加固，可仿照 CD2_SSL_VERIFY 新增配置项（本次审计保持最小改动，不新增）。
             with httpx.Client(proxy=proxy, timeout=timeout, follow_redirects=True, verify=False) as c:
                 r = c.get(url, headers=headers)
                 if r.status_code != 200 or len(r.content) < 500:
@@ -235,13 +238,13 @@ def hires_download(task_id: int, db: DbSession):
 
 
 @router.get("/hires/poster-index/{task_id}")
-def hires_poster_index(task_id: int):
+def hires_poster_index(task_id: int, _user: CurrentUserHeaderOrQuery):
     """获取海报索引（Phase 1 占位：默认 0）。"""
     return {"poster_index": 0}
 
 
 @router.post("/hires/set-poster/{task_id}/{index}")
-def hires_set_poster(task_id: int, index: int):
+def hires_set_poster(task_id: int, index: int, _user: CurrentUserHeaderOrQuery):
     """把指定索引的本地预览图设为海报（复制 thumb_{index}.jpg → poster.jpg）。"""
     d = _task_dir(task_id)
     src = d / f"thumb_{index}.jpg"
@@ -252,7 +255,7 @@ def hires_set_poster(task_id: int, index: int):
 
 
 @router.post("/hires/set-poster-remote/{task_id}/{index}")
-def hires_set_poster_remote(task_id: int, index: int, db: DbSession):
+def hires_set_poster_remote(task_id: int, index: int, db: DbSession, _user: CurrentUserHeaderOrQuery):
     """从远程缩略图直接设为海报（无需本地缓存）。
 
     用于本地无高清缓存时的「设为海报」：从 task.thumbnail_urls[index] 拿远程 URL，
@@ -295,6 +298,8 @@ def hires_set_poster_remote(task_id: int, index: int, db: DbSession):
         "Referer": "https://javdb.com/",
     }
     timeout = httpx.Timeout(30.0, connect=15.0)
+    # 安全提示：verify=False 关闭 TLS 证书校验（同上方 _download），存在中间人篡改风险；
+    # 仅下载公开图片到本地缓存，保持既有行为不变。
     try:
         with httpx.Client(proxy=proxy, timeout=timeout, follow_redirects=True, verify=False) as c:
             r = c.get(target_url, headers=headers)
@@ -320,12 +325,12 @@ def hires_set_poster_remote(task_id: int, index: int, db: DbSession):
 
 
 @router.post("/hires/queue/start")
-def hires_queue_start(task_ids: list[int]):
+def hires_queue_start(task_ids: list[int], _user: CurrentUserHeaderOrQuery):
     """启动串行下载队列（Phase 1 占位）。"""
     return {"ok": True, "message": "队列功能由 auto_crawl 调度替代"}
 
 
 @router.get("/hires/queue/status")
-def hires_queue_status():
+def hires_queue_status(_user: CurrentUserHeaderOrQuery):
     """队列状态（Phase 1 占位）。"""
     return {"running": False, "total": 0, "current": 0, "done": [], "failed": []}
