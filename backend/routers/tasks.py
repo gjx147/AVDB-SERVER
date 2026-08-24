@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -14,6 +17,50 @@ from models import Task, Actor
 from schemas import TaskListResponse, TaskOut
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+# ── Phase 2 锁体系：单任务提取的进程回收助手 ──
+
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """杀整个进程树（包括 Playwright Chromium 子进程）。对齐 auto_crawl._kill_process_tree。"""
+    if proc.poll() is not None:
+        return  # 已退出
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, timeout=10,
+            )
+        else:
+            import signal
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _reap_and_clear(proc: subprocess.Popen, timeout: int = 1800) -> None:
+    """后台线程：等待 extract-single 子进程；超时整树杀；按身份释放全局锁。
+
+    timeout 默认 1800s（30 分钟），对齐 crawl.py _DEFAULT_TIMEOUT。
+    """
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(proc)
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    finally:
+        # Phase 2 P1-3：按身份释放（get_proc() is proc 才 clear，防 ABA）
+        from services import scraper_lock
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
 
 
 # ── 静态路由（必须在 /{task_id} 之前！）──
@@ -154,8 +201,15 @@ def task_cast(task_id: int, db: DbSession, _user: CurrentUser):
 
 @router.post("/{task_id}/extract")
 def extract_single(task_id: int, db: DbSession, _user: CurrentUser):
-    """触发单任务提取（fire-and-forget subprocess）。"""
-    import asyncio, os, sys, subprocess
+    """触发单任务提取（fire-and-forget subprocess）。
+
+    Phase 2 锁体系修复：
+    - 走 scraper_lock 原子获取+注册（不再绕过全局锁）
+    - 进程组隔离（Windows CREATE_NEW_PROCESS_GROUP / Unix start_new_session），支持整树杀
+    - 后台线程超时回收（默认 30 分钟，对齐 auto_crawl._kill_process_tree 思路）
+    - 退出/超时后按身份 clear（防 ABA）
+    """
+    import threading
     task = db.get(Task, task_id)
     if not task: raise HTTPException(status_code=404, detail="任务不存在")
     # 异步触发 scraper extract-single
@@ -179,9 +233,38 @@ def extract_single(task_id: int, db: DbSession, _user: CurrentUser):
         _row = db.get(Setting, "javdb_url")
         if _row and _row.value:
             _env["JAVDB_URL"] = _row.value.strip()
-        subprocess.Popen([python, scraper, "extract-single", "--url", task.url],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         env=_env)
+
+        # 进程组隔离：支持整树 kill（对齐 crawl.py _start_scraper / auto_crawl）
+        popen_kwargs: dict = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "env": _env,
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        proc = subprocess.Popen(
+            [python, scraper, "extract-single", "--url", task.url],
+            **popen_kwargs,
+        )
+
+        # 原子获取+注册全局锁；被占用则回收刚启动的进程（Phase 2 P1-4）
+        from services import scraper_lock
+        if not scraper_lock.try_acquire_and_set(proc, {
+            "mode": "extract-single", "pid": proc.pid, "task_id": task_id,
+            "started_at": datetime.utcnow().isoformat(),
+        }):
+            _kill_process_tree(proc)
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                pass
+            return {"ok": False, "message": "已有爬取任务在运行"}
+
+        # 后台线程等待 + 超时整树杀 + 按身份释放锁
+        threading.Thread(target=_reap_and_clear, args=(proc,), daemon=True).start()
     except Exception as e:
         return {"ok": False, "message": str(e)}
     return {"ok": True, "message": "已触发提取"}

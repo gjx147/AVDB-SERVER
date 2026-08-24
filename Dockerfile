@@ -1,9 +1,20 @@
 # syntax=docker/dockerfile:1
 # AVDB-SERVER Dockerfile
-# 单阶段构建：Python slim + 依赖 + Playwright Chromium + 应用代码
+# 多阶段构建：Stage1 Node 构建前端 dist → Stage2 Python slim + 依赖 + Playwright Chromium + 应用代码
 
 ARG PYTHON_VERSION=3.12
 
+# ── Stage 1: 前端构建（node:20-alpine）──
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/frontend
+# 先复制 package.json 与锁文件，命中缓存时跳过 npm ci
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+# 产物：/app/frontend/dist
+
+# ── Stage 2: Python 运行时 ──
 FROM python:${PYTHON_VERSION}-slim
 
 LABEL maintainer="AVDB-SERVER"
@@ -51,7 +62,7 @@ COPY backend/ ./backend/
 COPY magnet_scraper/ ./magnet_scraper/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
-COPY frontend/ ./frontend/
+COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 # 环境变量
 ENV PYTHONUNBUFFERED=1

@@ -310,8 +310,18 @@ class SPAStaticFiles(StaticFiles):
         path = request_path.lstrip("/")
         file_path = Path(self.directory) / path
         if path and file_path.exists() and file_path.is_file():
-            await super().__call__(scope, receive, send)
-            return
+            # 纵深防御：解析后的真实路径必须位于 self.directory 内，
+            # 防止 ../ 目录穿越请求命中目录外文件（对齐 starlette StaticFiles.check_path）
+            try:
+                real_dir = os.path.realpath(str(self.directory))
+                real_file = os.path.realpath(str(file_path))
+                inside = os.path.commonpath([real_file, real_dir]) == real_dir
+            except ValueError:
+                # 不同盘符 / 绝对相对混用等无法比较的情形，按不通过处理
+                inside = False
+            if inside:
+                await super().__call__(scope, receive, send)
+                return
         index_file = Path(self.directory) / "index.html"
         if index_file.exists():
             await FileResponse(str(index_file))(scope, receive, send)

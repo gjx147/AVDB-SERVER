@@ -19,6 +19,7 @@ import logging
 from typing import Any
 
 import httpx
+from config import get_settings
 
 logger = logging.getLogger("avdb.downloaders.cd2")
 
@@ -99,7 +100,11 @@ async def grpc_web_call(base: str, method: str, payload: bytes, token: str = "")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     url = base.rstrip("/") + "/clouddrive.CloudDriveFileSrv/" + method
-    async with httpx.AsyncClient(timeout=30, verify=False) as c:
+    # 安全修复(F5)：TLS 证书校验改为读取配置 CD2_SSL_VERIFY（默认 False 兼容自签证书）。
+    # 生产/公网环境必须设置 CD2_SSL_VERIFY=true，否则 CD2 登录口令
+    # （明文走 GetToken）存在被中间人窃听的风险。
+    verify_tls = get_settings().CD2_SSL_VERIFY
+    async with httpx.AsyncClient(timeout=30, verify=verify_tls) as c:
         r = await c.post(url, content=frame, headers=headers)
         data, grpc_status = parse_grpc_web_response(r.content)
         if not grpc_status:

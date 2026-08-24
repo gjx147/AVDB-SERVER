@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from config import get_settings
@@ -29,6 +30,10 @@ router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 # 默认超时（30 分钟）
 _DEFAULT_TIMEOUT = 1800
+
+# Phase 2 F07：scraper 回调共享密钥（每次启动 scraper 时重新生成；
+# 未配置时 register/unregister 一律 401（fail closed））
+_callback_token: str | None = None
 
 
 class CrawlRequest(BaseModel):
@@ -84,6 +89,12 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     """
     settings = get_settings()
     env = dict(os.environ)
+
+    # Phase 2 F07：生成回调共享密钥，注入子进程 env
+    # （register/unregister 端点校验 Authorization: Bearer <token>）
+    global _callback_token
+    _callback_token = secrets.token_urlsafe(32)
+    env["SCRAPER_CALLBACK_TOKEN"] = _callback_token
 
     # 从 DB 读运行时代理配置，覆盖 env（让 scraper 子进程的 Playwright 生效）
     proxy = _get_proxy_from_db()
@@ -141,19 +152,36 @@ def _kill_process_tree(proc: subprocess.Popen) -> None:
             pass
 
 
+def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
+    """原子启动 scraper 并注册全局锁（Phase 2 P1-1 TOCTOU 修复）。
+
+    旧实现 try_acquire() → Popen → set_proc() 之间存在竞态窗口：
+    两个并发请求可同时通过 try_acquire()，各自启动一个 Playwright Chromium。
+    新实现先 Popen（非阻塞，立即返回），再调用 scraper_lock.try_acquire_and_set()
+    在锁内原子完成“检查是否已有活跳进程 + 登记 proc/info”；
+    若锁被占用则立即杀掉刚启动的进程树（避免残留 Chromium）并抛 409。
+    """
+    proc = _start_scraper(cmd_args)
+    if not scraper_lock.try_acquire_and_set(proc, {**info, "pid": proc.pid}):
+        # 锁被占用：回收刚启动的进程，避免孤儿 Chromium 残留
+        _kill_process_tree(proc)
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    return proc
+
+
 @router.post("/scan")
 def start_scan(req: CrawlRequest, _user: CurrentUser):
     """启动扫描（subprocess 调 scraper.py scan）。"""
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     cmd = ["scan", "--list-source-id", str(req.list_source_id)]
     if req.pages:
         cmd += ["-p", str(req.pages)]
 
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "list_source_id": req.list_source_id, "mode": "scan", "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "list_source_id": req.list_source_id, "mode": "scan",
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "scan"}
@@ -162,18 +190,14 @@ def start_scan(req: CrawlRequest, _user: CurrentUser):
 @router.post("/extract")
 def start_extract(req: CrawlRequest, _user: CurrentUser):
     """启动提取（subprocess 调 scraper.py extract）。"""
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     cmd = ["extract", "--list-source-id", str(req.list_source_id)]
     if req.limit:
         cmd += ["--limit", str(req.limit)]
     if req.failed_only:
         cmd += ["--failed-only"]
 
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "list_source_id": req.list_source_id, "mode": "extract", "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "list_source_id": req.list_source_id, "mode": "extract",
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "extract"}
@@ -189,12 +213,14 @@ def crawl_status(_user: CurrentUser):
     # 检查超时（清理僵尸进程）
     if proc_running and _is_timed_out(info):
         _kill_process_tree(proc)  # type: ignore
-        scraper_lock.clear()
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
         proc_running = False
 
     # 进程已退出但锁未清理
     if proc is not None and proc.poll() is not None:
-        scraper_lock.clear()
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
         proc_running = False
 
     # 读任务级状态文件
@@ -244,16 +270,12 @@ def refresh_actor_gender(req: CrawlRequest, _user: CurrentUser):
     修正老数据：旧版 _extract_actors 把 navbar 的 Censored/Uncensored/Western 当演员，
     且 actors.gender 全 null。新版用 javdb ♀/♂ 标记正确识别女优。
     """
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     cmd = ["refresh-actor-gender"]
     if req.limit:
         cmd += ["--limit", str(req.limit)]
 
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "list_source_id": req.list_source_id, "mode": "refresh-actor-gender", "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "list_source_id": req.list_source_id, "mode": "refresh-actor-gender",
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "refresh-actor-gender"}
@@ -262,17 +284,13 @@ def refresh_actor_gender(req: CrawlRequest, _user: CurrentUser):
 @router.post("/refresh-metadata")
 def refresh_metadata(_user: CurrentUser, body: dict | None = None):
     """刷新已访问任务的元数据面板（发行日期/评分/厂牌/系列等），不重抓磁力。"""
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     cmd = ["refresh-metadata"]
     limit = (body or {}).get("limit")
     if limit:
         cmd += ["--limit", str(limit)]
 
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "mode": "refresh-metadata", "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "mode": "refresh-metadata",
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "refresh-metadata"}
@@ -288,20 +306,35 @@ def stop_crawl(_user: CurrentUser):
             proc.wait(timeout=10)
         except Exception:
             pass
-    scraper_lock.clear()
+    # Phase 2 P1-3：按身份释放（防止清掉并发新注册的锁）
+    if proc is not None and scraper_lock.get_proc() is proc:
+        scraper_lock.clear()
     return {"ok": True, "message": "已停止"}
 
 
-# scraper 回调端点（register/unregister，无需鉴权——子进程调用）
+# scraper 回调端点（register/unregister）—— Phase 2 F07：校验共享密钥。
+# 子进程启动时由 _start_scraper 注入 SCRAPER_CALLBACK_TOKEN env；
+# 未配置 token（如端点被直接调用）一律拒绝（fail closed）。
+def _verify_callback_token(authorization: str | None) -> bool:
+    if not authorization or not authorization.startswith("Bearer "):
+        return False
+    token = authorization[len("Bearer "):].strip()
+    return bool(_callback_token) and secrets.compare_digest(token, _callback_token)
+
+
 @router.post("/register")
-def register(body: dict):
+def register(body: dict, authorization: str | None = Header(None)):
+    if not _verify_callback_token(authorization):
+        raise HTTPException(status_code=401, detail="未授权")
     info = scraper_lock.get_info()
     scraper_lock.set_proc(scraper_lock.get_proc(), {**info, **body, "registered": True})
     return {"ok": True}
 
 
 @router.post("/unregister")
-def unregister():
+def unregister(authorization: str | None = Header(None)):
+    if not _verify_callback_token(authorization):
+        raise HTTPException(status_code=401, detail="未授权")
     proc = scraper_lock.get_proc()
     # 进程结束，清理引用
     if proc and proc.poll() is not None:
@@ -335,20 +368,15 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
     前端传 {rank_type, max_pages}，后端启动 scraper ranking 子命令。
     """
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     rank_type = body.get("rank_type", "hot")
     valid_types = {"daily", "weekly", "monthly", "actor"}
     if rank_type not in valid_types:
-        scraper_lock.clear()  # 校验失败，释放锁
         raise HTTPException(status_code=400, detail=f"无效 rank_type，可选: {valid_types}")
     max_pages = str(body.get("max_pages", 5))
     cmd = ["ranking", "--rank-type", rank_type, "--max-pages", max_pages]
 
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "mode": "ranking", "rank_type": rank_type, "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "mode": "ranking", "rank_type": rank_type,
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "ranking"}
@@ -363,9 +391,6 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
     max_co_star：最大共演人数限制（作品女演员数超过则跳过；None/0 = 不限）。
     solo_only：只爬单体作品（javdb 演员页 t=s 过滤）。
     """
-    if not scraper_lock.try_acquire():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-
     cmd = ["crawl-actor", "--actor-url", actor_url]
     if actor_id is not None:
         cmd += ["--actor-id", str(actor_id)]
@@ -373,9 +398,8 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
         cmd += ["--max-co-star", str(max_co_star)]
     if solo_only:
         cmd += ["--solo-only"]
-    proc = _start_scraper(cmd)
-    scraper_lock.set_proc(proc, {
-        "mode": "actor", "actor_url": actor_url, "pid": proc.pid,
+    proc = _start_scraper_guarded(cmd, {
+        "mode": "actor", "actor_url": actor_url,
         "started_at": _now_iso(),
     })
     return {"ok": True, "pid": proc.pid, "mode": "actor", "actor_url": actor_url}

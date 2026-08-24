@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # 若设为 true 则跳过鉴权（本地开发/内网）
     AUTH_DISABLED: bool = False
 
+    # --- CD2（云盘客户端）---
+    # 是否校验 CD2 gRPC-Web 的 TLS 证书；默认 False 保持现状（兼容自签证书环境）。
+    # 生产/公网环境应设为 True，防止 CD2 登录口令在传输中被中间人窃听。
+    CD2_SSL_VERIFY: bool = False
+
     # --- 爬虫 ---
     JAVDB_URL: str = "https://javdb.com"
     SCRAPER_PYTHON: str = ""  # 空=用当前 python

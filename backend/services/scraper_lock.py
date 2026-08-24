@@ -32,6 +32,23 @@ def try_acquire() -> bool:
         return True
 
 
+def try_acquire_and_set(proc: subprocess.Popen, info: dict) -> bool:
+    """原子获取锁并登记进程（检查 + 注册在同一把锁内完成）。
+
+    返回 True = 获取成功且已登记 proc+info；返回 False = 已有 scraper 在跑。
+    解决原 try_acquire() → ... → set_proc() 之间的 TOCTOU 窗口：
+    两个并发请求可能同时通过 try_acquire，各自启动一个 Chromium 互踩。
+    调用方拿到 False 时应回收自己刚启动的进程。
+    """
+    with _lock:
+        global _proc, _info
+        if _proc is not None and _proc.poll() is None:
+            return False
+        _proc = proc
+        _info = info
+        return True
+
+
 def set_proc(proc: subprocess.Popen, info: dict) -> None:
     """注册已启动的 scraper 子进程 + 元信息。"""
     with _lock:

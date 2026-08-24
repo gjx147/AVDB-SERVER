@@ -18,10 +18,11 @@ services:
       - AUTH_DISABLED=false             # 生产环境必须 false
       - SECRET_KEY=${SECRET_KEY:-}      # 留空则首次启动自动生成随机密钥持久化到 data/.secret_key
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}  # 留空则首次启动自动生成随机密码(日志中打印一次)
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}  # 生产环境必须设置强密码；留空则首次启动自动生成随机密码(仅输出到终端 stderr，不落日志)
       - JAVDB_URL=https://javdb.com
       - DATABASE_URL=                 # 空则用默认 SQLite /app/data/javdb.db
       - DEBUG=false
+      - CD2_SSL_VERIFY=${CD2_SSL_VERIFY:-false}  # 默认 false 兼容自签证书；生产/公网部署必须设为 true（校验 CD2 TLS 证书）
       # 代理（Playwright 访问 javdb 用）
       - HTTP_PROXY=
       - HTTPS_PROXY=

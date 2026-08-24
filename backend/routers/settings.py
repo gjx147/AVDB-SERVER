@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -73,14 +73,14 @@ def backup_settings(db: DbSession, _user: CurrentUser):
     """导出全量设置为 JSON（兼容 AVDB 前端）。"""
     import json
     rows = db.execute(select(Setting)).scalars().all()
-    data = {r.key: r.value for r in rows}
+    data = {r.key: ("***" if _is_sensitive(r.key) else r.value) for r in rows}
     return {"settings": data, "exported_at": str(datetime.utcnow())}
 
 
 @router.post("/restore")
 async def restore_settings():
-    """恢复设置（Phase 1 占位：前端传文件，后端尚未处理）。"""
-    return {"ok": True, "message": "恢复功能待实现"}
+    """恢复设置（未实现：返回 501，避免前端误以为已恢复）。"""
+    raise HTTPException(status_code=501, detail="恢复功能待实现")
 
 
 @router.delete("/clean-failed")

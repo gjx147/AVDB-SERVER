@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
 import secrets
+import sys
 
 from jose import JWTError, jwt
 import bcrypt
@@ -108,8 +109,13 @@ def ensure_admin_exists() -> None:
         if not password:
             # 自动生成随机密码
             password = secrets.token_urlsafe(16)
-            logger.warning(
-                "⚠️  ADMIN_PASSWORD 未设置，已生成随机密码: %s (请妥善保存)", password
+            # 安全修复(F4)：随机密码只输出到终端 stderr，不写入文件日志/容器日志，
+            # 避免日志或数据卷泄露导致管理员口令泄露
+            print(
+                "⚠️  ADMIN_PASSWORD 未设置，已生成随机密码: "
+                + password
+                + " (请妥善保存，并立即登录修改密码)",
+                file=sys.stderr,
             )
         else:
             logger.warning(

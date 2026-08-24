@@ -397,14 +397,19 @@ async def _trigger_extract_and_push(task_id: int, video_code: str) -> None:
 
 
 async def _wait_and_clear_lock(proc) -> None:
-    """等 proc 完成后清除 scraper_lock（防止 extract-single 子进程长期占锁）。"""
+    """等 proc 完成后清除 scraper_lock（防止 extract-single 子进程长期占锁）。
+
+    Phase 2 P1-3：clear 前按身份判断（get_proc() is proc），防 ABA——
+    避免本进程退出时清掉并发新持有的锁。
+    """
     try:
         await proc.wait()
     except Exception:
         pass
     finally:
         from services import scraper_lock
-        scraper_lock.clear()
+        if scraper_lock.get_proc() is proc:
+            scraper_lock.clear()
 
 
 async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180):

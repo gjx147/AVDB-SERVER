@@ -19,6 +19,7 @@ import os
 import signal
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -85,6 +86,7 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
     else:
         popen_kwargs["start_new_session"] = True
 
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -92,6 +94,23 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
             stderr=log_file,
             **popen_kwargs,
         )
+        # Phase 2 P1-2：注册全局爬取锁（原子获取+登记），防止与手动/单任务爬取并发互踩
+        from services import scraper_lock
+        if not scraper_lock.try_acquire_and_set(proc, {
+            "mode": args[0] if args else "auto",
+            "args": " ".join(args),
+            "pid": proc.pid,
+            "started_at": datetime.utcnow().isoformat(),
+            "auto": True,
+        }):
+            # 锁被占用：回收刚启动的进程，避免残留 Chromium
+            _kill_process_tree(proc)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=10)
+            except Exception:
+                pass
+            logger.warning("全局爬取锁被占用，已终止本次自动 scraper: %s", " ".join(args))
+            return False
         try:
             await asyncio.wait_for(proc.wait(), timeout=timeout)
             if proc.returncode == 0:
@@ -111,6 +130,11 @@ async def _run_scraper(args: list[str], timeout: int = 1800) -> bool:
         logger.error("scraper 执行异常: %s", e)
         return False
     finally:
+        # Phase 2 P1-3：按身份释放锁（get_proc() is proc 才 clear，防 ABA）
+        if proc is not None:
+            from services import scraper_lock
+            if scraper_lock.get_proc() is proc:
+                scraper_lock.clear()
         log_file.close()
 
 

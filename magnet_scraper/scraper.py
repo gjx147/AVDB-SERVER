@@ -64,6 +64,11 @@ def _notify_backend_register(list_code: str, crawl_type: str) -> None:
     if not base:
         return
     try:
+        # Phase 2 F07：从 env 读取共享密钥（由后端启动时注入），回调带 Authorization 头
+        headers = {"Content-Type": "application/json"}
+        token = os.environ.get("SCRAPER_CALLBACK_TOKEN", "")
+        if token:
+            headers["Authorization"] = "Bearer " + token
         url = urljoin(base.rstrip("/") + "/", "api/crawl/register")
         req = Request(
             url,
@@ -72,7 +77,7 @@ def _notify_backend_register(list_code: str, crawl_type: str) -> None:
                 "crawl_type": (crawl_type or "extract").strip(),
                 "pid": os.getpid(),
             }).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         urlopen(req, timeout=5)
@@ -86,8 +91,13 @@ def _notify_backend_unregister() -> None:
     if not base:
         return
     try:
+        # Phase 2 F07：回调带 Authorization 头（无 token 时不加，失败只记日志不影响主流程）
+        headers = {}
+        token = os.environ.get("SCRAPER_CALLBACK_TOKEN", "")
+        if token:
+            headers["Authorization"] = "Bearer " + token
         url = urljoin(base.rstrip("/") + "/", "api/crawl/unregister")
-        req = Request(url, method="POST")
+        req = Request(url, headers=headers, method="POST")
         urlopen(req, timeout=5)
     except Exception:
         pass
