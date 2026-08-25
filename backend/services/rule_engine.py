@@ -30,14 +30,16 @@ def _match(task, cond: dict) -> bool:
     return True
 
 
-async def _execute_actions(task, actions: dict) -> list[str]:
-    """执行动作，返回执行的列表。"""
-    from database import SessionLocal
-    from models import Task, task_collections
+async def _execute_actions(task, actions: dict, db=None) -> list[str]:
+    """执行动作，返回执行的列表。db 为空时自行开 session（打磨：复用调用方 session 减少连接开销）。"""
+    from models import Task
 
     done: list[str] = []
     acts = actions.get("actions") or []
-    db = SessionLocal()
+    own_db = db is None
+    if own_db:
+        from database import SessionLocal
+        db = SessionLocal()
     try:
         t = db.get(Task, task.id)
         if not t:
@@ -46,10 +48,11 @@ async def _execute_actions(task, actions: dict) -> list[str]:
             t.is_favorite = True
             from datetime import datetime as _dt
             t.favorite_at = _dt.utcnow()
+            db.commit()
             done.append("favorite")
-        db.commit()
     finally:
-        db.close()
+        if own_db:
+            db.close()
     if "notify" in acts:
         try:
             from services.notifier import notify
@@ -94,11 +97,14 @@ async def evaluate_all() -> dict:
             except Exception:
                 actions = {}
             matched = [t for t in candidates if _match(t, cond)]
+            executed = 0
             for t in matched[:20]:
-                await _execute_actions(t, actions)
+                await _execute_actions(t, actions, db)
+                executed += 1
                 hits += 1
             if matched:
-                rule.hit_count += len(matched)
+                # 打磨：计数与实际执行数一致（原实现把未执行的匹配也计入）
+                rule.hit_count += executed
                 rule.last_run_at = datetime.utcnow()
         db.commit()
         return {"ok": True, "rules": len(rules), "hits": hits}

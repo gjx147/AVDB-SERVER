@@ -222,15 +222,29 @@ def library_health(db: DbSession, _user: CurrentUser):
     """N1 库健康度：字段覆盖率加权评分 + 最该补的 Top20（高评分缺磁力）。"""
     from models import Download, Task
 
-    total = db.execute(select(Task.id).where(Task.video_code.isnot(None))).all()
-    total_n = len(total)
+    # 打磨：单次扫描统计各字段覆盖率（原实现 6 次全表 count）
+    rows = db.execute(
+        select(Task.best_magnet, Task.title, Task.maker, Task.release_date, Task.rating, Task.media_in_library)
+        .where(Task.video_code.isnot(None))
+    ).all()
+    total_n = len(rows)
     if total_n == 0:
         return {"ok": True, "score": 100, "total": 0, "items": []}
-    counts = {}
-    for col, label in ((Task.best_magnet, "magnet"), (Task.title, "title"), (Task.maker, "maker"),
-                       (Task.release_date, "date"), (Task.rating, "rating"), (Task.media_in_library, "in_library")):
-        n = db.execute(select(Task.id).where(col.isnot(None))).all()
-        counts[label] = len(n)
+    counts = {"magnet": 0, "title": 0, "maker": 0, "date": 0, "rating": 0, "in_library": 0}
+    for magnet, title, maker, date, rating, in_lib in rows:
+        if magnet:
+            counts["magnet"] += 1
+        if title:
+            counts["title"] += 1
+        if maker:
+            counts["maker"] += 1
+        if date:
+            counts["date"] += 1
+        if rating:
+            counts["rating"] += 1
+        # 打磨：media_in_library 为布尔，仅 True 计入在库（原 isnot(None) 会把 False 误计）
+        if in_lib:
+            counts["in_library"] += 1
     org_n = db.execute(select(Download.id).where(Download.organized == True, Download.status == "completed")).all()  # noqa: E712
     dl_n = db.execute(select(Download.id).where(Download.status == "completed")).all()
     organized_rate = len(org_n) / len(dl_n) if dl_n else 1.0

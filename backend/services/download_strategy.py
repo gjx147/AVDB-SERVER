@@ -17,11 +17,16 @@ def get_strategy(db) -> dict:
         return {}
 
 
-def pick_downloader(db, task) -> str:
-    """按策略选择下载器（策略优先，其次默认下载器）。"""
-    from routers.downloaders import _get_setting
-    strategy = get_strategy(db)
-    default = _get_setting(db, "default_downloader") or "qbittorrent"
+def pick_downloader(db, task, strategy: dict | None = None, default: str | None = None) -> str:
+    """按策略选择下载器（策略优先，其次默认下载器）。
+
+    打磨：strategy/default 可由调用方一次性读取传入，避免批量场景每任务重复查询。
+    """
+    if strategy is None:
+        strategy = get_strategy(db)
+    if default is None:
+        from routers.downloaders import _get_setting
+        default = _get_setting(db, "default_downloader") or "qbittorrent"
     # 演员优先
     t_actors = [a.strip() for a in (task.actors or "").split(",") if a.strip()]
     for a in t_actors:

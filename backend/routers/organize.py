@@ -48,7 +48,7 @@ def undo(dl_id: int, _user: CurrentAdmin):
 
 
 @router.post("/subtitle/{dl_id}")
-async def upload_subtitle(dl_id: int, file: UploadFile = File(...), db: DbSession = None, _user: CurrentAdmin = None):
+async def upload_subtitle(dl_id: int, db: DbSession, _user: CurrentAdmin, file: UploadFile = File(...)):
     """N26: 为已整理的任务上传字幕文件（.srt/.ass），复制到媒体文件旁。
 
     路径规则：媒体文件同目录同名（.mp4 → .srt）；多文件取第一个。

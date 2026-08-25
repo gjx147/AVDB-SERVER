@@ -436,7 +436,7 @@ def actor_insights(actor_id: int, db: DbSession, _user: CurrentUser):
 
 
 @router.get("/status-summary")
-def actor_status_summary(ids: str = Query("", description="逗号分隔的 actor_id 列表"), db: DbSession = None, _user: CurrentUser = None):
+def actor_status_summary(db: DbSession, _user: CurrentUser, ids: str = Query("", description="逗号分隔的 actor_id 列表")):
     """N9: 批量返回演员状态（最后作品日期/距今天数），用于订阅页休止徽标。"""
     from datetime import datetime
     from models import ActorMovie
