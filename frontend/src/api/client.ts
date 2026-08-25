@@ -530,6 +530,11 @@ export const api = {
       '/api/system/s3-status').then((r) => r.data),
   s3Upload: () =>
     http.post<{ ok: boolean; key?: string; message?: string }>('/api/system/s3-upload').then((r) => r.data),
+  uploadSubtitle: (dlId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post<{ ok: boolean; path?: string; name?: string }>(`/api/organize/subtitle/${dlId}`, fd).then((r) => r.data)
+  },
   shares: {
     create: (kind: string, refId: number, days = 7, note = '') =>
       http.post<{ ok: boolean; token: string; url: string; expires_at: string }>(

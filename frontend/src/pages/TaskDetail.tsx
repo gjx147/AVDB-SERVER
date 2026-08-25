@@ -326,6 +326,7 @@ export function TaskDetail() {
             <MetaItem label="发行日期" val={task.release_date} />
             <MetaItem label="时长" val={task.duration} />
             <MetaItem label="评分" val={task.rating} />
+              {(task as { ai_tags?: string | null }).ai_tags ? <MetaItem label="标签" val="AI 补全" /> : null}
             <MetaItem label="片商" val={task.maker} />
             <MetaItem label="厂牌" val={task.label} />
             <MetaItem label="系列" val={task.series} />

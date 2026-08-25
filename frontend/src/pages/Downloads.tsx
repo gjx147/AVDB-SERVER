@@ -16,6 +16,23 @@ export function Downloads() {
   const nav = useNavigate()
   const [data, setData] = useState<{ downloads: DownloadRecord[]; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // N26: 字幕上传
+  const uploadSub = (dl: { id: number; organized?: boolean | null }) => {
+    if (!dl.organized) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.srt,.ass'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      try {
+        const r = await api.uploadSubtitle(dl.id, f)
+        toastOk(`字幕已上传：${r.name}`)
+      } catch (e) { toastErr(String((e as Error).message)) }
+    }
+    input.click()
+  }
+
   // N19: 种子健康（做种数 <5 低健康）
   const [unhealthy, setUnhealthy] = useState<Set<number>>(new Set())
   useEffect(() => {
@@ -27,6 +44,7 @@ export function Downloads() {
   }, [])
   const [filter, setFilter] = useState('')
   const toastErr = useStore((s) => s.toastErr)
+  const toastOk = useStore((s) => s.toastOk)
 
   const load = useCallback(() => {
     setData(null); setError(null)
@@ -81,6 +99,7 @@ export function Downloads() {
               <div className="row-tags">
                 <span className="chip" style={{ fontSize: 10 }}>{d.downloader === 'qbittorrent' ? 'qB' : 'CD2'}</span>
                 {d.organized && <span className="chip" style={{ fontSize: 10, background: '#d1fae5', color: '#047857' }}>已整理</span>}
+                {d.organized && <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '1px 8px' }} onClick={() => uploadSub(d)}>字幕</button>}
                 {unhealthy.has(d.id) && <span className="chip" style={{ fontSize: 10, background: '#fee2e2', color: '#b91c1c' }}>低健康</span>}
                 <span className={`chip ${statusCls[d.status] || ''}`}>{statusLabel[d.status] || d.status}</span>
                 {d.status === 'downloading' && d.progress > 0 && (
