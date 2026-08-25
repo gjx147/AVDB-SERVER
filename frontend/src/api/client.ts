@@ -157,7 +157,14 @@ export const api = {
         return { items: (d as { items?: Actor[] }).items || [], total: (d as { total?: number }).total ?? 0 }
       }),
     /** 自动翻页拉取全部演员（后端 page_size 上限 200；订阅页建头像映射用） */
+    // T15: 全量演员列表缓存 5 分钟（订阅页每次进入不再全量重拉）
+    _listAllCache: null as Actor[] | null,
+    _listAllCacheTs: 0,
     listAll: (withAvatar?: boolean, pageSize = 200): Promise<Actor[]> => {
+      const now = Date.now()
+      if (api.actors._listAllCache && now - api.actors._listAllCacheTs < 300000) {
+        return Promise.resolve(api.actors._listAllCache)
+      }
       const fetchPage = async (page: number): Promise<{ items: Actor[]; total: number }> =>
         http.get<unknown>('/api/actors', { params: { page, page_size: pageSize, with_avatar: withAvatar } }).then((r) => {
           const d = r.data as { items?: Actor[]; total?: number } | Actor[]
@@ -174,6 +181,8 @@ export const api = {
           if (r.items.length < pageSize || out.length >= r.total) break
           page++
         }
+        api.actors._listAllCache = out
+        api.actors._listAllCacheTs = Date.now()
         return out
       })()
     },

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { Icon } from './Icons'
@@ -85,11 +86,33 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           <span className="flame" aria-hidden="true">🕯</span>
           {moodMode ? '离开密室' : '烛光密室'}
         </button>
-        <div><span className="dot">●</span> 后端已连接</div>
+        <SidebarStatus />
         {/* 时段问候：她按早晚深夜换语气 */}
         <div className="sidebar-greet">{w(greetingKey())}</div>
         <div>{stats ? `${stats.total} 部作品` : 'AVDB v2.0'}</div>
       </div>
     </aside>
+  )
+}
+
+function SidebarStatus() {
+  const [online, setOnline] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    const check = () => {
+      const token = localStorage.getItem('apiToken') || ''
+      fetch('/api/health', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => { if (alive) setOnline(r.ok) })
+        .catch(() => { if (alive) setOnline(false) })
+    }
+    check()
+    const t = setInterval(check, 30000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
+  return (
+    <div>
+      <span className="dot" style={{ color: online === null ? 'var(--t-faint, #999)' : online ? 'var(--green, #059669)' : 'var(--red, #dc2626)' }}>●</span>
+      {online === null ? '检测中…' : online ? '后端已连接' : '后端离线'}
+    </div>
   )
 }

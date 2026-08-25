@@ -29,6 +29,7 @@ export function Favorites() {
       api.collections.tasks(activeCol, inLibrary).then((r) => { setTasks(r.tasks); setError(null) }).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
     } else {
       api.tasks.favorites(0, 100, inLibrary).then(setTasks).catch((e) => { setError(String((e as Error).message)); setTasks([]) })
+    // T17: 超限提示（接口无 total 时按满页判断）
     }
     api.collections.list().then((r) => setCollections(r.collections as unknown as Collection[])).catch(() => {})
   }
@@ -109,6 +110,10 @@ export function Favorites() {
         sub="被你点过心的珍藏，随时翻出来温存。">
         <button className="btn btn--ghost btn--sm" onClick={() => setAddingCol(!addingCol)}>＋ 新建分组</button>
       </PageHead>
+
+      {tasks && tasks.length >= 100 && (
+        <div style={{ fontSize: 11, color: "var(--t-mute)", margin: "8px 2px" }}>仅显示前 100 条（收藏超过 100 条时请使用影片库筛选）</div>
+      )}
 
       {addingCol && (
         <div className="card" style={{ marginBottom: 16 }}>

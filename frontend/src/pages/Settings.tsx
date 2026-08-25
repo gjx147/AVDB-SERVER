@@ -22,7 +22,24 @@ export function Settings() {
 
   const upd = (patch: Partial<S>) => setS({ ...s, ...patch })
   const save = async () => {
-    try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
+    try {
+      // T21: 保存前先拉取服务器最新设置，仅提交本地发生变化的字段，
+      // 避免主表单的旧快照覆盖其它 Tab 刚保存的新值（如新密钥）
+      let merged: Record<string, unknown> = s as unknown as Record<string, unknown>
+      try {
+        const latest = await api.settings.get() as unknown as Record<string, unknown>
+        merged = { ...latest }
+        for (const k of Object.keys(s as unknown as Record<string, unknown>)) {
+          const lv = (latest as Record<string, unknown>)[k]
+          const sv = (s as unknown as Record<string, unknown>)[k]
+          if (JSON.stringify(lv) !== JSON.stringify(sv)) {
+            merged[k] = sv
+          }
+        }
+      } catch { /* 拉取失败则全量提交本地值 */ }
+      await api.settings.update(merged as never)
+      toastOk('设置已保存')
+    } catch (e) { toastErr(String((e as Error).message)) }
   }
   const testProxy = async () => {
     setProxyTesting(true)

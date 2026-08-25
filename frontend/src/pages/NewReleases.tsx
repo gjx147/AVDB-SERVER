@@ -108,6 +108,11 @@ export function NewReleases() {
             sub="订阅演员后系统自动巡检，新作品会出现在这里；也可到订阅页点「立即巡检全部」。" />
         ) : (
           <div>
+            {releases && releases.length >= 200 && (
+              <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 8 }}>
+                仅显示前 200 条（共 {releases.length} 条），更多请用影片库筛选
+              </div>
+            )}
             {shown.map((nr) => {
               const sealed = !nr.is_read && !cracked.has(nr.id)
               return (

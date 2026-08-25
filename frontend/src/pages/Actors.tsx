@@ -30,7 +30,10 @@ export function Actors() {
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
 
+  // T19: 请求竞态防护（快速切换筛选时丢弃过期响应，对齐 Library）
+  const reqSeqRef = useRef(0)
   const load = useCallback((keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }, pageOverride?: number) => {
+    const reqId = ++reqSeqRef.current
     setActors(null)
     setError(null)
     setSelected(new Set())
@@ -39,9 +42,13 @@ export function Actors() {
     const pg = pageOverride !== undefined ? pageOverride : page
     const q = keyword?.trim() || undefined
     api.actors.listPage(pg + 1, PAGE, wa, fd, q).then((r) => {
+      if (reqId !== reqSeqRef.current) return
       setActors(r.items)
       setTotal(r.total)
-    }).catch((e) => { setError(String((e as Error).message)); setActors([]) })
+    }).catch((e) => {
+      if (reqId !== reqSeqRef.current) return
+      setError(String((e as Error).message)); setActors([])
+    })
   }, [onlyWithAvatar, onlyFollowed, page])
   useEffect(() => { load() }, [load])
 
