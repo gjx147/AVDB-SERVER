@@ -462,6 +462,11 @@ export const api = {
   activityHeatmap: (days = 180) =>
     http.get<{ days: Record<string, { favorites: number; downloads: number }>; total_days: number }>(
       '/api/insights/activity-heatmap', { params: { days } }).then((r) => r.data),
+  recommendations: () =>
+    http.get<{ items: { task_id: number; video_code: string | null; title: string | null; rating: number | null; poster_url: string | null; score: number | null; match: string[] }[]; reason: string }>(
+      '/api/insights/recommendations').then((r) => r.data),
+  recommendReason: (taskId: number) =>
+    http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(

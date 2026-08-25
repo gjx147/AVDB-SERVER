@@ -60,6 +60,7 @@ export function Dashboard() {
       </PageHead>
 
       <HeatmapCard />
+      <RecommendationsCard />
 
       <div className="stat-row">
         <Stat num={stats.total_tasks} unit="部" label="总作品" trend={`已入库 ${stats.visited_tasks}`} />
@@ -220,6 +221,58 @@ function InlineErr({ onRetry }: { onRetry: () => void }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--red)', padding: '14px 2px' }}>
       <span>该区块加载失败</span>
       <button className="btn btn--ghost btn--sm" onClick={onRetry}><Icon.refresh />重试</button>
+    </div>
+  )
+}
+
+function RecommendationsCard() {
+  const [recs, setRecs] = useState<{ task_id: number; video_code: string | null; title: string | null; rating: number | null; poster_url: string | null; score: number | null; match: string[] }[] | null>(null)
+  const [reason, setReason] = useState<Record<number, { text: string; loading: boolean }>>({})
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api.recommendations().then((r) => setRecs(r.items)).catch(() => setRecs([]))
+  }, [])
+  if (!recs || recs.length === 0) return null
+  const genReason = async (t: { task_id: number; video_code: string | null }) => {
+    setReason((p) => ({ ...p, [t.task_id]: { text: '', loading: true } }))
+    try {
+      const r = await api.recommendReason(t.task_id)
+      setReason((p) => ({ ...p, [t.task_id]: { text: r.reason || '（未能生成理由）', loading: false } }))
+    } catch {
+      setReason((p) => ({ ...p, [t.task_id]: { text: '生成失败', loading: false } }))
+    }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>为你推荐</div>
+        <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>基于收藏与已看偏好 · AI 理由按需生成</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {recs.map((t) => (
+          <div key={t.task_id} style={{
+            display: 'flex', gap: 10, alignItems: 'center', padding: '6px 8px',
+            border: '1px solid var(--line, #eee)', borderRadius: 8, fontSize: 12,
+          }}>
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <div style={{ fontWeight: 600 }}>{t.video_code || '—'} {t.rating ? <span style={{ color: 'var(--gold, #d97706)' }}>{t.rating}</span> : null}</div>
+              <div style={{ color: 'var(--t-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || ''}</div>
+              {t.match.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                  {t.match.map((m) => <span key={m} style={{ fontSize: 10, background: 'var(--bg-raised, #f3f4f6)', padding: '1px 6px', borderRadius: 99 }}>{m}</span>)}
+                </div>
+              )}
+              {reason[t.task_id]?.text && (
+                <div style={{ marginTop: 4, fontSize: 11, color: 'var(--t-mute)', fontStyle: 'italic' }}>「{reason[t.task_id].text}」</div>
+              )}
+            </div>
+            <button className="btn btn--ghost btn--sm" disabled={reason[t.task_id]?.loading}
+              onClick={() => genReason(t)} style={{ flex: 'none' }}>
+              {reason[t.task_id]?.loading ? '生成中…' : '推荐理由'}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

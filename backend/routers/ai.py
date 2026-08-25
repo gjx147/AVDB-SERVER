@@ -71,3 +71,40 @@ async def ai_whisper(req: WhisperRequest, _user: CurrentUser):
 async def ai_test(_user: CurrentUser):
     """用当前 settings 表配置发一句问候，验证 AI 连通性（供设置页「测试连接」）。"""
     return await test_connection()
+
+
+
+@router.post("/recommend-reason")
+async def recommend_reason(payload: dict, db: DbSession, _user: CurrentUser):
+    """为推荐作品生成一句话推荐理由（F8）。LLM 结果按 task_id 缓存，重复请求不花钱。"""
+    from fastapi import HTTPException
+    from models import Task
+
+    task_id = payload.get("task_id")
+    task = db.get(Task, task_id) if task_id else None
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    from services.ai_service import _get_cached, _hash_prompt, _save_cache, chat
+
+    key = _hash_prompt(f"recommend:{task_id}")
+    cached = _get_cached(key)
+    if cached:
+        return {"reason": cached, "cached": True}
+
+    title = task.title or task.video_code or ""
+    meta = f"番号 {task.video_code or '未知'}，评分 {task.rating or '暂无'}，标签：{task.tags or '无'}"
+    try:
+        reason = await chat(
+            [
+                {"role": "system", "content": "你是资深影评人，用一句话（40 字以内）向用户推荐一部作品，语气自然不浮夸，直接说推荐理由。"},
+                {"role": "user", "content": f"作品：{title}。{meta}"},
+            ],
+            task_type="recommend",
+        )
+    except Exception as e:
+        return {"reason": "", "cached": False, "error": str(e)[:200]}
+    reason = (reason or "").strip()
+    if reason:
+        _save_cache(key, "recommend", "", f"recommend:{task_id}", reason)
+    return {"reason": reason, "cached": False}
