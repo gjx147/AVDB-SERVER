@@ -123,6 +123,9 @@ async def _poll_qbittorrent(db) -> int:
         dl.error_message = r["error"]
         if r["status"] == "completed":
             dl.completed_at = datetime.utcnow()
+            # F7: 触发自动整理（硬链接进媒体库；不阻塞轮询，失败不影响下载状态）
+            from services.organizer import trigger_organize
+            asyncio.create_task(trigger_organize(dl.id, dl.info_hash))
         updated += 1
     if updated:
         db.commit()

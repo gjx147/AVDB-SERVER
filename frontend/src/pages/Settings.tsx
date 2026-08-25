@@ -107,6 +107,22 @@ export function Settings() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // ── F7 下载自动整理配置 ──
+  const [orgCfg, setOrgCfg] = useState<Record<string, string>>({
+    organize_enabled: 'false', organize_target_dir: '', organize_naming: '{code} - {title}',
+  })
+  useEffect(() => { api.organize.config().then(setOrgCfg).catch(() => {}) }, [])
+  const saveOrgCfg = async () => {
+    try { await api.organize.setConfig(orgCfg); toastOk('整理配置已保存') }
+    catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const runOrganizeAll = async () => {
+    try {
+      const r = await api.organize.runAll()
+      toastOk(`整理完成：${r.organized}/${r.total} 项成功`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
   return (
     <div className="page">
       <PageHead eyebrow="Settings" title={<>系统<em>设置</em></>}
@@ -204,6 +220,30 @@ export function Settings() {
                     <textarea className="input" rows={3} placeholder={'每行一个番号，例如:\nABC-123\nXYZ-789'} value={codesText}
                       onChange={(e) => setCodesText(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }} />
                     <button className="btn btn--gold btn--sm" onClick={importCodes} style={{ marginTop: 8 }} disabled={!codesText.trim()}>批量导入番号</button>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 14, marginTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>下载自动整理（硬链接进媒体库）</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={orgCfg.organize_enabled === 'true'}
+                        onChange={(e) => setOrgCfg((c) => ({ ...c, organize_enabled: e.target.checked ? 'true' : 'false' }))} />
+                      下载完成后自动整理（需配置整理目录，默认关闭）
+                    </label>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>媒体库整理目录（Emby 扫描目录，必填）</label>
+                      <input className="input" value={orgCfg.organize_target_dir} placeholder="/media/av"
+                        onChange={(e) => setOrgCfg((c) => ({ ...c, organize_target_dir: e.target.value }))} />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>命名模板（{'{code}'} 番号 / {'{title}'} 标题）</label>
+                      <input className="input" value={orgCfg.organize_naming} placeholder="{code} - {title}"
+                        onChange={(e) => setOrgCfg((c) => ({ ...c, organize_naming: e.target.value }))} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button className="btn btn--gold btn--sm" onClick={saveOrgCfg}>保存整理配置</button>
+                      <button className="btn btn--ghost btn--sm" onClick={runOrganizeAll}>整理全部已完成下载</button>
+                    </div>
                   </div>
                 </div>
               </div>

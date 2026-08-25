@@ -71,6 +71,7 @@ export function Downloads() {
               </div>
               <div className="row-tags">
                 <span className="chip" style={{ fontSize: 10 }}>{d.downloader === 'qbittorrent' ? 'qB' : 'CD2'}</span>
+                {d.organized && <span className="chip" style={{ fontSize: 10, background: '#d1fae5', color: '#047857' }}>已整理</span>}
                 <span className={`chip ${statusCls[d.status] || ''}`}>{statusLabel[d.status] || d.status}</span>
                 {d.status === 'downloading' && d.progress > 0 && (
                   <span className="chip chip-amber" style={{ fontFamily: 'var(--ff-mono)' }}>{Math.round(d.progress)}%</span>

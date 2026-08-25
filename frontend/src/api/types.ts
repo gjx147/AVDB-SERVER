@@ -318,6 +318,8 @@ export interface DownloadRecord {
   added_at: string | null
   completed_at: string | null
   error_message: string | null
+  organized?: boolean | null
+  organized_path?: string | null
   video_code: string | null
   title: string | null
 }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -29,6 +29,9 @@ class Download(Base):
 
     pushed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # F7: 自动整理标记（硬链接进媒体库）
+    organized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    organized_path: Mapped[str | None] = mapped_column(String(500))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now()
     )

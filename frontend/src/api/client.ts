@@ -462,6 +462,17 @@ export const api = {
   activityHeatmap: (days = 180) =>
     http.get<{ days: Record<string, { favorites: number; downloads: number }>; total_days: number }>(
       '/api/insights/activity-heatmap', { params: { days } }).then((r) => r.data),
+  organize: {
+    config: () =>
+      http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(
+        '/api/organize/config').then((r) => r.data),
+    setConfig: (c: Record<string, string>) =>
+      http.put<ApiOk>('/api/organize/config', c).then((r) => r.data),
+    runAll: () =>
+      http.post<{ ok: boolean; total: number; organized: number }>('/api/organize/run-all').then((r) => r.data),
+    undo: (dlId: number) =>
+      http.post<{ ok: boolean; removed: number }>(`/api/organize/undo/${dlId}`).then((r) => r.data),
+  },
 
   // ════════ Crawl Health / Calendar（F3/F4）════════
   crawlHealth: () =>
