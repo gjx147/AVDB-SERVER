@@ -149,8 +149,37 @@ async def notify(event: str, title: str, body: str = "") -> dict[str, bool]:
     if not _event_enabled(event, config):
         return {"skipped": True}
 
+    # F2: 免打扰时段（settings: notify_dnd_start / notify_dnd_end，格式 HH:MM）
+    try:
+        from datetime import datetime as _dt
+        _now = _dt.now().strftime("%H:%M")
+        _dnd_s = config.get("notify_dnd_start", "")
+        _dnd_e = config.get("notify_dnd_end", "")
+        if _dnd_s and _dnd_e and _dnd_s < _dnd_e and _dnd_s <= _now <= _dnd_e:
+            logger.info("通知 [%s] 处于免打扰时段 (%s-%s)，跳过", event, _dnd_s, _dnd_e)
+            return {"dnd": True}
+    except Exception:
+        pass
+
     results = await _send_all(config, event, title, body)
     logger.info("通知 [%s] %s -> %s", event, title, results)
+    # F2: 记录通知历史（每个通道一条）
+    try:
+        from database import SessionLocal
+        from models import NotifyLog
+        _db = SessionLocal()
+        try:
+            for _ch, _ok in results.items():
+                if isinstance(_ok, bool):
+                    _db.add(NotifyLog(
+                        event=event, title=(title or "")[:200], body=(body or "")[:2000],
+                        channel=_ch, ok=_ok, message="" if _ok else "发送失败",
+                    ))
+            _db.commit()
+        finally:
+            _db.close()
+    except Exception as e:
+        logger.warning("通知历史记录失败: %s", e)
     return results
 
 

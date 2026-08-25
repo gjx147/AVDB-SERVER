@@ -32,6 +32,7 @@ const nav: NavSection[] = [
   { section: '系统', items: [
     { to: '/downloads', label: '下载历史', icon: <Icon.download /> },
     { to: '/downloaders', label: '下载器', icon: <Icon.settings /> },
+    { to: '/notifications', label: '通知中心', icon: <Icon.bell /> },
     { to: '/settings', label: '设置', icon: <Icon.settings /> },
   ]},
 ]

@@ -16,6 +16,7 @@ from models.insight import InsightReport
 from models.llm_cache import LLMCache, ContentFilterRule
 from models.collection import Collection, task_collections
 from models.download import Download
+from models.notify_log import NotifyLog
 from models.user import User
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "Collection",
     "task_collections",
     "Download",
+    "NotifyLog",
     "User",
 ]

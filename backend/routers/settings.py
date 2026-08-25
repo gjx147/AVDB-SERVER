@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -78,9 +78,32 @@ def backup_settings(db: DbSession, _user: CurrentUser):
 
 
 @router.post("/restore")
-async def restore_settings():
-    """恢复设置（未实现：返回 501，避免前端误以为已恢复）。"""
-    raise HTTPException(status_code=501, detail="恢复功能待实现")
+async def restore_settings(file: UploadFile, db: DbSession, _user: CurrentAdmin):
+    """恢复设置：上传备份导出文件（JSON：{"settings": {...}}），脱敏值（***）跳过。
+
+    F1 实现：替代原 501 占位；敏感 key 保持哨兵语义，不会覆盖为占位符。
+    """
+    import json
+    raw = await file.read()
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="无效的备份文件（需要 JSON 格式的设置导出）")
+    settings_data = data.get("settings", data) if isinstance(data, dict) else None
+    if not isinstance(settings_data, dict) or not settings_data:
+        raise HTTPException(status_code=400, detail="备份文件缺少 settings 对象")
+    updated = 0
+    for key, value in settings_data.items():
+        if _is_sensitive(key) and str(value) == "***":
+            continue  # 脱敏值跳过，不覆盖真实凭据
+        row = db.get(Setting, key)
+        if row:
+            row.value = str(value) if value is not None else ""
+        else:
+            db.add(Setting(key=key, value=str(value) if value is not None else ""))
+        updated += 1
+    db.commit()
+    return {"ok": True, "restored": updated}
 
 
 @router.delete("/clean-failed")

@@ -25,6 +25,7 @@ const NewReleases  = lazy(() => import('./pages/NewReleases').then(m => ({ defau
 const Downloaders = lazy(() => import('./pages/Downloaders').then(m => ({ default: m.Downloaders })))
 const Downloads   = lazy(() => import('./pages/Downloads').then(m => ({ default: m.Downloads })))
 const Settings    = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
+const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const TaskDetail  = lazy(() => import('./pages/TaskDetail').then(m => ({ default: m.TaskDetail })))
 
 // 鉴权守卫：无 token 跳登录
@@ -125,6 +126,7 @@ export default function App() {
             <Route path="/downloaders" element={<Downloaders />} />
             <Route path="/downloads" element={<Downloads />} />
             <Route path="/settings" element={<Settings />} />
+<Route path="/notifications" element={<Notifications />} />
             <Route path="/task/:id" element={<TaskDetail />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

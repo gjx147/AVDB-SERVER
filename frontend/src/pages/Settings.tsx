@@ -59,6 +59,37 @@ export function Settings() {
     try { await api.settings.cleanFailed(); toastOk('已清理') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // ── F1 数据导入导出 ──
+  const [codesText, setCodesText] = useState('')
+  const exportCsv = async () => {
+    try {
+      const blob = await api.exportTasksCsv()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `avdb-tasks-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const exportSubs = async () => {
+    try {
+      const r = await api.exportSubscriptions()
+      const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `avdb-subscriptions-${new Date().toISOString().slice(0, 10)}.json`
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const importCodes = async () => {
+    const codes = codesText.split(/\n|,|;|，/).map((c) => c.trim()).filter(Boolean)
+    if (!codes.length) return
+    try {
+      const r = await api.importCodes(codes)
+      toastOk(`已导入 ${r.added} 个番号${r.skipped ? `，跳过 ${r.skipped} 个已存在` : ''}`)
+      setCodesText('')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
   return (
     <div className="page">
       <PageHead eyebrow="Settings" title={<>系统<em>设置</em></>}
@@ -146,6 +177,18 @@ export function Settings() {
                   导入备份<input type="file" accept=".db,.sqlite,.json" onChange={restore} style={{ display: 'none' }} />
                 </label>
                 <button className="btn btn--danger btn--sm" onClick={cleanFailed} style={{ width: 'fit-content' }}>清理所有失败任务</button>
+                <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>数据导入导出</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn btn--ghost btn--sm" onClick={exportCsv} style={{ width: 'fit-content' }}>导出任务 CSV</button>
+                    <button className="btn btn--ghost btn--sm" onClick={exportSubs} style={{ width: 'fit-content' }}>导出订阅清单</button>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <textarea className="input" rows={3} placeholder={'每行一个番号，例如:\nABC-123\nXYZ-789'} value={codesText}
+                      onChange={(e) => setCodesText(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }} />
+                    <button className="btn btn--gold btn--sm" onClick={importCodes} style={{ marginTop: 8 }} disabled={!codesText.trim()}>批量导入番号</button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -427,6 +427,26 @@ export const api = {
       http.post<{ ok: boolean; message: string }>('/api/settings/test-proxy', { proxy }).then((r) => r.data),
   },
 
+  // ════════ Notifications（F2 通知中心）════════
+  notifications: {
+    list: (event?: string) =>
+      http.get<{ items: { id: number; event: string; title: string; body: string; channel: string; ok: boolean; message: string; created_at: string }[] }>(
+        '/api/notifications', { params: { event } }).then((r) => r.data),
+    events: () => http.get<{ events: string[] }>('/api/notifications/events').then((r) => r.data),
+    test: () => http.post<Record<string, boolean | string>>('/api/notifications/test').then((r) => r.data),
+    dnd: () => http.get<{ dnd_start: string; dnd_end: string }>('/api/notifications/dnd').then((r) => r.data),
+    setDnd: (d: { dnd_start: string; dnd_end: string }) =>
+      http.put<ApiOk>('/api/notifications/dnd', d).then((r) => r.data),
+  },
+
+  // ════════ Transfer（F1 导入导出）════════
+  exportTasksCsv: () => http.get<Blob>('/api/export/tasks.csv', { responseType: 'blob' }).then((r) => r.data),
+  exportSubscriptions: () =>
+    http.get<{ subscriptions: { name: string; sub_type: string; actor_name: string | null; auto_add: boolean; enabled: boolean; check_interval_hours: number }[] }>(
+      '/api/export/subscriptions.json').then((r) => r.data),
+  importCodes: (codes: string[]) =>
+    http.post<{ ok: boolean; added: number; skipped: number }>('/api/import/codes', { codes }).then((r) => r.data),
+
   // ════════ Images ════════
   images: {
     thumbnails: (taskId: number) =>
