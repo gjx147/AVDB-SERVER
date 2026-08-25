@@ -467,6 +467,12 @@ export const api = {
       '/api/insights/recommendations').then((r) => r.data),
   recommendReason: (taskId: number) =>
     http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
+  actorInsights: (actorId: number) =>
+    http.get<{ years: { year: string; count: number }[]; co_stars: { name: string; count: number }[] }>(
+      `/api/actors/${actorId}/profile-insights`).then((r) => r.data),
+  quota115: () =>
+    http.get<{ ok: boolean; total?: number | null; used?: number | null; remain?: number | null; message?: string }>(
+      '/api/drive115/quota').then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(

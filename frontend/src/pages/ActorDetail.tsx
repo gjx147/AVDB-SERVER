@@ -659,7 +659,8 @@ export function ActorDetail() {
             <option value="in">✓ 在媒体库</option>
             <option value="out">✗ 不在媒体库</option>
           </select>
-          {movies.length > 0 && (
+          {actor && <ActorProfileInsights actorId={actor.id} />}
+      {movies.length > 0 && (
             <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
           )}
         </div>
@@ -719,6 +720,47 @@ export function ActorDetail() {
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
         <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
       </div>
+    </div>
+  )
+}
+
+function ActorProfileInsights({ actorId }: { actorId: number }) {
+  const [data, setData] = useState<{ years: { year: string; count: number }[]; co_stars: { name: string; count: number }[] } | null>(null)
+  useEffect(() => {
+    api.actorInsights(actorId).then(setData).catch(() => setData(null))
+  }, [actorId])
+  if (!data || (data.years.length === 0 && data.co_stars.length === 0)) return null
+  const maxYear = Math.max(...data.years.map((y) => y.count), 1)
+  return (
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+      {data.years.length > 0 && (
+        <div className="card" style={{ flex: '1 1 260px', padding: '12px 14px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>作品时间线（按年份）</div>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'end', height: 44 }}>
+            {data.years.map((y) => (
+              <div key={y.year} title={`${y.year} 共 ${y.count} 部`}
+                style={{ width: 18, height: Math.max(4, (y.count / maxYear) * 38), background: 'var(--gold, #d97706)', borderRadius: 2, opacity: 0.85 }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 4, fontSize: 9, color: 'var(--t-faint)', marginTop: 2 }}>
+            {data.years.slice(-10).map((y) => <span key={y.year} style={{ width: 18, textAlign: 'center' }}>{y.year.slice(2)}</span>)}
+          </div>
+        </div>
+      )}
+      {data.co_stars.length > 0 && (
+        <div className="card" style={{ flex: '1 1 260px', padding: '12px 14px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>共演演员 Top10</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {data.co_stars.map((c, i) => (
+              <div key={c.name} style={{ display: 'flex', gap: 8, fontSize: 11, alignItems: 'center' }}>
+                <span style={{ width: 16, color: 'var(--t-faint)' }}>{i + 1}</span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                <span style={{ color: 'var(--t-mute)' }}>{c.count} 部</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

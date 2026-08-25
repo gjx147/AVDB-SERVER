@@ -373,3 +373,63 @@ def extract_profiles_status(_user: CurrentUser):
     """一键提取任务进度（前端轮询）。"""
     from services import actor_profile_batch
     return actor_profile_batch.status()
+
+
+@router.get("/{actor_id}/profile-insights")
+def actor_insights(actor_id: int, db: DbSession, _user: CurrentUser):
+    """演员画像（F11）：作品年份分布 + 共演演员 Top10。"""
+    from collections import Counter
+    from models import ActorMovie
+
+    rows = db.execute(
+        select(Task.release_date, Task.actors).join(ActorMovie, ActorMovie.task_id == Task.id)
+        .where(ActorMovie.actor_id == actor_id, Task.release_date.isnot(None))
+    ).all()
+    years: dict[str, int] = {}
+    co: Counter = Counter()
+    for rd, actors in rows:
+        y = (rd or "")[:4]
+        if y:
+            years[y] = years.get(y, 0) + 1
+        for a in (actors or "").split(","):
+            a = a.strip()
+            if a:
+                co[a] += 1
+    from models import Actor
+    actor = db.get(Actor, actor_id)
+    if actor and actor.name in co:
+        del co[actor.name]
+    return {
+        "years": [{"year": k, "count": v} for k, v in sorted(years.items())],
+        "co_stars": [{"name": k, "count": v} for k, v in co.most_common(10)],
+    }
+
+
+@router.get("/{actor_id}/profile-insights")
+def actor_insights(actor_id: int, db: DbSession, _user: CurrentUser):
+    """演员画像（F11）：作品年份分布 + 共演演员 Top10。"""
+    from collections import Counter
+    from models import ActorMovie
+
+    rows = db.execute(
+        select(Task.release_date, Task.actors).join(ActorMovie, ActorMovie.task_id == Task.id)
+        .where(ActorMovie.actor_id == actor_id, Task.release_date.isnot(None))
+    ).all()
+    years: dict[str, int] = {}
+    co: Counter = Counter()
+    for rd, actors in rows:
+        y = (rd or "")[:4]
+        if y:
+            years[y] = years.get(y, 0) + 1
+        for a in (actors or "").split(","):
+            a = a.strip()
+            if a:
+                co[a] += 1
+    from models import Actor
+    actor = db.get(Actor, actor_id)
+    if actor and actor.name in co:
+        del co[actor.name]
+    return {
+        "years": [{"year": k, "count": v} for k, v in sorted(years.items())],
+        "co_stars": [{"name": k, "count": v} for k, v in co.most_common(10)],
+    }

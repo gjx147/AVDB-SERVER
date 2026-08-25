@@ -54,5 +54,22 @@ async def offline_tasks(_user: CurrentUser):
 
 @router.get("/quota")
 async def quota(_user: CurrentUser):
-    """查询离线配额。"""
-    return await get_quota()
+    """115 离线配额/空间用量（F12）：规范化返回 total/used/remain（字节）。"""
+    r = await get_quota()
+    if "error" in r:
+        return {"ok": False, "message": r["error"]}
+    data = r.get("data") or r
+    quota_obj = data.get("quota") or data
+
+    def _num(v):
+        try:
+            return int(v)
+        except Exception:
+            return None
+
+    return {
+        "ok": True,
+        "total": _num(quota_obj.get("total")),
+        "used": _num(quota_obj.get("used")),
+        "remain": _num(quota_obj.get("remain")),
+    }

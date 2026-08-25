@@ -57,6 +57,8 @@ export function Downloaders() {
         <button className="btn btn--gold" onClick={save}><Icon.download />保存</button>
       </PageHead>
 
+      <Quota115Card />
+
       {validation.general && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>⚠ {validation.general}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
@@ -171,6 +173,33 @@ function DownloaderLog() {
          padding: 12, fontSize: 12, fontFamily: 'var(--ff-mono)', color: 'var(--t-body)',
          whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0,
        }}>{lines.join('\n')}</pre>}
+    </div>
+  )
+}
+
+function Quota115Card() {
+  const [q, setQ] = useState<{ ok: boolean; total?: number | null; used?: number | null; remain?: number | null; message?: string } | null>(null)
+  useEffect(() => {
+    api.quota115().then(setQ).catch(() => setQ({ ok: false, message: '查询失败' }))
+  }, [])
+  if (!q) return null
+  const total = q.total ?? 0
+  const used = q.used ?? 0
+  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0
+  const gb = (n: number | null | undefined) => (n == null ? '?' : (n / 1024 / 1024 / 1024).toFixed(1))
+  return (
+    <div className="card" style={{ marginBottom: 16, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>115 离线配额</div>
+        <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>
+          {q.ok ? `已用 ${gb(used)}G / 总 ${gb(total)}G（剩 ${gb(q.remain)}G）` : (q.message || '未授权或不可用')}
+        </div>
+      </div>
+      {q.ok && total > 0 && (
+        <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-raised, #f3f4f6)', overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? 'var(--red, #dc2626)' : 'var(--gold, #d97706)', borderRadius: 3 }} />
+        </div>
+      )}
     </div>
   )
 }
