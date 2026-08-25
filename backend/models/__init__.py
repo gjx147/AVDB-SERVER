@@ -18,6 +18,7 @@ from models.collection import Collection, task_collections
 from models.download import Download
 from models.notify_log import NotifyLog
 from models.rating_history import RatingHistory
+from models.share_token import ShareToken
 from models.user import User
 
 __all__ = [

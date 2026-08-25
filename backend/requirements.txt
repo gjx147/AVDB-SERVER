@@ -50,3 +50,6 @@ pydantic>=2.7,<3.0
 pydantic-settings>=2.2,<3.0
 
 # 依赖锁文件见 requirements.lock（pip freeze 生成，可复现构建参考）
+
+# N20 对象存储备份（S3 兼容：R2/OSS/S3）
+boto3>=1.34

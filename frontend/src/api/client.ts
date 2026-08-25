@@ -525,6 +525,24 @@ export const api = {
   torrentHealth: () =>
     http.get<{ ok: boolean; total: number; message?: string; items?: { dl_id: number; video_code: string | null; seeder: number; leecher: number; progress: number; healthy: boolean }[] }>(
       '/api/downloads/torrent-health').then((r) => r.data),
+  s3Status: () =>
+    http.get<{ ok: boolean; configured: boolean; remote: { ok: boolean; items?: { key: string; size_mb: number }[]; message?: string } }>(
+      '/api/system/s3-status').then((r) => r.data),
+  s3Upload: () =>
+    http.post<{ ok: boolean; key?: string; message?: string }>('/api/system/s3-upload').then((r) => r.data),
+  shares: {
+    create: (kind: string, refId: number, days = 7, note = '') =>
+      http.post<{ ok: boolean; token: string; url: string; expires_at: string }>(
+        '/api/shares', { kind, ref_id: refId, days, note }).then((r) => r.data),
+    list: () =>
+      http.get<{ ok: boolean; items: { token: string; kind: string; ref_id: number; note: string; expires_at: string; url: string }[] }>(
+        '/api/shares').then((r) => r.data),
+    remove: (token: string) =>
+      http.delete<{ ok: boolean }>(`/api/shares/${token}`).then((r) => r.data),
+  },
+  publicShare: (token: string) =>
+    http.get<{ ok: boolean; kind: string; title: string; items: { video_code: string | null; title: string | null; rating: number | null; actors: string | null; poster_url: string | null; rank?: number; score?: number }[] }>(
+      `/api/public/share/${token}`).then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(

@@ -77,6 +77,13 @@ async def run_backup(retention_days: int = 7) -> dict:
                 backup_path = enc_path
                 logger.info("数据库备份已加密: %s", enc_path.name)
         logger.info("数据库备份完成: %s (%d KB)", backup_path.name, backup_path.stat().st_size // 1024)
+        # N20: 启用对象存储时自动上传
+        try:
+            from services.s3_backup import is_enabled, upload_backup
+            if is_enabled():
+                await upload_backup(str(backup_path))
+        except Exception as e:
+            logger.warning("S3 自动上传失败（不影响本地备份）: %s", e)
     except Exception as e:
         logger.error("数据库备份失败: %s", e)
         return {"ok": False, "message": str(e)}

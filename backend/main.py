@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pathlib import Path
 from starlette.staticfiles import StaticFiles
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 # 让 backend 目录自身可被 import
@@ -163,7 +164,7 @@ app.add_middleware(
 )
 
 # 挂载路由
-from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads, settings, dashboard, v2, drive115, magnet_search, system, new_releases, notifications, organize, transfer  # noqa: E402
+from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads, settings, dashboard, v2, drive115, magnet_search, system, new_releases, notifications, organize, shares, transfer  # noqa: E402
 app.include_router(list_sources.router)
 app.include_router(tasks.router)
 app.include_router(crawl.router)
@@ -191,6 +192,47 @@ app.include_router(notifications.router)
 app.include_router(transfer.export_router)
 app.include_router(transfer.import_router)
 app.include_router(organize.router)
+app.include_router(shares.router)
+
+
+@app.get("/api/public/share/{token}")
+def public_share(token: str, db: Session = Depends(get_db)):
+    """N21: 公开只读分享数据（免鉴权；校验有效期）。"""
+    from datetime import datetime
+    from models import ShareToken, Task, Collection, task_collections
+
+    st = db.execute(select(ShareToken).where(ShareToken.token == token)).scalar_one_or_none()
+    if not st:
+        raise HTTPException(status_code=404, detail="分享不存在")
+    if st.expires_at and st.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="分享已过期")
+
+    if st.kind == "collection":
+        coll = db.get(Collection, st.ref_id)
+        if not coll:
+            raise HTTPException(status_code=404, detail="收藏夹不存在")
+        rows = db.execute(
+            select(Task).join(task_collections, task_collections.c.task_id == Task.id)
+            .where(task_collections.c.collection_id == coll.id)
+            .order_by(task_collections.c.created_at.desc()).limit(200)
+        ).scalars().all()
+        return {"ok": True, "kind": "collection", "title": coll.name,
+                "items": [{"video_code": t.video_code, "title": t.title, "rating": t.rating,
+                           "actors": t.actors, "poster_url": t.poster_url} for t in rows]}
+    if st.kind == "actor":
+        from models import Actor
+        actor = db.get(Actor, st.ref_id)
+        return {"ok": True, "kind": "actor", "title": actor.name if actor else f"演员 {st.ref_id}",
+                "items": []}
+    if st.kind == "ranking":
+        from models import Ranking
+        rows = db.execute(
+            select(Ranking).where(Ranking.rank_type == "hot")
+            .order_by(Ranking.rank_date.desc()).limit(30)
+        ).scalars().all()
+        return {"ok": True, "kind": "ranking", "title": "热门榜单",
+                "items": [{"video_code": r.video_code, "rank": r.rank_position, "score": r.score} for r in rows]}
+    raise HTTPException(status_code=400, detail="不支持的分享类型")
 
 
 @app.get("/api/health")

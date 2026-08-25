@@ -13,6 +13,15 @@ export function Favorites() {
   const [collections, setCollections] = useState<Collection[]>([])
   const [activeCol, setActiveCol] = useState<number | null>(null)  // null = 全部收藏
   const [error, setError] = useState<string | null>(null)
+  // N21: 收藏夹分享
+  const shareColl = async (id: number, name: string) => {
+    try {
+      const r = await api.shares.create('collection', id, 7, name)
+      const url = `${location.origin}${r.url}`
+      await navigator.clipboard.writeText(url).catch(() => {})
+      toastOk(`分享链接已复制：${url}`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
   const [addingCol, setAddingCol] = useState(false)
   const [newColName, setNewColName] = useState('')
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
@@ -135,6 +144,7 @@ export function Favorites() {
               style={{ cursor: 'pointer', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               onClick={() => setActiveCol(c.id)}>
               {c.icon} {c.name} ({c.task_count})
+              <span style={{ opacity: .4, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); shareColl(c.id, c.name) }} title="分享">🔗</span>
               <span style={{ opacity: .4, marginLeft: 4 }} onClick={(e) => { e.stopPropagation(); delCol(c.id) }}>✕</span>
             </span>
           ))}

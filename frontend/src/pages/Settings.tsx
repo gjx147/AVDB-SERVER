@@ -107,6 +107,41 @@ export function Settings() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // ── N20 S3 对象存储备份 ──
+  const [s3, setS3] = useState<Record<string, string>>({ s3_backup_enabled: 'false', s3_endpoint: '', s3_bucket: '', s3_access_key: '', s3_secret_key: '', s3_region: '' })
+  const [s3Status, setS3Status] = useState<Awaited<ReturnType<typeof api.s3Status>> | null>(null)
+  useEffect(() => {
+    api.settings.get().then((r) => {
+      const c = r as unknown as Record<string, string>
+      setS3({
+        s3_backup_enabled: c.s3_backup_enabled || 'false', s3_endpoint: c.s3_endpoint || '',
+        s3_bucket: c.s3_bucket || '', s3_access_key: c.s3_access_key || '',
+        s3_secret_key: c.s3_secret_key || '', s3_region: c.s3_region || '',
+      })
+    }).catch(() => {})
+    api.s3Status().then(setS3Status).catch(() => {})
+  }, [])
+  const saveS3 = async () => {
+    try {
+      const payload: Record<string, string> = {}
+      for (const k of Object.keys(s3)) {
+        if (k === 's3_secret_key' && !s3[k]) continue
+        payload[k] = s3[k]
+      }
+      await api.settings.update(payload as never)
+      toastOk('S3 配置已保存')
+      api.s3Status().then(setS3Status).catch(() => {})
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const doS3Upload = async () => {
+    try {
+      const r = await api.s3Upload()
+      if (r.ok) toastOk(`已上传 ${r.key}`)
+      else toastErr(r.message || '上传失败')
+      api.s3Status().then(setS3Status).catch(() => {})
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
   // ── N17 AI 批量补标签 ──
   const [tagBusy, setTagBusy] = useState(false)
   const runBatchTags = async () => {

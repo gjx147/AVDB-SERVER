@@ -171,3 +171,27 @@ def system_status(db: DbSession, _user: CurrentUser):
         "backups": backups,
         "server_time": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+@router.get("/s3-status")
+def s3_status(db: DbSession, _user: CurrentAdmin):
+    """N20: 对象存储备份状态——配置是否完整 + 远端备份列表。"""
+    from services.s3_backup import _s3_client, list_remote
+
+    client, _bucket = _s3_client() if _s3_client() else (None, None)
+    remote = list_remote() if client else {"ok": False, "message": "S3 未配置"}
+    return {"ok": True, "configured": client is not None, "remote": remote}
+
+
+@router.post("/s3-upload")
+async def s3_upload(_user: CurrentAdmin):
+    """N20: 手动上传最新一份本地备份到对象存储。"""
+    import glob
+    from config import get_settings
+    from services.s3_backup import upload_backup
+
+    bdir = os.path.join(get_settings().DATA_DIR, "backups")
+    files = sorted(glob.glob(os.path.join(bdir, "javdb-*.db")) + glob.glob(os.path.join(bdir, "javdb-*.db.enc")), reverse=True)
+    if not files:
+        return {"ok": False, "message": "本地无备份文件"}
+    return await upload_backup(files[0])

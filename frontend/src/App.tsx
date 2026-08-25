@@ -28,6 +28,7 @@ const Settings    = lazy(() => import('./pages/Settings').then(m => ({ default: 
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const Analytics = lazy(() => import('./pages/Analytics').then(m => ({ default: m.Analytics })))
 const Status = lazy(() => import('./pages/Status').then(m => ({ default: m.Status })))
+const ShareView = lazy(() => import('./pages/ShareView').then(m => ({ default: m.ShareView })))
 import { AskOverlay } from './components/AskOverlay'
 const TaskDetail  = lazy(() => import('./pages/TaskDetail').then(m => ({ default: m.TaskDetail })))
 
@@ -114,6 +115,10 @@ export default function App() {
       <main className="main">
         <ErrorBoundary>
         <Suspense fallback={<div className="page"><Loading /></div>}>
+          {/* N21: 公开分享页（免登录） */}
+          <Routes>
+            <Route path="/share/:token" element={<ShareView />} />
+          </Routes>
           <RequireAuth>
           <Routes>
             <Route path="/wall" element={<Wall />} />
