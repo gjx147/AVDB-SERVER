@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from deps import CurrentUser, DbSession
@@ -103,3 +103,64 @@ def import_codes(payload: ImportCodesRequest, db: DbSession, _user: CurrentUser)
         added += 1
     db.commit()
     return {"ok": True, "added": added, "skipped": skipped}
+
+
+class ImportMagnetsRequest(BaseModel):
+    text: str = Field(max_length=20000, description="含磁力链接的文本（支持多行）")
+
+
+@import_router.post("/magnets")
+def import_magnets(payload: ImportMagnetsRequest, db: DbSession, _user: CurrentUser):
+    """N11: 批量导入磁力链接——解析 btih、按 info_hash 去重、建 pending 任务。"""
+    import re as _re
+    from models import Download, ListSource, Task
+
+    magnets = _re.findall(r"magnet:\?[^\s]+", payload.text)
+    hashes = []
+    for m in magnets:
+        hm = _re.search(r"btih:([a-fA-F0-9]{40})", m)
+        if hm:
+            hashes.append((hm.group(1).lower(), m))
+    if not hashes:
+        return {"ok": False, "message": "未解析到有效磁力链接（需含 btih 哈希）", "added": 0, "skipped": 0}
+
+    # 去重：downloads.info_hash + tasks.best_magnet
+    known_hashes = {r[0].lower() for r in db.execute(select(Download.info_hash)).all() if r[0]}
+    task_hashes = set()
+    for (m,) in db.execute(select(Task.best_magnet).where(Task.best_magnet.isnot(None))).all():
+        if m:
+            hm = _re.search(r"btih:([a-fA-F0-9]{40})", m)
+            if hm:
+                task_hashes.add(hm.group(1).lower())
+
+    src = db.execute(select(ListSource).where(ListSource.list_code == "RANKING")).scalar_one_or_none()
+    if not src:
+        src = ListSource(list_code="RANKING", list_path="/rankings")
+        db.add(src)
+        db.flush()
+
+    added = 0
+    skipped = 0
+    seen: set[str] = set()
+    for h, m in hashes:
+        if h in known_hashes or h in task_hashes or h in seen:
+            skipped += 1
+            continue
+        seen.add(h)
+        code = None
+        m2 = _re.search(r"dn=([^&]+)", m)
+        if m2:
+            from urllib.parse import unquote
+            code = _re.search(r"[A-Z]{2,5}-\d{2,5}[A-Z0-9]?", unquote(m2.group(1)).upper())
+            code = code.group(0) if code else None
+        db.add(Task(
+            list_source_id=src.id,
+            url=f"/m/{h[:12]}",
+            video_code=code or h[:12].upper(),
+            best_magnet=m,
+            magnets_json="[]",
+            status="pending",
+        ))
+        added += 1
+    db.commit()
+    return {"ok": True, "added": added, "skipped": skipped, "total": len(hashes)}

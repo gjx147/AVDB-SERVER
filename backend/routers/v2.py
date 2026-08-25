@@ -9,7 +9,7 @@ import time
 from collections import Counter
 
 from fastapi import APIRouter, Query
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, case
 
 from deps import CurrentUser, DbSession
 from models import Task
@@ -32,7 +32,7 @@ def list_tasks_v2(
     list_source_id: int | None = Query(None),
     min_rating: float | None = Query(None),
     in_library: bool | None = Query(None, description="按 Emby 在库状态筛选（null 不同值，不参与筛选）"),
-    sort: str = Query("created_desc", description="created_desc/rating_desc/title_asc/date_desc/favorite_desc"),
+    sort: str = Query("created_desc", description="created_desc/rating_desc/title_asc/date_desc/favorite_desc/priority"),
     limit: int = Query(48, le=200),
     offset: int = Query(0, ge=0),
 ):
@@ -74,6 +74,8 @@ def list_tasks_v2(
         "rating_desc": Task.rating.desc().nullslast(),
         "title_asc": Task.title.asc().nullslast(),
         "favorite_desc": Task.is_favorite.desc(),
+        # N12: 派生优先级（想看>高分>新作）
+        "priority": (case((Task.view_status == "want", 3), (Task.rating >= 8, 2), (Task.rating >= 6, 1), else_=0).desc(), Task.rating.desc().nullslast()),
     }
     stmt = stmt.order_by(sort_map.get(sort, Task.created_at.desc()))
 

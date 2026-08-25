@@ -27,6 +27,7 @@ const Downloads   = lazy(() => import('./pages/Downloads').then(m => ({ default:
 const Settings    = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
 const Analytics = lazy(() => import('./pages/Analytics').then(m => ({ default: m.Analytics })))
+const Status = lazy(() => import('./pages/Status').then(m => ({ default: m.Status })))
 import { AskOverlay } from './components/AskOverlay'
 const TaskDetail  = lazy(() => import('./pages/TaskDetail').then(m => ({ default: m.TaskDetail })))
 
@@ -131,6 +132,7 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
 <Route path="/notifications" element={<Notifications />} />
 <Route path="/analytics" element={<Analytics />} />
+<Route path="/status" element={<Status />} />
             <Route path="/task/:id" element={<TaskDetail />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

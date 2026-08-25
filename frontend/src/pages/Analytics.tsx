@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { PageHead, Loading } from '../components/States'
+import { useStore } from '../store/useStore'
+
+const useToastOk = () => useStore((st) => st.toastOk)
+const useToastErr = () => useStore((st) => st.toastErr)
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -185,6 +189,45 @@ function RankingPanel() {
   )
 }
 
+function GapsPanel() {
+  const [d, setD] = useState<Awaited<ReturnType<typeof api.wishlistGaps>> | null>(null)
+  const [busy, setBusy] = useState(false)
+  const toastOk = useToastOk()
+  const toastErr = useToastErr()
+  useEffect(() => {
+    let alive = true
+    api.wishlistGaps().then((r) => { if (alive) setD(r) }).catch(() => setD(null))
+    return () => { alive = false }
+  }, [])
+  if (!d) return <Panel title="观看缺口"><Loading /></Panel>
+  const pushAll = async () => {
+    const ids = d.items.filter((i) => i.has_magnet).map((i) => i.task_id)
+    if (ids.length === 0) return
+    setBusy(true)
+    try {
+      const r = await api.tasks.batchPush(ids)
+      toastOk(`已推送 ${r.pushed} 项${r.skipped ? `，跳过 ${r.skipped}` : ''}`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    setBusy(false)
+  }
+  return (
+    <Panel title={`观看缺口 · ${d.total} 部想看`}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {d.items.slice(0, 10).map((t) => (
+          <span key={t.task_id} style={{ fontSize: 11, border: '1px solid var(--line, #eee)', borderRadius: 99, padding: '2px 8px' }}>
+            {t.video_code}
+            {!t.has_magnet && <span style={{ color: 'var(--red, #dc2626)' }}> ⚠无磁力</span>}
+          </span>
+        ))}
+        {d.items.length === 0 && <span style={{ fontSize: 11, color: 'var(--t-mute)' }}>没有想看但未下载的作品</span>}
+      </div>
+      <button className="btn btn--gold btn--sm" onClick={pushAll} disabled={busy}>
+        {busy ? '推送中…' : '批量推送可下载项'}
+      </button>
+    </Panel>
+  )
+}
+
 export function Analytics() {
   return (
     <div className="page">
@@ -198,6 +241,7 @@ export function Analytics() {
         <CrawlPanel />
         <NotifyPanel />
         <RankingPanel />
+        <GapsPanel />
       </div>
     </div>
   )

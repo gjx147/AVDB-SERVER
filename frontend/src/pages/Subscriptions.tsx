@@ -120,6 +120,14 @@ export function Subscriptions() {
   }
   useEffect(() => { load() }, [])
 
+  // N9: 演员状态徽标（最后作品距今，休止/久无新作检测）
+  const [statusMap, setStatusMap] = useState<Record<number, { last_release: string; days_since: number | null }>>({})
+  useEffect(() => {
+    const ids = (subs ?? []).filter((x) => x.sub_type === 'actor' && x.actor_id).map((x) => x.actor_id as number)
+    if (ids.length === 0) return
+    api.actorStatusSummary(ids.join(',')).then((r) => setStatusMap(r.items)).catch(() => {})
+  }, [subs])
+
   const toggle = async (s: Subscription) => {
     try {
       const r = await api.subscriptions.toggle(s.id)
@@ -227,6 +235,13 @@ export function Subscriptions() {
                 <div className="sub-meta">
                   <span className="chip chip-rose">{TYPE_LABEL[s.sub_type] || s.sub_type}</span>
                   {s.auto_add && <span className="chip chip-amber">自动下载</span>}
+                  {s.sub_type === 'actor' && s.actor_id && statusMap[s.actor_id]?.days_since != null && (
+                    statusMap[s.actor_id].days_since! > 180
+                      ? <span className="chip" style={{ background: '#fee2e2', color: '#b91c1c', fontSize: 10 }}>休止?</span>
+                      : statusMap[s.actor_id].days_since! > 90
+                        ? <span className="chip chip-amber" style={{ fontSize: 10 }}>久无新作</span>
+                        : null
+                  )}
                   {s.actor_id != null && filledIds.has(s.actor_id) && <span className="chip chip-green">已补齐</span>}
                   {filling && s.actor_id != null && fillStatus?.current_actor_id === s.actor_id && <span className="chip chip-blue">补齐中…</span>}
                 </div>

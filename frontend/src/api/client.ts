@@ -501,6 +501,18 @@ export const api = {
   rankingTrends: (days = 14) =>
     http.get<{ ok: boolean; days: number; top_risers: { code: string; days: number; best: number; from: number; to: number; change: number }[]; top_on_chart: { code: string; days: number; best: number }[] }>(
       '/api/insights/ranking-trends', { params: { days } }).then((r) => r.data),
+  actorStatusSummary: (ids: string) =>
+    http.get<{ ok: boolean; items: Record<number, { last_release: string; days_since: number | null }> }>(
+      `/api/actors/status-summary?ids=${ids}`).then((r) => r.data),
+  importMagnets: (text: string) =>
+    http.post<{ ok: boolean; added: number; skipped: number; total: number; message?: string }>(
+      '/api/import/magnets', { text }).then((r) => r.data),
+  wishlistGaps: (limit = 50) =>
+    http.get<{ ok: boolean; total: number; items: { task_id: number; video_code: string | null; title: string | null; rating: number | null; has_magnet: boolean; in_library: boolean }[] }>(
+      '/api/tasks/wishlist-gaps', { params: { limit } }).then((r) => r.data),
+  systemStatus: () =>
+    http.get<{ ok: boolean; jobs: { id: string; next_run: string }[]; queue: { pending: number; failed: number }; active_downloads: number; errors_24h: { crawl: number; notify: number }; backups: { name: string; size_mb: number }[]; server_time: string }>(
+      '/api/system/status').then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(

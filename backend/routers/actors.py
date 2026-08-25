@@ -433,3 +433,32 @@ def actor_insights(actor_id: int, db: DbSession, _user: CurrentUser):
         "years": [{"year": k, "count": v} for k, v in sorted(years.items())],
         "co_stars": [{"name": k, "count": v} for k, v in co.most_common(10)],
     }
+
+
+@router.get("/status-summary")
+def actor_status_summary(ids: str = Query("", description="逗号分隔的 actor_id 列表"), db: DbSession = None, _user: CurrentUser = None):
+    """N9: 批量返回演员状态（最后作品日期/距今天数），用于订阅页休止徽标。"""
+    from datetime import datetime
+    from models import ActorMovie
+
+    parsed = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if not parsed:
+        return {"ok": True, "items": {}}
+    rows = db.execute(
+        select(ActorMovie.actor_id, Task.release_date)
+        .join(Task, Task.id == ActorMovie.task_id)
+        .where(ActorMovie.actor_id.in_(parsed), Task.release_date.isnot(None))
+        .order_by(Task.release_date.desc())
+    ).all()
+    items: dict[int, dict] = {}
+    now = datetime.utcnow()
+    for aid, rd in rows:
+        if aid in items:
+            continue
+        days = None
+        try:
+            days = (now - datetime.strptime(str(rd)[:10], "%Y-%m-%d")).days
+        except Exception:
+            pass
+        items[aid] = {"last_release": str(rd)[:10], "days_since": days}
+    return {"ok": True, "items": items}

@@ -442,3 +442,21 @@ def dedupe_tasks(db: DbSession, _user: CurrentAdmin, dry_run: bool = Query(True)
         deleted += len(dup_ids)
     db.commit()
     return {"ok": True, "dry_run": False, "groups": len(plan), "deleted": deleted}
+
+
+@router.get("/wishlist-gaps")
+def wishlist_gaps(db: DbSession, _user: CurrentUser, limit: int = Query(50, le=100)):
+    """N13: 观看缺口清单——想看（want）但无磁力或不在库的作品，可批量推送。"""
+    rows = db.execute(
+        select(Task).where(Task.view_status == "want")
+        .order_by(Task.rating.desc().nullslast(), Task.release_date.desc().nullslast())
+        .limit(limit)
+    ).scalars().all()
+    items = [
+        {
+            "task_id": t.id, "video_code": t.video_code, "title": t.title, "rating": t.rating,
+            "has_magnet": bool(t.best_magnet), "in_library": bool(t.media_in_library),
+        }
+        for t in rows
+    ]
+    return {"ok": True, "total": len(items), "items": items}

@@ -107,6 +107,17 @@ export function Settings() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // ── N11 磁力导入 ──
+  const [magText, setMagText] = useState('')
+  const importMagnets = async () => {
+    if (!magText.trim()) return
+    try {
+      const r = await api.importMagnets(magText)
+      toastOk(`已导入 ${r.added} 个磁力${r.skipped ? `，跳过 ${r.skipped} 个重复` : ''}`)
+      if (r.ok) setMagText('')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
   // ── F7 下载自动整理配置 ──
   const [orgCfg, setOrgCfg] = useState<Record<string, string>>({
     organize_enabled: 'false', organize_target_dir: '', organize_naming: '{code} - {title}',
@@ -220,6 +231,12 @@ export function Settings() {
                     <textarea className="input" rows={3} placeholder={'每行一个番号，例如:\nABC-123\nXYZ-789'} value={codesText}
                       onChange={(e) => setCodesText(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }} />
                     <button className="btn btn--gold btn--sm" onClick={importCodes} style={{ marginTop: 8 }} disabled={!codesText.trim()}>批量导入番号</button>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <textarea className="input" rows={3} placeholder={'粘贴磁力链接（可多行，自动去重）'}
+                      value={magText} onChange={(e) => setMagText(e.target.value)}
+                      style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }} />
+                    <button className="btn btn--gold btn--sm" onClick={importMagnets} style={{ marginTop: 8 }} disabled={!magText.trim()}>批量导入磁力</button>
                   </div>
                 </div>
                 <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 14, marginTop: 14 }}>

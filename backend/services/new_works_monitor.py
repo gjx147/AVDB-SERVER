@@ -300,10 +300,27 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             from services.notifier import notify
             codes = [nr.video_code for nr in truly_new]
             try:
+                # N10: 附同厂牌已收藏高分作品（相似推荐）
+                _rec = ""
+                try:
+                    _first_maker = db.execute(
+                        select(Task.maker).where(Task.video_code.in_(codes), Task.maker.isnot(None))
+                    ).scalars().first()
+                    if _first_maker:
+                        _favs = db.execute(
+                            select(Task.video_code, Task.rating)
+                            .where(Task.maker == _first_maker, Task.rating.isnot(None),
+                                   Task.view_status.in_(["viewed", "want"]))
+                            .order_by(Task.rating.desc()).limit(3)
+                        ).all()
+                        if _favs:
+                            _rec = "\n相似收藏: " + " / ".join(f"{c}({r})" for c, r in _favs)
+                except Exception:
+                    pass
                 await notify(
                     "new_works",
                     f"{actor.name} 新作品",
-                    f"新增 {len(truly_new)} 部: {', '.join(codes[:5])}"
+                    f"新增 {len(truly_new)} 部: {', '.join(codes[:5])}{_rec}"
                     + ("…" if len(codes) > 5 else ""),
                 )
             except Exception as e:

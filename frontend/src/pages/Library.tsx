@@ -271,6 +271,7 @@ export function Library() {
           <option value="rating_desc">评分最高</option>
           <option value="title_asc">标题排序</option>
           <option value="favorite_desc">收藏优先</option>
+          <option value="priority">优先级（想看优先）</option>
         </select>
         <div className="seg">
           <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>画廊</button>

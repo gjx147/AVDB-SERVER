@@ -122,3 +122,52 @@ def app_logs(_user: CurrentAdmin, limit: int = 100, filter: str = "", file: str 
         return {"lines": lines[-limit:], "total": len(lines), "file": filename}
     except Exception as e:
         return {"lines": [], "total": 0, "error": str(e), "file": filename}
+
+
+@router.get("/status")
+def system_status(db: DbSession, _user: CurrentUser):
+    """N14: 系统状态全景——调度任务/队列/活跃下载/最近错误/备份。"""
+    from datetime import datetime, timedelta
+    from models import CrawlLog, Download, NotifyLog, Task
+
+    jobs = []
+    try:
+        from services.scheduler import list_jobs
+        jobs = list_jobs()
+    except Exception:
+        pass
+
+    now = datetime.utcnow()
+    day_ago = now - timedelta(hours=24)
+    pending = db.execute(select(Task.id).where(Task.status == "pending")).all()
+    failed = db.execute(select(Task.id).where(Task.status == "failed")).all()
+    active_dl = db.execute(
+        select(Download.id).where(Download.status.in_(["pushed", "downloading"]))
+    ).all()
+    crawl_err = db.execute(
+        select(CrawlLog.id).where(CrawlLog.created_at >= day_ago, CrawlLog.level.in_(["error", "warn"]))
+    ).all()
+    notify_fail = db.execute(
+        select(NotifyLog.id).where(NotifyLog.created_at >= day_ago, NotifyLog.ok == False)  # noqa: E712
+    ).all()
+
+    backups = []
+    try:
+        from config import get_settings
+        import os
+        bdir = os.path.join(get_settings().DATA_DIR, "backups")
+        if os.path.isdir(bdir):
+            files = sorted(os.listdir(bdir), reverse=True)[:5]
+            backups = [{"name": f, "size_mb": round(os.path.getsize(os.path.join(bdir, f)) / 1048576, 1)} for f in files if os.path.isfile(os.path.join(bdir, f))]
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "jobs": jobs,
+        "queue": {"pending": len(pending), "failed": len(failed)},
+        "active_downloads": len(active_dl),
+        "errors_24h": {"crawl": len(crawl_err), "notify": len(notify_fail)},
+        "backups": backups,
+        "server_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+    }
