@@ -23,6 +23,21 @@ from config import get_settings
 
 logger = logging.getLogger("avdb.downloaders.cd2")
 
+# T13: 模块级复用 httpx 客户端（避免每次 gRPC-Web 调用新建连接）
+_cd2_http_client: httpx.AsyncClient | None = None
+
+
+def _get_cd2_client() -> httpx.AsyncClient:
+    """复用 CD2 HTTP 客户端（verify 配置在首次创建时固定，变更需重启）。"""
+    global _cd2_http_client
+    if _cd2_http_client is None:
+        _cd2_http_client = httpx.AsyncClient(
+            timeout=30,
+            verify=get_settings().CD2_SSL_VERIFY,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+    return _cd2_http_client
+
 
 # ── protobuf 编码 ─────────────────────────────────────────────
 
@@ -103,13 +118,12 @@ async def grpc_web_call(base: str, method: str, payload: bytes, token: str = "")
     # 安全修复(F5)：TLS 证书校验改为读取配置 CD2_SSL_VERIFY（默认 False 兼容自签证书）。
     # 生产/公网环境必须设置 CD2_SSL_VERIFY=true，否则 CD2 登录口令
     # （明文走 GetToken）存在被中间人窃听的风险。
-    verify_tls = get_settings().CD2_SSL_VERIFY
-    async with httpx.AsyncClient(timeout=30, verify=verify_tls) as c:
-        r = await c.post(url, content=frame, headers=headers)
-        data, grpc_status = parse_grpc_web_response(r.content)
-        if not grpc_status:
-            grpc_status = r.headers.get("grpc-status", "")
-        return data, grpc_status, r.status_code
+    c = _get_cd2_client()
+    r = await c.post(url, content=frame, headers=headers)
+    data, grpc_status = parse_grpc_web_response(r.content)
+    if not grpc_status:
+        grpc_status = r.headers.get("grpc-status", "")
+    return data, grpc_status, r.status_code
 
 
 # ── protobuf 解析（按字段提取，简单实现，不处理嵌套） ─────────

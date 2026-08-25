@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,12 +40,25 @@ class Settings(BaseSettings):
     # 若设为 true 则跳过鉴权（本地开发/内网）
     AUTH_DISABLED: bool = False
 
+    @model_validator(mode="after")
+    def _validate_auth_disabled(self):
+        """T7: AUTH_DISABLED 仅允许在 DEBUG=true 时开启（防止误配置导致全站裸奔）。"""
+        if self.AUTH_DISABLED and not self.DEBUG:
+            raise ValueError("AUTH_DISABLED 仅允许在 DEBUG=true 时开启（安全保护）")
+        return self
+
     # --- CD2（云盘客户端）---
     # 是否校验 CD2 gRPC-Web 的 TLS 证书；默认 False 保持现状（兼容自签证书环境）。
     # 生产/公网环境应设为 True，防止 CD2 登录口令在传输中被中间人窃听。
     CD2_SSL_VERIFY: bool = False
 
+    # --- 115 云盘 ---
+    # 115 开放平台 client_id（需实际申请；占位值仅本地调试）
+    DRIVE115_CLIENT_ID: str = "AVDB-SERVER"
+
     # --- 爬虫 ---
+    # 是否在启动时预热 Playwright 浏览器（NAS 低内存环境可关闭，按需启动）
+    BROWSER_PREWARM: bool = True
     JAVDB_URL: str = "https://javdb.com"
     SCRAPER_PYTHON: str = ""  # 空=用当前 python
 

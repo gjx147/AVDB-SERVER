@@ -90,7 +90,10 @@ async def lifespan(app: FastAPI):
     # 启动浏览器池（按需启动，首次 acquire 时才真正 launch）
     from services.browser_pool import browser_pool
     try:
-        await browser_pool.start()
+        if get_settings().BROWSER_PREWARM:
+            await browser_pool.start()
+        else:
+            logger.info("BROWSER_PREWARM=false，浏览器按需启动")
     except Exception as e:
         logger.warning(f"浏览器池启动失败（按需重试）: {e}")
     # 启动调度中心

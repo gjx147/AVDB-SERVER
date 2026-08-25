@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -26,7 +27,8 @@ logger = logging.getLogger("avdb.drive115")
 _AUTH_BASE = "https://passportapi.115.com"
 _API_BASE = "https://proapi.115.com"
 _QRCODE_BASE = "https://qrcodeapi.115.com"
-_CLIENT_ID = "AVDB-SERVER"  # 115 开放平台 client_id（需实际申请，这里占位）
+# T10: client_id 配置化（config.DRIVE115_CLIENT_ID，需实际申请）
+_CLIENT_ID = None  # 惰性初始化，见 _get_client_id()
 
 
 def _get_setting(db, key: str) -> str:
@@ -59,7 +61,7 @@ async def init_device_auth() -> dict:
     finally:
         db.close()
     payload = {
-        "client_id": _CLIENT_ID,
+        "client_id": _get_client_id(),
         "code_challenge": challenge,
         "code_challenge_method": "sha256",
     }
@@ -110,6 +112,19 @@ async def exchange_token(uid: str) -> dict:
         return {"error": str(e)}
 
 
+def _get_client_id() -> str:
+    """读取 115 client_id（配置化；未配置时回退占位值）。"""
+    global _CLIENT_ID
+    if _CLIENT_ID is None:
+        from config import get_settings
+        _CLIENT_ID = get_settings().DRIVE115_CLIENT_ID or "AVDB-SERVER"
+    return _CLIENT_ID
+
+
+# T10: token 刷新单飞锁（并发请求同时发现过期时只刷新一次，避免 refresh_token 互踢）
+_refresh_lock = asyncio.Lock()
+
+
 async def _get_valid_token() -> str | None:
     """获取有效 token（过期则用 refresh_token 刷新）。"""
     db = SessionLocal()
@@ -124,9 +139,19 @@ async def _get_valid_token() -> str | None:
     # 检查过期
     if expires and int(expires) < int(time.time()) + 60:
         if refresh:
-            new_token = await _refresh_token(refresh)
-            if new_token:
-                return new_token
+            async with _refresh_lock:
+                # 锁内二次检查：等待期间其他协程可能已完成刷新
+                _db2 = SessionLocal()
+                try:
+                    _t2 = _get_setting(_db2, "drive115_access_token")
+                    _e2 = _get_setting(_db2, "drive115_expires_at")
+                finally:
+                    _db2.close()
+                if _t2 and _e2 and int(_e2) >= int(time.time()) + 60:
+                    return _t2
+                new_token = await _refresh_token(refresh)
+                if new_token:
+                    return new_token
         return None
     return token
 

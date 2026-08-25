@@ -28,6 +28,9 @@ _WATCHDOG_INTERVAL = 60
 
 # 全局单例（lifespan 启动时创建，shutdown 时关闭）
 _scheduler: AsyncIOScheduler | None = None
+# T12: 停止标记——stop 后再次 get_scheduler() 创建新实例时自动启动，
+# 避免 job 注册到永不启动的调度器上静默不执行
+_stopped = False
 
 
 def _watchdog_reap_crawl() -> None:
@@ -47,7 +50,7 @@ def _watchdog_reap_crawl() -> None:
 
 def get_scheduler() -> AsyncIOScheduler:
     """获取调度器单例（未启动时自动创建）。"""
-    global _scheduler
+    global _scheduler, _stopped
     if _scheduler is None:
         _scheduler = AsyncIOScheduler(
             job_defaults={
@@ -57,6 +60,11 @@ def get_scheduler() -> AsyncIOScheduler:
             },
             timezone="Asia/Shanghai",
         )
+        if _stopped:
+            # T12: 停止后重建的实例自动启动，保证新注册的 job 真正执行
+            _stopped = False
+            _scheduler.start()
+            logger.warning("调度器已停止后重新创建，已自动启动")
     return _scheduler
 
 
@@ -77,11 +85,12 @@ async def start_scheduler() -> None:
 
 async def stop_scheduler() -> None:
     """关闭调度器（在 lifespan shutdown 调用）。"""
-    global _scheduler
+    global _scheduler, _stopped
     if _scheduler and _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("调度中心已关闭")
     _scheduler = None
+    _stopped = True
 
 
 def add_interval_job(

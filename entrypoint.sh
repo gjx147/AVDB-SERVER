@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e  # T8: 任何步骤失败立即退出，避免 chown 失败后继续启动
 # AVDB-SERVER 启动入口
 # 以 root 启动，修复 /app/data 权限后降权到 appuser 执行
 

@@ -109,7 +109,7 @@ def batch_retry(task_ids: list[int], db: DbSession, _user: CurrentUser):
     updated = db.execute(
         Task.__table__.update().where(
             Task.id.in_(task_ids), Task.status == "failed"
-        ).values(status="pending", retry_count=0)
+        ).values(status="pending")  # T11: 不重置 retry_count，避免与 auto_retry 构成无限重试
     ).rowcount
     db.commit()
     return {"ok": True, "updated": updated}
