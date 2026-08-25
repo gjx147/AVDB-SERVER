@@ -177,7 +177,9 @@ export function Dashboard() {
 function HeatmapCard() {
   const [heat, setHeat] = useState<Record<string, { favorites: number; downloads: number }> | null>(null)
   useEffect(() => {
-    api.activityHeatmap(180).then((r) => setHeat(r.days)).catch(() => setHeat({}))
+    let alive = true
+    api.activityHeatmap(180).then((r) => { if (alive) setHeat(r.days) }).catch(() => { if (alive) setHeat({}) })
+    return () => { alive = false }
   }, [])
   const items = heat ? Object.entries(heat).sort((a, b) => a[0].localeCompare(b[0])).slice(-180) : []
   if (!heat || items.length === 0) return null
@@ -231,7 +233,9 @@ function RecommendationsCard() {
   const [reason, setReason] = useState<Record<number, { text: string; loading: boolean }>>({})
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    api.recommendations().then((r) => setRecs(r.items)).catch(() => setRecs([]))
+    let alive = true
+    api.recommendations().then((r) => { if (alive) setRecs(r.items) }).catch(() => { if (alive) setRecs([]) })
+    return () => { alive = false }
   }, [])
   if (!recs || recs.length === 0) return null
   const genReason = async (t: { task_id: number; video_code: string | null }) => {
@@ -281,7 +285,9 @@ function RecommendationsCard() {
 function YearlyReportCard() {
   const [rep, setRep] = useState<{ year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; monthly: number[] } | null>(null)
   useEffect(() => {
-    api.yearlyReport().then(setRep).catch(() => setRep(null))
+    let alive = true
+    api.yearlyReport().then((r) => { if (alive) setRep(r) }).catch(() => { if (alive) setRep(null) })
+    return () => { alive = false }
   }, [])
   if (!rep || rep.stats.added === 0) return null
   const maxMonth = Math.max(...rep.monthly, 1)

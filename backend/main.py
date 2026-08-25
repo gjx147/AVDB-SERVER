@@ -288,8 +288,6 @@ def login(
 # --- 前端 SPA 静态文件服务 ---
 # 静态文件最后挂载（否则会覆盖 API 路由）。
 # frontend/dist 在容器内为 /app/frontend/dist，本地开发为项目根 frontend/dist。
-from pathlib import Path  # noqa: E402
-from fastapi.responses import FileResponse, Response  # noqa: E402
 from starlette.staticfiles import StaticFiles  # noqa: E402
 
 # ── WebSocket：爬取实时进度推送 ──

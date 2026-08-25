@@ -123,7 +123,12 @@ async def trigger_organize(dl_id: int, info_hash: str | None = None) -> dict:
             return {"ok": False, "message": "未配置整理目录"}
         qb_config = {k: _get_setting(db, k) for k in ("qb_url", "qb_username", "qb_password")}
         template = _get_setting(db, "organize_naming") or "{code} - {title}"
-        ok, msg = await asyncio.to_thread(_organize_one, db, dl, qb_config, Path(target), template)
+        # 打磨：qB 登录/查询等异常兜底，避免后台任务静默失败
+        try:
+            ok, msg = await asyncio.to_thread(_organize_one, db, dl, qb_config, Path(target), template)
+        except Exception as e:
+            logger.error("整理异常 dl_id=%s: %s", dl_id, e)
+            ok, msg = False, f"整理异常: {str(e)[:200]}"
         try:
             from models import NotifyLog
             db.add(NotifyLog(

@@ -47,11 +47,18 @@ export function AskOverlay() {
         {res && (
           <>
             <div style={{ fontSize: 11, color: 'var(--t-mute)', margin: '6px 0' }}>找到 {res.total} 部</div>
+            {res.total === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--t-mute)', textAlign: 'center', padding: '16px 0' }}>
+                没有找到匹配的作品，换个说法试试（如：8 分以上 / 巨乳 / ABC-123）
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {res.items.map((t) => (
                 <div key={t.task_id} style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid var(--line, #eee)', borderRadius: 8, padding: 6, fontSize: 12 }}>
                   {t.poster_url
-                    ? <img src={t.poster_url} alt="" style={{ width: 30, height: 42, objectFit: 'cover', borderRadius: 4 }} loading="lazy" referrerPolicy="no-referrer" />
+                    ? <img src={t.poster_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+                        onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                        style={{ width: 30, height: 42, objectFit: 'cover', borderRadius: 4 }} />
                     : <div style={{ width: 30, height: 42, background: 'var(--bg-raised, #f3f4f6)', borderRadius: 4 }} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div>{t.video_code}{t.rating ? <span style={{ color: 'var(--gold, #d97706)' }}> {t.rating}</span> : null}</div>

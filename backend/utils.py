@@ -30,26 +30,5 @@ def set_setting(db: Session, key: str, value: str) -> None:
     db.commit()
 
 
-def get_or_404(db: Session, model, obj_id: int, name: str = "资源"):
-    """通用 get + 404 模式（原来在 20+ 个 router 端点中重复）。
-
-    Usage:
-        task = get_or_404(db, Task, task_id, "任务")
-        actor = get_or_404(db, Actor, actor_id, "演员")
-    """
-    obj = db.get(model, obj_id)
-    if obj is None:
-        raise HTTPException(status_code=404, detail=f"{name}不存在")
-    return obj
-
-
-def paginate(db: Session, stmt, pagination: tuple[int, int]):
-    """通用分页查询（原来在 6 个 router 中重复）。
-
-    Returns (total, items).
-    """
-    from sqlalchemy import func, select
-    offset, limit = pagination
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    items = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
-    return total, items
+# 注：get_or_404 / paginate 曾在 Phase 3 提取，但各 router 仍手写实现，
+# 两个函数当前全项目无引用（2026-08 审查确认），已移除；如需推广请先在调用点接入。
