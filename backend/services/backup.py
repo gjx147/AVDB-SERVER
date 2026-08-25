@@ -58,15 +58,33 @@ async def run_backup(retention_days: int = 7) -> dict:
     try:
         # SQLite 在线热备份 API（阻塞调用放线程池，避免卡事件循环）
         await asyncio.to_thread(_sqlite_backup, str(db_path), str(backup_path))
+        # T9: 备份加密（Fernet，密钥由 SECRET_KEY 派生；开启后生成 .enc 并删除明文）
+        if get_settings().BACKUP_ENCRYPT:
+            from cryptography.fernet import Fernet
+            import base64
+            import hashlib
+
+            secret = get_settings().SECRET_KEY
+            if not secret:
+                logger.warning("BACKUP_ENCRYPT=true 但 SECRET_KEY 为空，跳过加密（备份保持明文）")
+            else:
+                key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+                enc_path = backup_dir / f"javdb-{timestamp}.db.enc"
+                with open(backup_path, "rb") as src, open(enc_path, "wb") as dst:
+                    dst.write(b"AVDBENC1")
+                    dst.write(Fernet(key).encrypt(src.read()))
+                backup_path.unlink()
+                backup_path = enc_path
+                logger.info("数据库备份已加密: %s", enc_path.name)
         logger.info("数据库备份完成: %s (%d KB)", backup_path.name, backup_path.stat().st_size // 1024)
     except Exception as e:
         logger.error("数据库备份失败: %s", e)
         return {"ok": False, "message": str(e)}
 
-    # 清理旧备份
+    # 清理旧备份（明文 .db 与加密 .enc 都清理）
     deleted = 0
     cutoff = datetime.utcnow().timestamp() - retention_days * 86400
-    for f in backup_dir.glob("javdb-*.db"):
+    for f in list(backup_dir.glob("javdb-*.db")) + list(backup_dir.glob("javdb-*.db.enc")):
         if f.stat().st_mtime < cutoff:
             f.unlink()
             deleted += 1

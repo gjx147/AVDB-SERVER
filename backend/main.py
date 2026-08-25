@@ -249,6 +249,7 @@ def _check_login_rate(ip: str) -> None:
 @app.post("/api/auth/login")
 def login(
     request: Request,
+    response: Response,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
@@ -269,6 +270,13 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token(user.username)
+    # T16: 同时下发 httpOnly Cookie（SameSite=Lax；HTTPS 时标记 Secure），
+    # 图片/WS 等无法携带 Header 的请求可走 Cookie 通道
+    response.set_cookie(
+        "avdb_token", token,
+        httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+        secure=request.url.scheme == "https",
+    )
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -303,7 +311,7 @@ async def crawl_progress_ws(websocket: WebSocket):
     # 避免本地开发无 token 时爬取控制台 WebSocket 连不上。
     from config import get_settings
     if not get_settings().AUTH_DISABLED:
-        _token = websocket.query_params.get("token", "")
+        _token = websocket.query_params.get("token", "") or websocket.cookies.get("avdb_token", "")
         if not _token:
             await websocket.close(code=4401)
             return

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -26,9 +26,10 @@ Pagination = Annotated[tuple[int, int], Depends(get_pagination)]
 
 
 def get_current_user(
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> str:
-    """从 Authorization: Bearer <token> 解析当前用户名。
+    """解析当前用户名：优先 Authorization: Bearer <token>，其次 httpOnly Cookie avdb_token（T16）。
 
     AUTH_DISABLED 时直接放行。
     """
@@ -38,13 +39,17 @@ def get_current_user(
     if settings.AUTH_DISABLED:
         return "anonymous"
 
-    if not authorization or not authorization.startswith("Bearer "):
+    token = ""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        token = request.cookies.get("avdb_token", "")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="缺少有效的 Authorization 头",
+            detail="缺少有效的 Authorization 头或登录 Cookie",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = authorization.removeprefix("Bearer ").strip()
     username = decode_token(token)
     if username is None:
         raise HTTPException(
@@ -59,6 +64,7 @@ CurrentUser = Annotated[str, Depends(get_current_user)]
 
 
 def get_current_user_header_or_query(
+    request: Request,
     authorization: str | None = Header(default=None),
     token: str | None = Query(default=None),
 ) -> str:
@@ -73,9 +79,11 @@ def get_current_user_header_or_query(
     if settings.AUTH_DISABLED:
         return "anonymous"
 
-    # 优先 Authorization 头，其次 query 参数 token
+    # 优先 Authorization 头，其次 query 参数 token，再次 httpOnly Cookie（T16）
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        token = request.cookies.get("avdb_token", "")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

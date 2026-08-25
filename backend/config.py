@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # 生产/公网环境应设为 True，防止 CD2 登录口令在传输中被中间人窃听。
     CD2_SSL_VERIFY: bool = False
 
+    # --- 备份 ---
+    # 数据库备份加密（Fernet，密钥由 SECRET_KEY 派生）；默认关保持兼容既有明文备份
+    BACKUP_ENCRYPT: bool = False
+
     # --- 115 云盘 ---
     # 115 开放平台 client_id（需实际申请；占位值仅本地调试）
     DRIVE115_CLIENT_ID: str = "AVDB-SERVER"

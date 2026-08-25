@@ -173,6 +173,11 @@ def hires_download(task_id: int, db: DbSession, _user: CurrentUserHeaderOrQuery)
         thumb_urls = filtered
     poster_url = task.poster_url
 
+    # T20: 预览图下载上限（避免单次请求耗时数分钟）
+    MAX_THUMBS = 12
+    if len(thumb_urls) > MAX_THUMBS:
+        thumb_urls = thumb_urls[:MAX_THUMBS]
+
     total_found = len(thumb_urls) + (1 if poster_url else 0)
     if total_found == 0:
         raise HTTPException(status_code=400, detail="任务无图片 URL（需先爬取详情页）")
