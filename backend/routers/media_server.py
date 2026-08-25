@@ -22,6 +22,13 @@ async def sync(_user: CurrentUser, limit: int = Query(200, le=1000), force: bool
     return await sync_library_status(limit, force=force)
 
 
+@router.post("/sync-view-progress")
+async def sync_view_progress(_user: CurrentAdmin):
+    """F10: 拉取 Emby 播放进度，>90% 的自动标记本地已看。"""
+    from services.media_server import sync_view_progress as _sync
+    return await _sync()
+
+
 @router.get("/test")
 async def test(_user: CurrentUser):
     """测试 Emby 连接（用 settings 表配置）。"""

@@ -240,4 +240,77 @@ def register_job() -> None:
     """注册每日定时同步到调度中心。"""
     from services.scheduler import add_interval_job
     add_interval_job(run_scheduled_sync, "media-library-sync", seconds=24 * 3600)
-    logger.info("媒体库定时同步已注册: 每 24h")
+    # F10: 观看进度同步（每 6 小时，播放记录更新及时反映）
+    async def _view_sync_wrapper() -> dict:
+        return await sync_view_progress()
+    add_interval_job(_view_sync_wrapper, "emby-view-progress-sync", seconds=6 * 3600)
+    logger.info("媒体库定时同步已注册: 在库 24h / 观看进度 6h")
+
+
+async def sync_view_progress(threshold: float = 90.0, limit: int = 500) -> dict:
+    """F10: 从 Emby 拉取媒体库播放进度，已观看（>threshold%）的自动标记本地已看。"""
+    from sqlalchemy import select
+
+    from database import SessionLocal
+    from models import Task
+
+    config = await _get_config()
+    url = config.get("emby_url", "").rstrip("/")
+    token = config.get("emby_token", "")
+    if not url or not token:
+        return {"ok": False, "message": "未配置 Emby"}
+    headers = {"X-Emby-Token": token}
+    params = {"Recursive": "true", "Fields": "Path,PlayedPercentage", "Limit": limit}
+
+    # API Key 无用户上下文：先取第一个用户 id 再查其进度
+    user_id = ""
+    try:
+        async with httpx.AsyncClient(timeout=15, verify=False) as c:
+            r = await c.get(f"{url}/emby/Users", headers=headers)
+            users = r.json() if r.status_code == 200 else []
+            if users:
+                user_id = str(users[0].get("Id", ""))
+    except Exception:
+        pass
+
+    rows_all: list[dict] = []
+    async with httpx.AsyncClient(timeout=30, verify=False) as client:
+        for lib in _library_ids(config) or [None]:
+            p = dict(params)
+            if lib:
+                p["ParentId"] = lib
+            base = f"{url}/emby/Users/{user_id}/Items" if user_id else f"{url}/emby/Items"
+            try:
+                r = await client.get(base, headers=headers, params=p)
+                if r.status_code == 200:
+                    rows_all.extend(r.json().get("Items", []))
+            except Exception as e:
+                logger.warning(f"Emby 进度查询失败({lib}): {e}")
+
+    watched = [it for it in rows_all if (it.get("PlayedPercentage") or 0) >= threshold]
+    if not watched:
+        return {"ok": True, "scanned": len(rows_all), "watched": 0, "marked": 0}
+
+    codes: set[str] = set()
+    for it in watched:
+        codes.update(_extract_codes_from_item(it))
+    if not codes:
+        return {"ok": True, "scanned": len(rows_all), "watched": len(watched), "marked": 0}
+
+    db = SessionLocal()
+    try:
+        tasks = db.execute(
+            select(Task).where(
+                Task.video_code.in_(codes),
+                (Task.view_status.is_(None) | (Task.view_status != "viewed")),
+            )
+        ).scalars().all()
+        marked = 0
+        for t in tasks:
+            t.view_status = "viewed"
+            marked += 1
+        db.commit()
+        logger.info("Emby 观看进度同步：%d 条已看（库内匹配 %d）", len(watched), marked)
+        return {"ok": True, "scanned": len(rows_all), "watched": len(watched), "marked": marked}
+    finally:
+        db.close()

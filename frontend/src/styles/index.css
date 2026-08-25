@@ -14,3 +14,15 @@
 @import './polish.css';
 @import './motion.css';
 @import './eros.css';
+
+
+/* ── F9 移动端适配 ── */
+@media (max-width: 720px) {
+  .gallery-toolbar { flex-wrap: wrap; gap: 8px; }
+  .gallery-toolbar .search { flex: 1 1 100%; }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
+  .settings-layout { grid-template-columns: 1fr; }
+  .sidebar { width: 250px; }
+  .page { padding: 14px; }
+  .card { padding: 14px 16px; }
+}

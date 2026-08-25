@@ -1,0 +1,13 @@
+{
+  "name": "AVDB 影片库",
+  "short_name": "AVDB",
+  "description": "自托管个人媒体库管理",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101b3a",
+  "theme_color": "#101b3a",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
