@@ -113,6 +113,10 @@ export const api = {
 
     batchFavorite: (task_ids: number[]) =>
       http.post<ApiOk>('/api/tasks/batch/favorite', task_ids).then((r) => r.data),
+    batchView: (task_ids: number[], status = 'viewed') =>
+      http.post<{ ok: boolean; updated: number }>('/api/tasks/batch-view', { task_ids, status }).then((r) => r.data),
+    batchPush: (task_ids: number[]) =>
+      http.post<{ ok: boolean; pushed: number; skipped: number }>('/api/tasks/batch-push', { task_ids }).then((r) => r.data),
 
     stats: (list_source_id?: number) =>
       http.get<TaskStats[]>('/api/tasks/stats', { params: { list_source_id } }).then((r) => r.data),
@@ -446,6 +450,9 @@ export const api = {
       '/api/export/subscriptions.json').then((r) => r.data),
   importCodes: (codes: string[]) =>
     http.post<{ ok: boolean; added: number; skipped: number }>('/api/import/codes', { codes }).then((r) => r.data),
+  activityHeatmap: (days = 180) =>
+    http.get<{ days: Record<string, { favorites: number; downloads: number }>; total_days: number }>(
+      '/api/insights/activity-heatmap', { params: { days } }).then((r) => r.data),
 
   // ════════ Crawl Health / Calendar（F3/F4）════════
   crawlHealth: () =>

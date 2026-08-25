@@ -192,7 +192,23 @@ export function Library() {
     })
   }
 
-  const batch = async (kind: 'delete' | 'retry' | 'favorite') => {
+  const selectAllFiltered = async () => {
+    try {
+      const searchQ = qRef.current.trim()
+      const r = searchQ
+        ? await api.v2.searchFts(searchQ, 200)
+        : await api.v2.tasks({
+            status: status || undefined,
+            list_source_id: sourceId || undefined,
+            in_library: inLib === 'all' ? undefined : inLib === 'in',
+            sort, limit: 200, offset: 0,
+          })
+      setSelected(new Set(r.tasks.map((t) => t.id)))
+      toastOk(`已全选 ${r.tasks.length} 条（当前筛选范围内，上限 200）`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
+  const batch = async (kind: 'delete' | 'retry' | 'favorite' | 'push' | 'view') => {
     const ids = [...selected]
     if (!ids.length) return
     if (kind === 'delete') {
@@ -203,6 +219,20 @@ export function Library() {
       if (kind === 'delete') await api.tasks.batchDelete(ids)
       if (kind === 'retry') await api.tasks.batchRetry(ids)
       if (kind === 'favorite') await api.tasks.batchFavorite(ids)
+      if (kind === 'push') {
+        const r = await api.tasks.batchPush(ids)
+        toastOk(`已推送 ${r.pushed} 项${r.skipped ? `，跳过 ${r.skipped} 项（无磁力或失败）` : ''}`)
+        setSelected(new Set())
+        load(page)
+        return
+      }
+      if (kind === 'view') {
+        const r = await api.tasks.batchView(ids, 'viewed')
+        toastOk(`已标记 ${r.updated} 项已看`)
+        setSelected(new Set())
+        load(page)
+        return
+      }
       toastOk(`已批量${kind === 'delete' ? '删除' : kind === 'retry' ? '重试' : '收藏'} ${ids.length} 项`)
       setSelected(new Set())
       load(page)  // P1-3: 显式传当前页码，避免 load() 闭包用了旧 page
@@ -303,6 +333,9 @@ export function Library() {
         <button className="btn btn--ghost btn--sm" onClick={() => batch('favorite')}>批量收藏</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('retry')}>批量重试</button>
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')}>批量删除</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => batch('push')} disabled={selected.size === 0}>批量推送下载</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => batch('view')} disabled={selected.size === 0}>标记已看</button>
+        <button className="btn btn--ghost btn--sm" onClick={selectAllFiltered} disabled={total === 0}>全选全部</button>
         <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
       </div>
 

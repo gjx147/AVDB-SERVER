@@ -9,7 +9,8 @@ import sys
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, or_, select
+from pydantic import BaseModel
+from sqlalchemy import update, func, or_, select
 from sqlalchemy.orm import Session
 
 from deps import CurrentUser, DbSession, Pagination
@@ -336,3 +337,65 @@ def update_note(task_id: int, db: DbSession, _user: CurrentUser, note: str = Que
     task.note = note or None
     db.commit()
     return {"ok": True}
+
+
+
+class BatchViewRequest(BaseModel):
+    task_ids: list[int]
+    status: str = "viewed"
+
+
+@router.post("/batch-view")
+def batch_set_view(payload: BatchViewRequest, db: DbSession, _user: CurrentUser):
+    """批量标记已看/想看（F6）。"""
+    if payload.status not in ("viewed", "want"):
+        raise HTTPException(status_code=400, detail="status 仅支持 viewed / want")
+    if not payload.task_ids:
+        return {"ok": True, "updated": 0}
+    n = db.execute(
+        update(Task).where(Task.id.in_(payload.task_ids)).values(view_status=payload.status)
+    ).rowcount
+    db.commit()
+    return {"ok": True, "updated": n}
+
+
+@router.post("/batch-push")
+async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUser):
+    """批量推送下载（F6）：把选中任务（需已有磁力）推送到默认下载器。"""
+    from models import Download
+    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_qbittorrent
+
+    tasks = db.execute(
+        select(Task).where(Task.id.in_(payload.task_ids))
+    ).scalars().all()
+    config_keys = (
+        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+        "clouddrive_url", "clouddrive_token", "clouddrive_username",
+        "clouddrive_password", "clouddrive_save_path",
+    )
+    config = {k: _get_setting(db, k) for k in config_keys}
+    downloader = _get_setting(db, "default_downloader") or "qbittorrent"
+    pushed = 0
+    skipped = 0
+    for t in tasks:
+        if not t.best_magnet:
+            skipped += 1
+            continue
+        try:
+            if downloader == "clouddrive":
+                result = await _push_clouddrive(t.best_magnet, config)
+            else:
+                result = await _push_qbittorrent(t.best_magnet, config)
+            if result.get("ok"):
+                db.add(Download(
+                    task_id=t.id, video_code=t.video_code, magnet=t.best_magnet,
+                    info_hash=_extract_hash(t.best_magnet), downloader=downloader,
+                    status="pushed",
+                ))
+                pushed += 1
+            else:
+                skipped += 1
+        except Exception:
+            skipped += 1
+    db.commit()
+    return {"ok": True, "pushed": pushed, "skipped": skipped}
