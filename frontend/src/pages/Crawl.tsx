@@ -94,6 +94,14 @@ export function Crawl() {
     if (logBodyRef.current) logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
   }, [logs, fileLines, logSrc, logFilter])
 
+  // F3 爬虫健康概览
+  const [health, setHealth] = useState<{ total_24h: number; error_24h: number; success_rate: number; reasons: Record<string, number>; trend: { date: string; total: number; errors: number }[] } | null>(null)
+  const [diag, setDiag] = useState<{ proxy: string; javdb: string; javdb_url: string } | null>(null)
+  useEffect(() => {
+    api.crawlHealth().then(setHealth).catch(() => {})
+    api.crawlDiagnostics().then(setDiag).catch(() => {})
+  }, [])
+
   const doScan = async () => {
     const sid = selSource || (sources ?? [])[0]?.id
     if (!sid) return toastErr('请先选择列表源')
@@ -133,6 +141,42 @@ export function Crawl() {
         <button className="btn btn--gold" onClick={doExtract} disabled={running}><Icon.play />开始提取</button>
         <button className="btn btn--ghost btn--sm" onClick={doRefreshMetadata} disabled={running}>刷新元数据</button>
       </PageHead>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{health ? `${health.success_rate}%` : '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>24h 成功率</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{health ? health.total_24h : '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>24h 任务数</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: health && health.error_24h > 0 ? 'var(--red, #dc2626)' : 'var(--green, #059669)' }}>
+              {health ? health.error_24h : '—'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>24h 错误</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 12 }}>
+            <span>代理 {diag ? (diag.proxy === 'ok' ? '✓ 正常' : diag.proxy === 'skip' ? '○ 未配置' : '✗ 异常') : '…'}</span>
+            <span>目标站 {diag ? (diag.javdb === 'ok' ? '✓ 可达' : '✗ 不可达') : '…'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'end', height: 36, flex: '1 1 auto', minWidth: 160, justifyContent: 'flex-end' }}>
+            {health && health.trend.length > 0 && (() => {
+              const max = Math.max(...health.trend.map((t) => t.total), 1)
+              return health.trend.map((t) => (
+                <div key={t.date} title={`${t.date} 共 ${t.total} 条，错误 ${t.errors}`}
+                  style={{
+                    width: 9, height: Math.max(3, (t.total / max) * 32), borderRadius: 2,
+                    background: t.errors > 0 ? 'var(--red, #dc2626)' : 'var(--green, #059669)',
+                    opacity: 0.75,
+                  }} />
+              ))
+            })()}
+          </div>
+        </div>
+      </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24 }}>
         <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>选择列表源</span>

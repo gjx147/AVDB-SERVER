@@ -447,6 +447,15 @@ export const api = {
   importCodes: (codes: string[]) =>
     http.post<{ ok: boolean; added: number; skipped: number }>('/api/import/codes', { codes }).then((r) => r.data),
 
+  // ════════ Crawl Health / Calendar（F3/F4）════════
+  crawlHealth: () =>
+    http.get<{ total_24h: number; error_24h: number; success_rate: number; reasons: Record<string, number>; trend: { date: string; total: number; errors: number }[] }>(
+      '/api/crawl/health').then((r) => r.data),
+  crawlDiagnostics: () =>
+    http.get<{ proxy: string; javdb: string; javdb_url: string }>('/api/crawl/diagnostics').then((r) => r.data),
+  releaseCalendar: (month?: string) =>
+    http.get<{ month: string; days: Record<string, number> }>('/api/new-releases/calendar', { params: { month } }).then((r) => r.data),
+
   // ════════ Images ════════
   images: {
     thumbnails: (taskId: number) =>

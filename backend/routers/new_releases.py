@@ -79,6 +79,27 @@ def add_to_library_api(new_release_id: int, db: DbSession, _user: CurrentUser):
     return {"ok": True, "message": "该作品已入库"}
 
 
+@router.get("/calendar")
+def release_calendar(db: DbSession, _user: CurrentUser, month: str = ""):
+    """按作品发布日期聚合月历（F4）：month=YYYY-MM，默认本月，返回 {day: count}。"""
+    from datetime import datetime
+    from models import Task
+
+    if not month:
+        month = datetime.utcnow().strftime("%Y-%m")
+    rows = db.execute(
+        select(Task.release_date).where(
+            Task.release_date.isnot(None), Task.release_date.like(month + "%")
+        )
+    ).all()
+    days: dict[str, int] = {}
+    for (rd,) in rows:
+        d = (rd or "")[:10]
+        if d:
+            days[d] = days.get(d, 0) + 1
+    return {"month": month, "days": days}
+
+
 @router.post("/check-now/{actor_id}")
 async def check_now(actor_id: int, db: DbSession, _user: CurrentUser):
     """立即巡检某演员（手动触发，不等 6h 定时）。

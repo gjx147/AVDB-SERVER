@@ -67,6 +67,10 @@ async def start_scheduler() -> None:
         # 爬取僵尸进程 watchdog：每 60s 主动回收超时进程（F09）。
         # job_defaults 已含 coalesce=True + max_instances=1；replace_existing 防重复注册。
         add_interval_job(_watchdog_reap_crawl, "crawl-reap-watchdog", seconds=_WATCHDOG_INTERVAL)
+
+        # F4: 每周一 9:00 推送本周新作 Top10（需在通知设置启用 weekly_report 事件）
+        from services.weekly_report import run_weekly_report
+        add_cron_job(run_weekly_report, "weekly-report", day_of_week="mon", hour=9, minute=0)
         sched.start()
         logger.info("调度中心已启动 (jobs=%d)", len(sched.get_jobs()))
 
@@ -107,14 +111,17 @@ def add_cron_job(
     hour: int = 0,
     minute: int = 0,
     day: int | None = None,
+    day_of_week: str | None = None,
     replace_existing: bool = True,
     **kwargs: Any,
 ) -> None:
-    """注册一个 cron 定时 job（如每月1号、每天某时）。"""
+    """注册一个 cron 定时 job（如每月1号、每周一某时）。"""
     sched = get_scheduler()
     cron_kwargs: dict[str, Any] = {"hour": hour, "minute": minute}
     if day is not None:
         cron_kwargs["day"] = day
+    if day_of_week is not None:
+        cron_kwargs["day_of_week"] = day_of_week
     sched.add_job(
         func,
         trigger=CronTrigger(**cron_kwargs),

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import type { NewRelease } from '../api/types'
+import type { NewRelease, Task } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
@@ -12,6 +12,10 @@ export function NewReleases() {
   const [releases, setReleases] = useState<NewRelease[] | null>(null)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // F4 发布月历
+  const [cal, setCal] = useState<{ month: string; days: Record<string, number> } | null>(null)
+  const [selDay, setSelDay] = useState('')
+  const [dayTasks, setDayTasks] = useState<Task[] | null>(null)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
 
@@ -21,6 +25,15 @@ export function NewReleases() {
     api.newReleases.list({ limit: 200 }).then((r) => setReleases(r.items || [])).catch((e) => { setError(String((e as Error).message)); setReleases([]) })
   }
   useEffect(() => { load() }, [])
+  useEffect(() => { api.releaseCalendar().then(setCal).catch(() => {}) }, [])
+  const pickDay = async (d: string) => {
+    setSelDay(d)
+    setDayTasks(null)
+    try {
+      const r = await api.v2.tasks({ date_from: d, date_to: d, limit: 50, sort: 'rating' })
+      setDayTasks(r.tasks)
+    } catch { setDayTasks([]) }
+  }
 
   // 封蜡揭幕：未读新作默认蒙纱+蜡封；首次 hover 蜡封碎裂、封面亮起（会话内保持）
   const [cracked, setCracked] = useState<Set<number>>(new Set())
@@ -62,6 +75,30 @@ export function NewReleases() {
         </label>
         <button className="btn btn--ghost btn--sm" onClick={load}><Icon.refresh />刷新</button>
       </PageHead>
+
+      {cal && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>发布日历 · {cal.month}</div>
+            <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>本月共 {Object.values(cal.days).reduce((a, b) => a + b, 0)} 部入库作品（按发布日期）</div>
+          </div>
+          <MonthGrid month={cal.month} days={cal.days} selDay={selDay} onPick={pickDay} />
+          {selDay && dayTasks && (
+            <div style={{ marginTop: 10, borderTop: '1px solid var(--line, #eee)', paddingTop: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--t-mute)', marginBottom: 6 }}>{selDay} 共 {dayTasks.length} 部</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto' }}>
+                {dayTasks.map((t) => (
+                  <div key={t.id} style={{ fontSize: 12, display: 'flex', gap: 8 }}>
+                    <span style={{ color: 'var(--t-mute)', flex: 'none' }}>{t.video_code}</span>
+                    <span style={{ flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || ''}</span>
+                    {t.rating ? <span style={{ flex: 'none', color: 'var(--gold, #d97706)' }}>{t.rating}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         {error ? <ErrorEmpty message={error} onRetry={load} /> :
@@ -127,4 +164,36 @@ export function NewReleases() {
       </div>
     </div>
   )
+}
+
+
+function MonthGrid({ month, days, selDay, onPick }: {
+  month: string
+  days: Record<string, number>
+  selDay: string
+  onPick: (d: string) => void
+}) {
+  const [y, m] = month.split('-').map(Number)
+  const first = new Date(y, m - 1, 1)
+  const offset = first.getDay()
+  const dim = new Date(y, m, 0).getDate()
+  const cells = []
+  for (let i = 0; i < offset; i++) cells.push(<div key={`e${i}`} style={{ width: 34, height: 26 }} />)
+  for (let d = 1; d <= dim; d++) {
+    const key = `${month}-${String(d).padStart(2, '0')}`
+    const cnt = days[key] ?? 0
+    cells.push(
+      <div key={key} onClick={() => cnt > 0 && onPick(key)} title={cnt > 0 ? `${key} 共 ${cnt} 部` : key}
+        style={{
+          width: 34, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, borderRadius: 6, cursor: cnt > 0 ? 'pointer' : 'default',
+          background: cnt > 5 ? 'var(--gold-wash, #fde68a)' : cnt > 0 ? 'var(--bg-raised, #f3f4f6)' : 'transparent',
+          color: cnt > 0 ? '#7c5a00' : 'var(--t-faint, #999)',
+          border: selDay === key ? '1px solid var(--gold, #d97706)' : '1px solid transparent',
+        }}>
+        {d}
+      </div>
+    )
+  }
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 4, justifyContent: 'center' }}>{cells}</div>
 }

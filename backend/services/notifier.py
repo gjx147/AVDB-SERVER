@@ -38,6 +38,7 @@ ALL_EVENTS = {
     "subscription",    # 订阅巡检结果
     "download",        # 下载完成
     "monthly_report",  # 月报生成
+    "weekly_report",   # 每周新作榜单（F4）
     "crawl",           # 爬取完成/失败
     "disk_warning",    # 磁盘告警
     "error",           # 错误

@@ -200,6 +200,86 @@ def start_extract(req: CrawlRequest, _user: CurrentUser):
     return {"ok": True, "pid": proc.pid, "mode": "extract"}
 
 
+@router.get("/health")
+def crawl_health(db: DbSession, _user: CurrentUser):
+    """爬虫健康概览（F3）：24h 成功率、失败原因归类、7 日趋势。"""
+    from datetime import datetime, timedelta
+    from models import CrawlLog
+
+    now = datetime.utcnow()
+    since = now - timedelta(hours=24)
+    logs = db.execute(
+        select(CrawlLog).where(CrawlLog.created_at >= since)
+    ).scalars().all()
+    total = len(logs)
+    errors = [l for l in logs if l.level in ("error", "warn")]
+    reasons = {"cf_challenge": 0, "timeout": 0, "parse_error": 0, "proxy_error": 0, "other": 0}
+    for l in errors:
+        m = (l.message or "").lower()
+        if "cloudflare" in m or "blocked" in m or "拦截" in m:
+            reasons["cf_challenge"] += 1
+        elif "timeout" in m or "超时" in m:
+            reasons["timeout"] += 1
+        elif "parse" in m or "解析" in m:
+            reasons["parse_error"] += 1
+        elif "proxy" in m or "代理" in m:
+            reasons["proxy_error"] += 1
+        else:
+            reasons["other"] += 1
+
+    # 7 日趋势（单次查询内存分桶）
+    week_logs = db.execute(
+        select(CrawlLog.created_at, CrawlLog.level).where(CrawlLog.created_at >= now - timedelta(days=7))
+    ).all()
+    trend = []
+    for i in range(6, -1, -1):
+        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        day_logs = [l for l in week_logs if day_start <= l[0] < day_end]
+        trend.append({
+            "date": day_start.strftime("%m-%d"),
+            "total": len(day_logs),
+            "errors": len([l for l in day_logs if l[1] in ("error", "warn")]),
+        })
+    return {
+        "total_24h": total,
+        "error_24h": len(errors),
+        "success_rate": round((total - len(errors)) / total * 100, 1) if total else 100.0,
+        "reasons": reasons,
+        "trend": trend,
+    }
+
+
+@router.get("/diagnostics")
+def crawl_diagnostics(db: DbSession, _user: CurrentUser):
+    """依赖连通性检测（F3）：代理与目标站可达性。"""
+    import httpx
+    from models import Setting
+
+    def _get(key: str) -> str:
+        row = db.get(Setting, key)
+        return row.value if row else ""
+
+    proxy = _get("http_proxy") or ""
+    javdb = _get("javdb_url") or "https://javdb.com"
+    result = {"proxy": "skip", "javdb": "fail", "javdb_url": javdb}
+
+    # 代理连通性（经代理请求 204 端点）
+    if proxy:
+        try:
+            r = httpx.get("https://www.google.com/generate_204", proxy=proxy, timeout=8)
+            result["proxy"] = "ok" if r.status_code == 204 else "fail"
+        except Exception:
+            result["proxy"] = "fail"
+    # 目标站可达性
+    try:
+        r = httpx.get(javdb, timeout=10, follow_redirects=True, verify=False)
+        result["javdb"] = "ok" if r.status_code < 500 else "fail"
+    except Exception:
+        result["javdb"] = "fail"
+    return result
+
+
 @router.get("/status")
 def crawl_status(_user: CurrentUser):
     """查询爬取状态：进程级（内存）+ 任务级（crawl_status.json）。"""
