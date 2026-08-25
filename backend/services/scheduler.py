@@ -83,6 +83,10 @@ async def start_scheduler() -> None:
         # N15: 每日 2:00 评分快照（趋势分析数据源）
         from services.rating_snapshot import run_snapshot
         add_cron_job(run_snapshot, "rating-snapshot", hour=2, minute=0)
+
+        # N22: 每小时规则引擎求值
+        from services.rule_engine import evaluate_all
+        add_interval_job(evaluate_all, "rule-engine", seconds=3600)
         sched.start()
         logger.info("调度中心已启动 (jobs=%d)", len(sched.get_jobs()))
 

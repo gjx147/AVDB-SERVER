@@ -58,6 +58,7 @@ export function Downloaders() {
       </PageHead>
 
       <Quota115Card />
+      <StrategyCard />
 
       {validation.general && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>⚠ {validation.general}</div>}
 
@@ -200,6 +201,33 @@ function Quota115Card() {
           <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? 'var(--red, #dc2626)' : 'var(--gold, #d97706)', borderRadius: 3 }} />
         </div>
       )}
+    </div>
+  )
+}
+
+function StrategyCard() {
+  const [text, setText] = useState('')
+  const toastOk = useStore((s) => s.toastOk)
+  const toastErr = useStore((s) => s.toastErr)
+  useEffect(() => {
+    api.downloadStrategy.get().then((r) => setText(JSON.stringify(r.strategy || {}, null, 2))).catch(() => {})
+  }, [])
+  const save = async () => {
+    try {
+      const strategy = JSON.parse(text || '{}')
+      await api.downloadStrategy.set(strategy)
+      toastOk('下载策略已保存')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16, padding: '12px 14px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>智能下载策略（按演员/厂牌路由下载器）</div>
+      <div style={{ fontSize: 10, color: 'var(--t-mute)', marginBottom: 6 }}>
+        格式：{"{ actors: { 演员名: qbittorrent 或 clouddrive }, makers: { 厂牌: ... }, default: qbittorrent }"}
+      </div>
+      <textarea className="input" rows={5} value={text} onChange={(e) => setText(e.target.value)}
+        style={{ width: '100%', fontFamily: 'monospace', fontSize: 11 }} />
+      <button className="btn btn--gold btn--sm" onClick={save} style={{ marginTop: 8 }}>保存策略</button>
     </div>
   )
 }

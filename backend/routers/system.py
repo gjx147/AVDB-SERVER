@@ -195,3 +195,25 @@ async def s3_upload(_user: CurrentAdmin):
     if not files:
         return {"ok": False, "message": "本地无备份文件"}
     return await upload_backup(files[0])
+
+
+@router.get("/download-strategy")
+def get_download_strategy(db: DbSession, _user: CurrentAdmin):
+    """N23: 读取下载策略（JSON）。"""
+    from services.download_strategy import get_strategy
+    return {"ok": True, "strategy": get_strategy(db)}
+
+
+@router.put("/download-strategy")
+def set_download_strategy(payload: dict, db: DbSession, _user: CurrentAdmin):
+    """N23: 保存下载策略（{actors: {name: downloader}, makers: {...}, default: ...}）。"""
+    import json
+    from models import Setting
+    row = db.get(Setting, "download_strategy")
+    value = json.dumps(payload.get("strategy") or {}, ensure_ascii=False)
+    if row:
+        row.value = value
+    else:
+        db.add(Setting(key="download_strategy", value=value))
+    db.commit()
+    return {"ok": True}

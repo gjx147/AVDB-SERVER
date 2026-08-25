@@ -281,7 +281,36 @@ export function Analytics() {
         <RankingPanel />
         <GapsPanel />
         <AuditPanel />
+        <SeriesPanel />
       </div>
     </div>
+  )
+}
+
+function SeriesPanel() {
+  const [d, setD] = useState<Awaited<ReturnType<typeof api.seriesProgress>> | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.seriesProgress().then((r) => { if (alive) setD(r) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  if (!d) return <Panel title="系列概览"><Loading /></Panel>
+  return (
+    <Panel title={`系列概览 · ${d.total_series} 个系列`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11 }}>
+        {d.items.slice(0, 8).map((x) => (
+          <div key={x.series}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.series}</span>
+              <span style={{ color: 'var(--t-mute)' }}>{x.total} 部 · 已看 {x.viewed_rate}%{x.avg_rating ? ` · 均分 ${x.avg_rating}` : ''}</span>
+            </div>
+            <div style={{ height: 3, background: 'var(--bg-raised, #f3f4f6)', borderRadius: 2, marginTop: 2 }}>
+              <div style={{ width: `${x.viewed_rate}%`, height: '100%', background: 'var(--gold, #d97706)', borderRadius: 2 }} />
+            </div>
+          </div>
+        ))}
+        {d.items.length === 0 && <span style={{ color: 'var(--t-mute)' }}>暂无系列数据</span>}
+      </div>
+    </Panel>
   )
 }

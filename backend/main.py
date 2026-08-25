@@ -164,7 +164,7 @@ app.add_middleware(
 )
 
 # 挂载路由
-from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads, settings, dashboard, v2, drive115, magnet_search, system, new_releases, notifications, organize, shares, transfer  # noqa: E402
+from routers import list_sources, tasks, crawl, status, actors, aggregate, rankings, subscriptions, insights, ai, content_filter, media_server, images, favorites, downloaders, downloads, settings, dashboard, v2, drive115, magnet_search, system, new_releases, notifications, organize, rules, shares, transfer  # noqa: E402
 app.include_router(list_sources.router)
 app.include_router(tasks.router)
 app.include_router(crawl.router)
@@ -193,6 +193,7 @@ app.include_router(transfer.export_router)
 app.include_router(transfer.import_router)
 app.include_router(organize.router)
 app.include_router(shares.router)
+app.include_router(rules.router)
 
 
 @app.get("/api/public/share/{token}")

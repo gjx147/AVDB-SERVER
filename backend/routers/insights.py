@@ -445,3 +445,35 @@ def rating_trends(task_id: int, db: DbSession, _user: CurrentUser):
     ).all()
     return {"ok": True, "task_id": task_id,
             "points": [{"date": d, "rating": r} for d, r in rows]}
+
+
+@router.get("/series-progress")
+def series_progress(db: DbSession, _user: CurrentUser, limit: int = Query(15, le=50)):
+    """N24: 系列概览——库内系列收录数/已看数/平均评分，按收录数排序。"""
+    from collections import defaultdict
+    from models import Task
+
+    rows = db.execute(
+        select(Task.series, Task.view_status, Task.rating, Task.is_favorite)
+        .where(Task.series.isnot(None), Task.series != "")
+    ).all()
+    per: dict[str, dict] = defaultdict(lambda: {"total": 0, "viewed": 0, "faved": 0, "ratings": []})
+    for series, vs, rating, fav in rows:
+        d = per[series]
+        d["total"] += 1
+        if vs == "viewed":
+            d["viewed"] += 1
+        if fav:
+            d["faved"] += 1
+        if rating:
+            d["ratings"].append(float(rating))
+    items = []
+    for name, d in per.items():
+        items.append({
+            "series": name, "total": d["total"], "viewed": d["viewed"],
+            "faved": d["faved"],
+            "avg_rating": round(sum(d["ratings"]) / len(d["ratings"]), 2) if d["ratings"] else None,
+            "viewed_rate": round(d["viewed"] / d["total"] * 100, 1) if d["total"] else 0,
+        })
+    items.sort(key=lambda x: -x["total"])
+    return {"ok": True, "items": items[:limit], "total_series": len(items)}

@@ -374,13 +374,15 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
         "clouddrive_password", "clouddrive_save_path",
     )
     config = {k: _get_setting(db, k) for k in config_keys}
-    downloader = _get_setting(db, "default_downloader") or "qbittorrent"
+    # N23: 按智能策略路由下载器（演员/厂牌优先，否则默认）
+    from services.download_strategy import pick_downloader
     pushed = 0
     skipped = 0
     for t in tasks:
         if not t.best_magnet:
             skipped += 1
             continue
+        downloader = pick_downloader(db, t)
         try:
             if downloader == "clouddrive":
                 result = await _push_clouddrive(t.best_magnet, config)

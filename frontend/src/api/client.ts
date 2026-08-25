@@ -543,6 +543,23 @@ export const api = {
   publicShare: (token: string) =>
     http.get<{ ok: boolean; kind: string; title: string; items: { video_code: string | null; title: string | null; rating: number | null; actors: string | null; poster_url: string | null; rank?: number; score?: number }[] }>(
       `/api/public/share/${token}`).then((r) => r.data),
+  rules: {
+    list: () => http.get<{ ok: boolean; items: { id: number; name: string; conditions_json: string; actions_json: string; enabled: boolean; hit_count: number; last_run_at: string | null }[] }>('/api/rules').then((r) => r.data),
+    create: (body: { name: string; conditions: Record<string, unknown>; actions: Record<string, unknown>; enabled?: boolean }) =>
+      http.post<{ ok: boolean; id: number }>('/api/rules', body).then((r) => r.data),
+    update: (id: number, body: Record<string, unknown>) =>
+      http.put<{ ok: boolean }>(`/api/rules/${id}`, body).then((r) => r.data),
+    remove: (id: number) => http.delete<{ ok: boolean }>(`/api/rules/${id}`).then((r) => r.data),
+    runNow: () => http.post<{ ok: boolean; rules: number; hits: number }>('/api/rules/run-now').then((r) => r.data),
+  },
+  downloadStrategy: {
+    get: () => http.get<{ ok: boolean; strategy: Record<string, unknown> }>('/api/system/download-strategy').then((r) => r.data),
+    set: (strategy: Record<string, unknown>) =>
+      http.put<{ ok: boolean }>('/api/system/download-strategy', { strategy }).then((r) => r.data),
+  },
+  seriesProgress: (limit = 15) =>
+    http.get<{ ok: boolean; items: { series: string; total: number; viewed: number; faved: number; avg_rating: number | null; viewed_rate: number }[]; total_series: number }>(
+      '/api/insights/series-progress', { params: { limit } }).then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(
