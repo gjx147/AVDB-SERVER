@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { DashboardStats, Task, MonthlyStat, DiskInfo } from '../api/types'
@@ -58,6 +58,8 @@ export function Dashboard() {
         sub="灯已调暗——今晚，想先看谁？">
         <button className="btn btn--ghost btn--sm" onClick={load}><Icon.refresh />刷新</button>
       </PageHead>
+
+      <HeatmapCard />
 
       <div className="stat-row">
         <Stat num={stats.total_tasks} unit="部" label="总作品" trend={`已入库 ${stats.visited_tasks}`} />
@@ -166,6 +168,38 @@ export function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function HeatmapCard() {
+  const [heat, setHeat] = useState<Record<string, { favorites: number; downloads: number }> | null>(null)
+  useEffect(() => {
+    api.activityHeatmap(180).then((r) => setHeat(r.days)).catch(() => setHeat({}))
+  }, [])
+  const items = heat ? Object.entries(heat).sort((a, b) => a[0].localeCompare(b[0])).slice(-180) : []
+  if (!heat || items.length === 0) return null
+  const max = Math.max(...items.map(([, v]) => v.favorites + v.downloads), 1)
+  const cells: ReactNode[] = []
+  for (const [d, v] of items) {
+    const level = Math.round(((v.favorites + v.downloads) / max) * 4)
+    const colors = ['#d1fae5', '#6ee7b7', '#10b981', '#047857']
+    cells.push(
+      <div key={d} title={`${d} 收藏 ${v.favorites} · 下载 ${v.downloads}`}
+        style={{
+          width: 11, height: 11, borderRadius: 2,
+          background: level === 0 ? 'var(--bg-raised, #f3f4f6)' : colors[Math.min(level - 1, 3)],
+          opacity: 0.9,
+        }} />
+    )
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>活动热力 · 最近 180 天</div>
+        <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>收藏 / 下载行为（悬停查看详情）</div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>{cells}</div>
     </div>
   )
 }
