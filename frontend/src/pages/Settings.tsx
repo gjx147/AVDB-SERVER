@@ -107,6 +107,18 @@ export function Settings() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // ── N17 AI 批量补标签 ──
+  const [tagBusy, setTagBusy] = useState(false)
+  const runBatchTags = async () => {
+    if (tagBusy) return
+    setTagBusy(true)
+    try {
+      const r = await api.batchTags(5)
+      toastOk(`批量打标完成：${r.done}/${r.processed} 条${r.errors ? `，失败 ${r.errors}` : ''}`)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    setTagBusy(false)
+  }
+
   // ── N11 磁力导入 ──
   const [magText, setMagText] = useState('')
   const importMagnets = async () => {
@@ -231,6 +243,7 @@ export function Settings() {
                     <textarea className="input" rows={3} placeholder={'每行一个番号，例如:\nABC-123\nXYZ-789'} value={codesText}
                       onChange={(e) => setCodesText(e.target.value)} style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }} />
                     <button className="btn btn--gold btn--sm" onClick={importCodes} style={{ marginTop: 8 }} disabled={!codesText.trim()}>批量导入番号</button>
+                    <button className="btn btn--ghost btn--sm" onClick={runBatchTags} style={{ marginTop: 8 }}>AI 批量补标签（5 条）</button>
                   </div>
                   <div style={{ marginTop: 10 }}>
                     <textarea className="input" rows={3} placeholder={'粘贴磁力链接（可多行，自动去重）'}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from deps import CurrentUser
@@ -243,3 +243,34 @@ async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
         for t in rows
     ]
     return {"ok": True, "question": question, "query": query, "total": len(items), "items": items, "engine": engine}
+
+
+@router.post("/batch-tags")
+async def batch_tags(db: DbSession, _user: CurrentAdmin, limit: int = Query(5, le=20)):
+    """N17: 批量补标签——取缺 ai_tags 的已入库任务，限速逐个调 LLM 生成。"""
+    import logging
+    from sqlalchemy import select
+    from models import Task
+    from services.ai_service import generate_tags
+
+    logger = logging.getLogger("avdb.ai")
+    rows = db.execute(
+        select(Task).where(
+            Task.status == "visited",
+            (Task.ai_tags.is_(None) | (Task.ai_tags == "")),
+            Task.title.isnot(None),
+        ).order_by(Task.id.desc()).limit(limit)
+    ).scalars().all()
+    done = 0
+    errors = 0
+    for t in rows:
+        try:
+            tags = await generate_tags(t.title or t.video_code or "")
+            if tags:
+                t.ai_tags = tags
+                done += 1
+        except Exception as e:
+            logger.warning("批量打标失败 task=%s: %s", t.id, e)
+            errors += 1
+    db.commit()
+    return {"ok": True, "processed": len(rows), "done": done, "errors": errors}

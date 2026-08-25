@@ -228,6 +228,44 @@ function GapsPanel() {
   )
 }
 
+function AuditPanel() {
+  const [d, setD] = useState<Awaited<ReturnType<typeof api.mediaAudit>> | null>(null)
+  const [busy, setBusy] = useState(false)
+  const toastOk = useToastOk()
+  const toastErr = useToastErr()
+  const run = async () => {
+    setBusy(true)
+    try { const r = await api.mediaAudit(); setD(r) }
+    catch (e) { toastErr(String((e as Error).message)) }
+    setBusy(false)
+  }
+  return (
+    <Panel title="Emby 反向审计">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn--ghost btn--sm" onClick={run} disabled={busy}>{busy ? '审计中…' : '运行审计'}</button>
+        {d?.ok && <span style={{ fontSize: 11, color: 'var(--t-mute)' }}>Emby {d.emby_total} 项 / 本地 {d.local_total} 项</span>}
+      </div>
+      {d?.ok && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+          {d.emby_only && d.emby_only.length > 0 && (
+            <div>Emby 有但库无记录：<span style={{ color: 'var(--gold, #d97706)' }}>{d.emby_only.slice(0, 8).join(' / ')}</span>{d.emby_only.length > 8 ? ` 等 ${d.emby_only.length} 项` : ''}</div>
+          )}
+          {d.dup_codes && d.dup_codes.length > 0 && (
+            <div>本地重复番号：<span style={{ color: 'var(--red, #dc2626)' }}>{d.dup_codes.map((x) => `${x.code}×${x.count}`).join(' / ')}</span></div>
+          )}
+          {d.in_lib_missing_from_emby && d.in_lib_missing_from_emby.length > 0 && (
+            <div>在库但 Emby 缺失：<span style={{ color: 'var(--blue, #2563eb)' }}>{d.in_lib_missing_from_emby.slice(0, 8).join(' / ')}</span></div>
+          )}
+          {!(d.emby_only?.length || d.dup_codes?.length || d.in_lib_missing_from_emby?.length) && (
+            <span style={{ color: 'var(--t-mute)' }}>未发现遗漏</span>
+          )}
+        </div>
+      )}
+      {d && !d.ok && <div style={{ fontSize: 11, color: 'var(--red, #dc2626)' }}>{d.message}</div>}
+    </Panel>
+  )
+}
+
 export function Analytics() {
   return (
     <div className="page">
@@ -242,6 +280,7 @@ export function Analytics() {
         <NotifyPanel />
         <RankingPanel />
         <GapsPanel />
+        <AuditPanel />
       </div>
     </div>
   )

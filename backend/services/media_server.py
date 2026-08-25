@@ -314,3 +314,53 @@ async def sync_view_progress(threshold: float = 90.0, limit: int = 500) -> dict:
         return {"ok": True, "scanned": len(rows_all), "watched": len(watched), "marked": marked}
     finally:
         db.close()
+
+
+async def audit_library() -> dict:
+    """N18: Emby 反向审计——Emby 有但库无 / 本地重复番号 / 库在档但 Emby 缺失。"""
+    import re as _re
+    from collections import Counter
+    from sqlalchemy import select
+
+    from database import SessionLocal
+    from models import Task
+
+    config = await _get_config()
+    url = config.get("emby_url", "").rstrip("/")
+    token = config.get("emby_token", "")
+    if not url or not token:
+        return {"ok": False, "message": "未配置 Emby"}
+    headers = {"X-Emby-Token": token}
+    emby_codes: set[str] = set()
+    emby_paths: list[str] = []
+    try:
+        async with httpx.AsyncClient(timeout=30, verify=False) as c:
+            r = await c.get(f"{url}/emby/Items", headers=headers,
+                            params={"Recursive": "true", "Fields": "Path", "Limit": 5000})
+            items = r.json().get("Items", []) if r.status_code == 200 else []
+            for it in items:
+                p = str(it.get("Path") or "")
+                if p:
+                    emby_paths.append(p)
+                emby_codes.update(_extract_codes_from_item(it))
+    except Exception as e:
+        return {"ok": False, "message": f"Emby 查询失败: {str(e)[:200]}"}
+
+    db = SessionLocal()
+    try:
+        local = db.execute(select(Task.video_code, Task.media_in_library)).all()
+        local_codes = {c for c, _ in local if c}
+        code_counter = Counter(c for c, _ in local if c)
+        dup_codes = [{"code": c, "count": n} for c, n in code_counter.items() if n > 1][:20]
+        emby_only = sorted(emby_codes - local_codes)[:50]
+        lib_missing = [c for c, in_lib in local if in_lib and c and c not in emby_codes][:50]
+        return {
+            "ok": True,
+            "emby_total": len(emby_paths),
+            "local_total": len(local_codes),
+            "emby_only": emby_only,
+            "dup_codes": dup_codes,
+            "in_lib_missing_from_emby": lib_missing,
+        }
+    finally:
+        db.close()

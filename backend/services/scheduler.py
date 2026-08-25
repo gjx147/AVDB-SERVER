@@ -79,6 +79,10 @@ async def start_scheduler() -> None:
         # F4: 每周一 9:00 推送本周新作 Top10（需在通知设置启用 weekly_report 事件）
         from services.weekly_report import run_weekly_report
         add_cron_job(run_weekly_report, "weekly-report", day_of_week="mon", hour=9, minute=0)
+
+        # N15: 每日 2:00 评分快照（趋势分析数据源）
+        from services.rating_snapshot import run_snapshot
+        add_cron_job(run_snapshot, "rating-snapshot", hour=2, minute=0)
         sched.start()
         logger.info("调度中心已启动 (jobs=%d)", len(sched.get_jobs()))
 

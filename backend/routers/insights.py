@@ -431,3 +431,17 @@ def ranking_trends(db: DbSession, _user: CurrentUser, days: int = Query(14, le=9
         "top_risers": risers[:10],
         "top_on_chart": [{"code": k, "days": v["days"], "best": v["best"]} for k, v in top_days],
     }
+
+
+@router.get("/rating-trends/{task_id}")
+def rating_trends(task_id: int, db: DbSession, _user: CurrentUser):
+    """N15: 单任务评分趋势（快照序列，缺数据时返回空）。"""
+    from models import RatingHistory
+
+    rows = db.execute(
+        select(RatingHistory.snapshot_date, RatingHistory.rating)
+        .where(RatingHistory.task_id == task_id)
+        .order_by(RatingHistory.snapshot_date)
+    ).all()
+    return {"ok": True, "task_id": task_id,
+            "points": [{"date": d, "rating": r} for d, r in rows]}

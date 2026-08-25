@@ -33,3 +33,10 @@ async def sync_view_progress(_user: CurrentAdmin):
 async def test(_user: CurrentUser):
     """测试 Emby 连接（用 settings 表配置）。"""
     return await test_connection()
+
+
+@router.post("/audit")
+async def audit(_user: CurrentAdmin):
+    """N18: Emby 反向遗漏审计——Emby 条目与本地任务双向匹配，输出三类清单。"""
+    from services.media_server import audit_library
+    return await audit_library()

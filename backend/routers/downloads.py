@@ -47,3 +47,43 @@ def download_stats(db: DbSession, _user: CurrentUser):
         ).all()
     }
     return {"by_status": by_status, "by_downloader": by_downloader}
+
+
+@router.get("/torrent-health")
+def torrent_health(db: DbSession, _user: CurrentUser):
+    """N19: qB 种子健康度——实时做种数 <5 标记低健康。"""
+    from models import Download, Setting
+
+    def _get(k: str) -> str:
+        row = db.get(Setting, k)
+        return row.value if row else ""
+
+    qb_url, qb_user, qb_pass = _get("qb_url"), _get("qb_username"), _get("qb_password")
+    if not qb_url:
+        return {"ok": False, "message": "未配置 qBittorrent"}
+    try:
+        import qbittorrentapi
+        qbc = qbittorrentapi.Client(host=qb_url, username=qb_user, password=qb_pass, REQUESTS_ARGS={"timeout": 8})
+        qbc.auth_log_in()
+        torrents = {t.infohash_v1.lower(): t for t in qbc.torrents_info() if t.infohash_v1}
+        qbc.auth_log_out()
+    except Exception as e:
+        return {"ok": False, "message": f"qB 连接失败: {str(e)[:120]}"}
+
+    rows = db.execute(
+        select(Download).where(Download.status.in_(["pushed", "downloading"]))
+    ).scalars().all()
+    items = []
+    for dl in rows:
+        t = torrents.get((dl.info_hash or "").lower())
+        if not t:
+            continue
+        seeder = int(getattr(t, "num_seeds", 0) or 0)
+        items.append({
+            "dl_id": dl.id, "video_code": dl.video_code,
+            "seeder": seeder, "leecher": int(getattr(t, "num_leechs", 0) or 0),
+            "progress": round(float(getattr(t, "progress", 0) or 0) * 100, 1),
+            "healthy": seeder >= 5,
+        })
+    items.sort(key=lambda x: x["seeder"])
+    return {"ok": True, "total": len(items), "items": items}

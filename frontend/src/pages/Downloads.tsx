@@ -16,6 +16,15 @@ export function Downloads() {
   const nav = useNavigate()
   const [data, setData] = useState<{ downloads: DownloadRecord[]; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // N19: 种子健康（做种数 <5 低健康）
+  const [unhealthy, setUnhealthy] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    let alive = true
+    api.torrentHealth().then((r) => {
+      if (alive && r.items) setUnhealthy(new Set(r.items.filter((i) => !i.healthy).map((i) => i.dl_id)))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [])
   const [filter, setFilter] = useState('')
   const toastErr = useStore((s) => s.toastErr)
 
@@ -72,6 +81,7 @@ export function Downloads() {
               <div className="row-tags">
                 <span className="chip" style={{ fontSize: 10 }}>{d.downloader === 'qbittorrent' ? 'qB' : 'CD2'}</span>
                 {d.organized && <span className="chip" style={{ fontSize: 10, background: '#d1fae5', color: '#047857' }}>已整理</span>}
+                {unhealthy.has(d.id) && <span className="chip" style={{ fontSize: 10, background: '#fee2e2', color: '#b91c1c' }}>低健康</span>}
                 <span className={`chip ${statusCls[d.status] || ''}`}>{statusLabel[d.status] || d.status}</span>
                 {d.status === 'downloading' && d.progress > 0 && (
                   <span className="chip chip-amber" style={{ fontFamily: 'var(--ff-mono)' }}>{Math.round(d.progress)}%</span>

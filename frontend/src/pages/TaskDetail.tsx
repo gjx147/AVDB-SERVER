@@ -419,6 +419,7 @@ export function TaskDetail() {
           {task.error_message && (
             <div className="magnet-box" style={{ marginTop: 20, color: 'var(--red)' }}>错误：{task.error_message}</div>
           )}
+          <RatingTrend taskId={task.id} />
         </div>
 
         {/* 右栏：磁力 */}
@@ -524,3 +525,35 @@ const thumbNavBtn = (side: 'left' | 'right'): React.CSSProperties => ({
   fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
   backdropFilter: 'blur(4px)',
 })
+
+function RatingTrend({ taskId }: { taskId: number }) {
+  const [points, setPoints] = useState<{ date: string; rating: number }[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.ratingTrends(taskId).then((r) => { if (alive) setPoints(r.points) }).catch(() => setPoints([]))
+    return () => { alive = false }
+  }, [taskId])
+  if (!points || points.length < 2) return null
+  const max = Math.max(...points.map((p) => p.rating), 10)
+  const min = Math.min(...points.map((p) => p.rating), 0)
+  const range = Math.max(max - min, 0.5)
+  const W = 220, H = 40
+  const pts = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * W
+    const y = H - 4 - ((p.rating - min) / range) * (H - 8)
+    return `${x},${y}`
+  }).join(' ')
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>评分趋势（每日快照）</div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <polyline points={pts} fill="none" stroke="var(--gold, #d97706)" strokeWidth="1.5" />
+        <circle cx={W} cy={H - 4 - ((points[points.length - 1].rating - min) / range) * (H - 8)}
+          r="2.5" fill="var(--gold, #d97706)" />
+      </svg>
+      <div style={{ fontSize: 10, color: 'var(--t-faint)' }}>
+        {points[0].rating} → {points[points.length - 1].rating}（{points.length} 天）
+      </div>
+    </div>
+  )
+}

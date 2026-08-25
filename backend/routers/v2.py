@@ -92,14 +92,25 @@ def search_fts(
     limit: int = Query(48, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """FTS 全文搜索（兼容前端，实际用 LIKE 降级）。"""
+    """全文搜索（N16 升级）：空格分词多关键词 AND 匹配（标题/番号/演员/标签），评分优先排序。"""
     from sqlalchemy import or_
-    stmt = select(Task).where(
-        or_(Task.title.like(f"%{q}%"), Task.video_code.like(f"%{q}%"))
-    )
+
+    terms = [t.strip() for t in q.split() if t.strip()][:6] or [q]
+    conds = [
+        or_(
+            Task.title.like(f"%{t}%"),
+            Task.video_code.like(f"%{t}%"),
+            Task.actors.like(f"%{t}%"),
+            Task.tags.like(f"%{t}%"),
+        )
+        for t in terms
+    ]
+    stmt = select(Task).where(*conds)
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    tasks = db.execute(stmt.order_by(Task.id.desc()).offset(offset).limit(limit)).scalars().all()
-    return {"tasks": tasks, "total": total, "engine": "like"}
+    tasks = db.execute(
+        stmt.order_by(Task.rating.desc().nullslast(), Task.id.desc()).offset(offset).limit(limit)
+    ).scalars().all()
+    return {"tasks": tasks, "total": total, "engine": "multi"}
 
 
 @router.get("/tasks/{task_id}/similar")

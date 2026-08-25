@@ -513,6 +513,18 @@ export const api = {
   systemStatus: () =>
     http.get<{ ok: boolean; jobs: { id: string; next_run: string }[]; queue: { pending: number; failed: number }; active_downloads: number; errors_24h: { crawl: number; notify: number }; backups: { name: string; size_mb: number }[]; server_time: string }>(
       '/api/system/status').then((r) => r.data),
+  ratingTrends: (taskId: number) =>
+    http.get<{ ok: boolean; task_id: number; points: { date: string; rating: number }[] }>(
+      `/api/insights/rating-trends/${taskId}`).then((r) => r.data),
+  batchTags: (limit = 5) =>
+    http.post<{ ok: boolean; processed: number; done: number; errors: number }>(
+      `/api/ai/batch-tags?limit=${limit}`).then((r) => r.data),
+  mediaAudit: () =>
+    http.post<{ ok: boolean; message?: string; emby_total?: number; local_total?: number; emby_only?: string[]; dup_codes?: { code: string; count: number }[]; in_lib_missing_from_emby?: string[] }>(
+      '/api/media-server/audit').then((r) => r.data),
+  torrentHealth: () =>
+    http.get<{ ok: boolean; total: number; message?: string; items?: { dl_id: number; video_code: string | null; seeder: number; leecher: number; progress: number; healthy: boolean }[] }>(
+      '/api/downloads/torrent-health').then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(
