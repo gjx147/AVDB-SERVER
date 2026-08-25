@@ -61,6 +61,7 @@ export function Dashboard() {
 
       <HeatmapCard />
       <RecommendationsCard />
+      <YearlyReportCard />
 
       <div className="stat-row">
         <Stat num={stats.total_tasks} unit="部" label="总作品" trend={`已入库 ${stats.visited_tasks}`} />
@@ -272,6 +273,61 @@ function RecommendationsCard() {
             </button>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function YearlyReportCard() {
+  const [rep, setRep] = useState<{ year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; monthly: number[] } | null>(null)
+  useEffect(() => {
+    api.yearlyReport().then(setRep).catch(() => setRep(null))
+  }, [])
+  if (!rep || rep.stats.added === 0) return null
+  const maxMonth = Math.max(...rep.monthly, 1)
+  const monthLabels = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+  const topList = (arr: { name: string; count: number }[]) =>
+    arr.length === 0 ? <span style={{ color: 'var(--t-faint)', fontSize: 11 }}>暂无</span> : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {arr.map((x) => (
+          <div key={x.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.name}</span>
+            <span style={{ color: 'var(--t-mute)' }}>{x.count}</span>
+          </div>
+        ))}
+      </div>
+    )
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>年度回顾 · {rep.year}</div>
+        <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>入库 {rep.stats.added} · 下载 {rep.stats.downloads} · 收藏 {rep.stats.favorites}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 220px', minWidth: 180 }}>
+          <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>月度入库分布</div>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'end', height: 52 }}>
+            {rep.monthly.map((c, i) => (
+              <div key={i} title={`${monthLabels[i]} 入库 ${c}`}
+                style={{ flex: 1, height: Math.max(3, (c / maxMonth) * 48), background: 'var(--gold, #d97706)', borderRadius: 2, opacity: 0.85 }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 3, fontSize: 8, color: 'var(--t-faint)', marginTop: 2 }}>
+            {monthLabels.map((m, i) => <span key={m} style={{ flex: 1, textAlign: 'center' }}>{i + 1}</span>)}
+          </div>
+        </div>
+        <div style={{ flex: '1 1 160px', minWidth: 130 }}>
+          <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>年度 Top 演员</div>
+          {topList(rep.top_actors)}
+        </div>
+        <div style={{ flex: '1 1 160px', minWidth: 130 }}>
+          <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>年度 Top 标签</div>
+          {topList(rep.top_tags)}
+        </div>
+        <div style={{ flex: '1 1 160px', minWidth: 130 }}>
+          <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>年度 Top 厂商</div>
+          {topList(rep.top_makers)}
+        </div>
       </div>
     </div>
   )

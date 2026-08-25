@@ -156,3 +156,62 @@ def recommendations(db: DbSession, _user: CurrentUser, limit: int = Query(6, le=
     _recommend_cache["ts"] = now
     _recommend_cache["data"] = result
     return result
+
+
+@router.get("/yearly-report")
+def yearly_report(db: DbSession, _user: CurrentUser, year: int | None = None):
+    """F14: 年度回顾——入库/下载/收藏统计 + Top 演员/标签/厂商 + 月度分布。"""
+    from collections import Counter
+    from datetime import datetime
+    from models import Download, Task, task_collections
+
+    y = year or datetime.utcnow().year
+    start = datetime(y, 1, 1)
+    end = datetime(y + 1, 1, 1)
+
+    # 年度入库
+    year_tasks = db.execute(
+        select(Task).where(Task.created_at >= start, Task.created_at < end)
+    ).scalars().all()
+    # 年度下载完成
+    dl_count = db.execute(
+        select(Download.id).where(
+            Download.completed_at >= start, Download.completed_at < end,
+            Download.status == "completed",
+        )
+    ).all()
+    # 年度收藏
+    fav_count = db.execute(
+        select(task_collections.c.task_id).where(
+            task_collections.c.created_at >= start, task_collections.c.created_at < end
+        )
+    ).all()
+
+    actor_c: Counter = Counter()
+    tag_c: Counter = Counter()
+    maker_c: Counter = Counter()
+    monthly = [0] * 12
+    for t in year_tasks:
+        if t.created_at:
+            monthly[t.created_at.month - 1] += 1
+        for a in (t.actors or "").split(","):
+            if a.strip():
+                actor_c[a.strip()] += 1
+        for g in (t.tags or "").split(","):
+            if g.strip():
+                tag_c[g.strip()] += 1
+        if t.maker:
+            maker_c[t.maker] += 1
+
+    return {
+        "year": y,
+        "stats": {
+            "added": len(year_tasks),
+            "downloads": len(dl_count),
+            "favorites": len(fav_count),
+        },
+        "top_actors": [{"name": k, "count": v} for k, v in actor_c.most_common(5)],
+        "top_tags": [{"name": k, "count": v} for k, v in tag_c.most_common(5)],
+        "top_makers": [{"name": k, "count": v} for k, v in maker_c.most_common(5)],
+        "monthly": monthly,
+    }

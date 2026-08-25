@@ -399,3 +399,46 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
             skipped += 1
     db.commit()
     return {"ok": True, "pushed": pushed, "skipped": skipped}
+
+
+@router.post("/dedupe")
+def dedupe_tasks(db: DbSession, _user: CurrentAdmin, dry_run: bool = Query(True)):
+    """F13: 番号归一化去重——按 normalize_code 分组，保留磁力/评分最全者，
+    迁移收藏/共演/下载/上新引用后删除重复任务。dry_run=true 只预览计划。"""
+    from sqlalchemy import update as sa_update
+    from models import Download, NewRelease, actor_movies, task_collections
+    from services.media_server import normalize_code
+
+    tasks = db.execute(select(Task).where(Task.video_code.isnot(None))).scalars().all()
+    groups: dict[str, list[Task]] = {}
+    for t in tasks:
+        key = normalize_code(t.video_code or "")
+        if key:
+            groups.setdefault(key, []).append(t)
+    dup_groups = {k: v for k, v in groups.items() if len(v) > 1}
+
+    def _pick(group: list[Task]):
+        ordered = sorted(group, key=lambda t: (1 if t.best_magnet else 0, t.rating or 0, -t.id), reverse=True)
+        return ordered[0], ordered[1:]
+
+    plan = []
+    for code, group in dup_groups.items():
+        keep, dups = _pick(group)
+        plan.append({"code": code, "keep_id": keep.id, "dup_ids": [d.id for d in dups], "dup_count": len(dups)})
+    if dry_run:
+        return {"ok": True, "dry_run": True, "groups": len(plan),
+                "to_delete": sum(len(p["dup_ids"]) for p in plan), "plan": plan}
+
+    deleted = 0
+    for p in plan:
+        keep_id = p["keep_id"]
+        dup_ids = p["dup_ids"]
+        for dup_id in dup_ids:
+            for table in (actor_movies, task_collections):
+                db.execute(table.update().where(table.c.task_id == dup_id).values(task_id=keep_id))
+            db.execute(sa_update(Download).where(Download.task_id == dup_id).values(task_id=keep_id))
+            db.execute(sa_update(NewRelease).where(NewRelease.task_id == dup_id).values(task_id=keep_id))
+        db.execute(Task.__table__.delete().where(Task.id.in_(dup_ids)))
+        deleted += len(dup_ids)
+    db.commit()
+    return {"ok": True, "dry_run": False, "groups": len(plan), "deleted": deleted}

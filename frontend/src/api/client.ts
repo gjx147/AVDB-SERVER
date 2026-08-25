@@ -473,6 +473,12 @@ export const api = {
   quota115: () =>
     http.get<{ ok: boolean; total?: number | null; used?: number | null; remain?: number | null; message?: string }>(
       '/api/drive115/quota').then((r) => r.data),
+  dedupeTasks: (dryRun = true) =>
+    http.post<{ ok: boolean; dry_run: boolean; groups: number; to_delete?: number; deleted?: number; plan?: { code: string; keep_id: number; dup_ids: number[]; dup_count: number }[] }>(
+      `/api/tasks/dedupe?dry_run=${dryRun}`).then((r) => r.data),
+  yearlyReport: (year?: number) =>
+    http.get<{ year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; monthly: number[] }>(
+      '/api/insights/yearly-report', { params: { year } }).then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(
