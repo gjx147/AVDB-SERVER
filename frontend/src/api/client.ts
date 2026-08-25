@@ -482,6 +482,25 @@ export const api = {
   yearlyReport: (year?: number) =>
     http.get<{ year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; monthly: number[] }>(
       '/api/insights/yearly-report', { params: { year } }).then((r) => r.data),
+  // ── N1-N8 分析中心 ──
+  libraryHealth: () =>
+    http.get<{ ok: boolean; score: number; total: number; rates: Record<string, number>; fix_top: { task_id: number; video_code: string | null; title: string | null; rating: number | null }[] }>(
+      '/api/insights/library-health').then((r) => r.data),
+  profileReport: () =>
+    http.get<{ ok: boolean; total: number; avg_rating: number | null; hhi: number | null; top_actors: { name: string; score: number }[]; top_tags: { name: string; score: number }[]; top_makers: { name: string; score: number }[] }>(
+      '/api/insights/profile').then((r) => r.data),
+  downloadStats: (days = 30) =>
+    http.get<{ ok: boolean; days: number; items: { downloader: string; total: number; completed: number; failed: number; success_rate: number; avg_hours: number | null; top_errors: { msg: string; count: number }[] }[] }>(
+      '/api/insights/download-stats', { params: { days } }).then((r) => r.data),
+  crawlEfficiency: (days = 14) =>
+    http.get<{ ok: boolean; days: number; trend: { date: string; total: number; errors: number }[]; totals: { type: string; total: number; errors: number; success_rate: number }[]; top_errors: { msg: string; count: number }[] }>(
+      '/api/insights/crawl-efficiency', { params: { days } }).then((r) => r.data),
+  notificationHealth: (days = 30) =>
+    http.get<{ ok: boolean; days: number; items: { channel: string; total: number; ok: number; fail_rate: number }[]; recent_failures: { channel: string; message: string; time: string }[] }>(
+      '/api/insights/notification-health', { params: { days } }).then((r) => r.data),
+  rankingTrends: (days = 14) =>
+    http.get<{ ok: boolean; days: number; top_risers: { code: string; days: number; best: number; from: number; to: number; change: number }[]; top_on_chart: { code: string; days: number; best: number }[] }>(
+      '/api/insights/ranking-trends', { params: { days } }).then((r) => r.data),
   organize: {
     config: () =>
       http.get<{ organize_enabled: string; organize_target_dir: string; organize_naming: string; organize_keep_source: string }>(

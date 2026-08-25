@@ -215,3 +215,219 @@ def yearly_report(db: DbSession, _user: CurrentUser, year: int | None = None):
         "top_makers": [{"name": k, "count": v} for k, v in maker_c.most_common(5)],
         "monthly": monthly,
     }
+
+
+@router.get("/library-health")
+def library_health(db: DbSession, _user: CurrentUser):
+    """N1 库健康度：字段覆盖率加权评分 + 最该补的 Top20（高评分缺磁力）。"""
+    from models import Download, Task
+
+    total = db.execute(select(Task.id).where(Task.video_code.isnot(None))).all()
+    total_n = len(total)
+    if total_n == 0:
+        return {"ok": True, "score": 100, "total": 0, "items": []}
+    counts = {}
+    for col, label in ((Task.best_magnet, "magnet"), (Task.title, "title"), (Task.maker, "maker"),
+                       (Task.release_date, "date"), (Task.rating, "rating"), (Task.media_in_library, "in_library")):
+        n = db.execute(select(Task.id).where(col.isnot(None))).all()
+        counts[label] = len(n)
+    org_n = db.execute(select(Download.id).where(Download.organized == True, Download.status == "completed")).all()  # noqa: E712
+    dl_n = db.execute(select(Download.id).where(Download.status == "completed")).all()
+    organized_rate = len(org_n) / len(dl_n) if dl_n else 1.0
+    magnet_rate = counts["magnet"] / total_n
+    meta_rate = (counts["title"] + counts["maker"] + counts["date"]) / (3 * total_n)
+    rating_rate = counts["rating"] / total_n
+    inlib_rate = counts["in_library"] / total_n
+    score = round(
+        100 * (0.30 * magnet_rate + 0.25 * meta_rate + 0.20 * rating_rate + 0.15 * inlib_rate + 0.10 * organized_rate),
+        1,
+    )
+    # 最该补的：评分高但无磁力
+    fix_rows = db.execute(
+        select(Task).where(Task.rating.isnot(None), Task.best_magnet.is_(None))
+        .order_by(Task.rating.desc()).limit(20)
+    ).scalars().all()
+    return {
+        "ok": True, "score": score, "total": total_n,
+        "rates": {"magnet": round(magnet_rate * 100, 1), "meta": round(meta_rate * 100, 1),
+                  "rating": round(rating_rate * 100, 1), "in_library": round(inlib_rate * 100, 1),
+                  "organized": round(organized_rate * 100, 1)},
+        "fix_top": [{"task_id": t.id, "video_code": t.video_code, "title": t.title, "rating": t.rating} for t in fix_rows],
+    }
+
+
+@router.get("/profile")
+def profile(db: DbSession, _user: CurrentUser):
+    """N2 观看偏好画像：viewed/want 加权聚合口味 Top + 集中度。"""
+    from collections import Counter
+    from models import Task
+
+    rows = db.execute(
+        select(Task.actors, Task.tags, Task.maker, Task.rating, Task.view_status)
+        .where(Task.view_status.in_(["viewed", "want"]))
+    ).all()
+    actor_c: Counter = Counter()
+    tag_c: Counter = Counter()
+    maker_c: Counter = Counter()
+    ratings: list[float] = []
+    weights = {"viewed": 2.0, "want": 1.5}
+    for actors, tags, maker, rating, vs in rows:
+        w = weights.get(vs, 1.0)
+        for a in (actors or "").split(","):
+            if a.strip():
+                actor_c[a.strip()] += w
+        for t in (tags or "").split(","):
+            if t.strip():
+                tag_c[t.strip()] += w
+        if maker:
+            maker_c[maker] += w
+        if rating:
+            ratings.append(float(rating))
+    n = len(rows)
+    avg = round(sum(ratings) / len(ratings), 2) if ratings else None
+    top3 = sum(v for _, v in actor_c.most_common(3))
+    hhi = round(sum((v / sum(actor_c.values())) ** 2 for v in actor_c.values()), 3) if actor_c else None
+    return {
+        "ok": True, "total": n, "avg_rating": avg, "hhi": hhi,
+        "top_actors": [{"name": k, "score": round(v, 1)} for k, v in actor_c.most_common(8)],
+        "top_tags": [{"name": k, "score": round(v, 1)} for k, v in tag_c.most_common(8)],
+        "top_makers": [{"name": k, "score": round(v, 1)} for k, v in maker_c.most_common(8)],
+    }
+
+
+@router.get("/download-stats")
+def download_stats(db: DbSession, _user: CurrentUser, days: int = Query(30, le=365)):
+    """N3 下载成功率与失败归因（按下载器）。"""
+    from collections import Counter, defaultdict
+    from datetime import datetime, timedelta
+    from models import Download
+
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(Download.downloader, Download.status, Download.error_message, Download.pushed_at, Download.completed_at)
+        .where(Download.pushed_at >= since)
+    ).all()
+    per: dict[str, dict] = defaultdict(lambda: {"total": 0, "completed": 0, "failed": 0, "durations": [], "errors": Counter()})
+    for dl, status, err, pushed, completed in rows:
+        d = per[dl or "unknown"]
+        d["total"] += 1
+        if status == "completed":
+            d["completed"] += 1
+            if pushed and completed:
+                d["durations"].append((completed - pushed).total_seconds() / 3600)
+        elif status == "failed":
+            d["failed"] += 1
+            key = (err or "未知原因")[:40]
+            d["errors"][key] += 1
+    result = []
+    for dl, d in per.items():
+        rate = round(d["completed"] / d["total"] * 100, 1) if d["total"] else 0
+        avg_h = round(sum(d["durations"]) / len(d["durations"]), 2) if d["durations"] else None
+        result.append({
+            "downloader": dl, "total": d["total"], "completed": d["completed"],
+            "failed": d["failed"], "success_rate": rate, "avg_hours": avg_h,
+            "top_errors": [{"msg": k, "count": v} for k, v in d["errors"].most_common(3)],
+        })
+    result.sort(key=lambda x: -x["total"])
+    return {"ok": True, "days": days, "items": result}
+
+
+@router.get("/crawl-efficiency")
+def crawl_efficiency(db: DbSession, _user: CurrentUser, days: int = Query(14, le=90)):
+    """N5 爬虫效率：按天×类型统计成功率 + 失败原因 Top。"""
+    from collections import Counter, defaultdict
+    from datetime import datetime, timedelta
+    from models import CrawlLog
+
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(CrawlLog.crawl_type, CrawlLog.level, CrawlLog.message, CrawlLog.created_at)
+        .where(CrawlLog.created_at >= since)
+    ).all()
+    per_day: dict[str, dict] = defaultdict(lambda: {"total": 0, "errors": 0})
+    type_stats: dict[str, dict] = defaultdict(lambda: {"total": 0, "errors": 0})
+    error_c: Counter = Counter()
+    for ctype, level, msg, ts in rows:
+        day = ts.strftime("%m-%d") if hasattr(ts, "strftime") else str(ts)[5:10]
+        d = per_day[day]
+        d["total"] += 1
+        if level in ("error", "warn"):
+            d["errors"] += 1
+        t = type_stats[ctype or "unknown"]
+        t["total"] += 1
+        if level in ("error", "warn"):
+            t["errors"] += 1
+            key = (msg or "未知")[:40]
+            error_c[key] += 1
+    trend = [{"date": k, **v} for k, v in sorted(per_day.items())]
+    totals = [{"type": k, "total": v["total"], "errors": v["errors"],
+               "success_rate": round((v["total"] - v["errors"]) / v["total"] * 100, 1) if v["total"] else 100}
+              for k, v in type_stats.items()]
+    return {"ok": True, "days": days, "trend": trend, "totals": totals,
+            "top_errors": [{"msg": k, "count": v} for k, v in error_c.most_common(5)]}
+
+
+@router.get("/notification-health")
+def notification_health(db: DbSession, _user: CurrentUser, days: int = Query(30, le=365)):
+    """N6 通知健康度：按通道成功率 + 最近失败。"""
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+    from models import NotifyLog
+
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(NotifyLog.channel, NotifyLog.ok, NotifyLog.message, NotifyLog.created_at)
+        .where(NotifyLog.created_at >= since)
+    ).all()
+    per: dict[str, dict] = defaultdict(lambda: {"total": 0, "ok": 0})
+    recent_fail: list[dict] = []
+    for ch, ok, msg, ts in rows:
+        d = per[ch or "unknown"]
+        d["total"] += 1
+        if ok:
+            d["ok"] += 1
+        elif len(recent_fail) < 10:
+            recent_fail.append({"channel": ch, "message": (msg or "")[:80], "time": str(ts)[:19]})
+    items = []
+    for ch, d in per.items():
+        items.append({"channel": ch, "total": d["total"], "ok": d["ok"],
+                      "fail_rate": round((d["total"] - d["ok"]) / d["total"] * 100, 1) if d["total"] else 0})
+    items.sort(key=lambda x: -x["fail_rate"])
+    return {"ok": True, "days": days, "items": items, "recent_failures": recent_fail}
+
+
+@router.get("/ranking-trends")
+def ranking_trends(db: DbSession, _user: CurrentUser, days: int = Query(14, le=90)):
+    """N8 榜单趋势：在榜天数/最佳排名/上升最快 Top10。"""
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+    from models import Ranking
+
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(Ranking.video_code, Ranking.rank_date, Ranking.rank_position)
+        .where(Ranking.rank_date >= since, Ranking.video_code.isnot(None))
+    ).all()
+    per: dict[str, dict] = defaultdict(lambda: {"days": 0, "best": 9999, "first": None, "last": None, "positions": []})
+    for code, rd, pos in rows:
+        d = per[code]
+        d["days"] += 1
+        d["best"] = min(d["best"], pos or 9999)
+        d["first"] = min(d["first"] or rd, rd)
+        d["last"] = max(d["last"] or rd, rd)
+        if pos:
+            d["positions"].append(pos)
+    risers = []
+    for code, d in per.items():
+        first_p = d["positions"][0] if d["positions"] else None
+        last_p = d["positions"][-1] if d["positions"] else None
+        if first_p and last_p and first_p != last_p:
+            risers.append({"code": code, "days": d["days"], "best": d["best"],
+                           "from": first_p, "to": last_p, "change": first_p - last_p})
+    risers.sort(key=lambda x: -x["change"])
+    top_days = sorted(per.items(), key=lambda kv: -kv[1]["days"])[:10]
+    return {
+        "ok": True, "days": days,
+        "top_risers": risers[:10],
+        "top_on_chart": [{"code": k, "days": v["days"], "best": v["best"]} for k, v in top_days],
+    }

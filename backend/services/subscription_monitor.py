@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, update, func
 
 from database import SessionLocal
 from models import ListSource, Subscription, Task
@@ -178,6 +178,48 @@ async def run_check_cycle() -> dict:
                 sub.last_checked_at = now
                 sub.last_result = json.dumps({"error": str(e)})
                 results.append({"id": sub.id, "name": sub.name, "error": str(e)})
+
+        # N4: 订阅演员"凉了"提醒——超阈值（默认 180 天，配置 actor_inactive_days）无新作，
+        # 合并推送一条通知，避免刷屏
+        try:
+            _inactive_days = 180
+            _cfg_row = db.get(Setting, "actor_inactive_days")
+            if _cfg_row and _cfg_row.value:
+                try:
+                    _inactive_days = int(_cfg_row.value)
+                except Exception:
+                    pass
+            _threshold = now - timedelta(days=_inactive_days)
+            _actor_subs = [s for s in subs if s.sub_type == "actor" and s.actor_id]
+            if _actor_subs:
+                from models import ActorMovie
+                _last_rows = db.execute(
+                    select(ActorMovie.actor_id, func.max(Task.release_date))
+                    .join(Task, Task.id == ActorMovie.task_id)
+                    .where(ActorMovie.actor_id.in_([s.actor_id for s in _actor_subs]),
+                           Task.release_date.isnot(None))
+                    .group_by(ActorMovie.actor_id)
+                ).all()
+                _last_map = {aid: rd for aid, rd in _last_rows}
+                _inactive = []
+                for _s in _actor_subs:
+                    _rd = _last_map.get(_s.actor_id)
+                    if not _rd:
+                        continue
+                    try:
+                        _d = datetime.strptime(str(_rd)[:10], "%Y-%m-%d")
+                    except Exception:
+                        continue
+                    if _d < _threshold:
+                        _inactive.append({"name": _s.name, "last": str(_rd)[:10], "days": (now - _d).days})
+                if _inactive:
+                    _lines = "\n".join(
+                        f"· {i['name']}（最后作品 {i['last']}，已 {i['days']} 天）" for i in _inactive[:10]
+                    )
+                    from services.notifier import notify
+                    await notify("actor_inactive", f"{len(_inactive)} 位订阅演员疑似休止/引退", _lines)
+        except Exception as e:
+            logger.warning("演员休止检测失败: %s", e)
         db.commit()
         _state["last_run"] = now.isoformat()
         _state["total_checked"] = len(results)

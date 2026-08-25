@@ -39,6 +39,7 @@ ALL_EVENTS = {
     "download",        # 下载完成
     "monthly_report",  # 月报生成
     "weekly_report",   # 每周新作榜单（F4）
+    "actor_inactive",  # 订阅演员疑似休止/引退（N4）
     "crawl",           # 爬取完成/失败
     "disk_warning",    # 磁盘告警
     "error",           # 错误

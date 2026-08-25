@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { DashboardStats, Task, MonthlyStat, DiskInfo } from '../api/types'
@@ -284,6 +284,7 @@ function RecommendationsCard() {
 
 function YearlyReportCard() {
   const [rep, setRep] = useState<{ year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; top_tags: { name: string; count: number }[]; top_makers: { name: string; count: number }[]; monthly: number[] } | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   useEffect(() => {
     let alive = true
     api.yearlyReport().then((r) => { if (alive) setRep(r) }).catch(() => { if (alive) setRep(null) })
@@ -307,8 +308,12 @@ function YearlyReportCard() {
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>年度回顾 · {rep.year}</div>
-        <div style={{ fontSize: 11, color: 'var(--t-mute)' }}>入库 {rep.stats.added} · 下载 {rep.stats.downloads} · 收藏 {rep.stats.favorites}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--t-mute)' }}>入库 {rep.stats.added} · 下载 {rep.stats.downloads} · 收藏 {rep.stats.favorites}</span>
+          <button className="btn btn--ghost btn--sm" onClick={() => setShareOpen(true)}>生成分享卡</button>
+        </div>
       </div>
+      {shareOpen && <ShareCardModal report={rep} onClose={() => setShareOpen(false)} />}
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 220px', minWidth: 180 }}>
           <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>月度入库分布</div>
@@ -334,6 +339,78 @@ function YearlyReportCard() {
           <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 4 }}>年度 Top 厂商</div>
           {topList(rep.top_makers)}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ShareCardModal({ report, onClose }: {
+  report: { year: number; stats: { added: number; downloads: number; favorites: number }; top_actors: { name: string; count: number }[]; monthly: number[] }
+  onClose: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const cv = canvasRef.current
+    if (!cv) return
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+    const W = 600, H = 800
+    cv.width = W; cv.height = H
+    const g = ctx.createLinearGradient(0, 0, 0, H)
+    g.addColorStop(0, '#101b3a'); g.addColorStop(1, '#1e3a8a')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 34px "Microsoft YaHei", sans-serif'
+    ctx.fillText(`年度回顾 ${report.year}`, 40, 70)
+    ctx.font = '16px "Microsoft YaHei", sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,.75)'
+    ctx.fillText(`入库 ${report.stats.added} · 下载 ${report.stats.downloads} · 收藏 ${report.stats.favorites}`, 40, 105)
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 18px "Microsoft YaHei", sans-serif'
+    ctx.fillText('年度 Top 演员', 40, 165)
+    ctx.font = '14px "Microsoft YaHei", sans-serif'
+    report.top_actors.slice(0, 5).forEach((a, i) => {
+      ctx.fillStyle = 'rgba(255,255,255,.88)'
+      ctx.fillText(`${i + 1}. ${a.name}`, 40, 190 + i * 28)
+      ctx.fillStyle = 'rgba(255,255,255,.5)'
+      ctx.fillText(`${a.count} 部`, 440, 190 + i * 28)
+    })
+    const maxM = Math.max(...report.monthly, 1)
+    const bw = 34, gap = 10, x0 = 40, y0 = 540, bh = 200
+    report.monthly.forEach((c, i) => {
+      const h = Math.max(3, (c / maxM) * bh)
+      ctx.fillStyle = '#f59e0b'
+      ctx.fillRect(x0 + i * (bw + gap), y0 - h, bw, h)
+      ctx.fillStyle = 'rgba(255,255,255,.5)'
+      ctx.font = '11px "Microsoft YaHei", sans-serif'
+      ctx.fillText(`${i + 1}月`, x0 + i * (bw + gap), y0 + 16)
+    })
+    ctx.fillStyle = 'rgba(255,255,255,.35)'
+    ctx.font = '12px "Microsoft YaHei", sans-serif'
+    ctx.fillText('AVDB 影片库', 40, H - 30)
+  }, [report])
+
+  const download = () => {
+    const cv = canvasRef.current
+    if (!cv) return
+    const a = document.createElement('a')
+    a.href = cv.toDataURL('image/png')
+    a.download = `avdb-yearly-${report.year}.png`
+    a.click()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-page, #fff)', borderRadius: 14, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,.4)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>年度分享卡</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn--gold btn--sm" onClick={download}>下载 PNG</button>
+            <button className="btn btn--ghost btn--sm" onClick={onClose}>关闭</button>
+          </div>
+        </div>
+        <canvas ref={canvasRef} style={{ width: 300, height: 400, borderRadius: 10, display: 'block' }} />
       </div>
     </div>
   )
