@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from database import SessionLocal
-from deps import CurrentUser, DbSession
+from deps import CurrentAdmin, CurrentUser, DbSession
 from models import Download, Setting, Task
 
 logger = logging.getLogger("avdb.downloaders")
@@ -289,7 +289,7 @@ async def list_cd2_folder(path: str, db: DbSession, _user: CurrentUser):
 
 
 @router.get("/logs")
-def downloader_logs(_user: CurrentUser, limit: int = 100):
+def downloader_logs(_user: CurrentAdmin, limit: int = 100):
     """读取最近的下载器日志（data/downloaders.log）。"""
     from pathlib import Path
     from config import get_settings

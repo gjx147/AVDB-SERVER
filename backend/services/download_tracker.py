@@ -22,6 +22,9 @@ logger = logging.getLogger("avdb.download_tracker")
 
 _state = {"running": False, "last_run": None, "updated": 0}
 
+# T4: torrent 从 qB 消失的连续未命中计数（dl_id → 轮次），3 轮未命中标记失败
+_missing_count: dict[int, int] = {}
+
 # qBittorrent 状态映射
 _QB_COMPLETED = {"uploading", "queuedUP", "stalledUP", "forcedUP", "pausedUP", "checkingUP"}
 _QB_DOWNLOADING = {"downloading", "metaDL", "forcedDL", "queuedDL", "stalledDL", "checkingDL"}
@@ -54,7 +57,14 @@ def _poll_qbittorrent_sync(config: dict, hashes: list[tuple[int, str]]) -> list[
         for dl_id, info_hash in hashes:
             t = torrents.get(info_hash)
             if not t:
+                # T4 兜底：torrent 已从 qB 消失（被删除/手动移除）——连续 3 轮未命中标记失败，
+                # 避免下载记录永久卡在 downloading 且每轮重复查询
+                _missing_count[dl_id] = _missing_count.get(dl_id, 0) + 1
+                if _missing_count[dl_id] >= 3:
+                    results.append({"id": dl_id, "status": "failed", "progress": 0,
+                                    "error": "torrent 已从 qB 消失（被删除或手动移除）"})
                 continue
+            _missing_count.pop(dl_id, None)
             state = str(t.state)
             progress = round(float(t.progress) * 100, 1) if t.progress else 0
             if state in _QB_COMPLETED:

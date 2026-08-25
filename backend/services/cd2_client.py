@@ -231,7 +231,8 @@ async def login(base: str, username: str, password: str) -> tuple[str, str]:
             # JWTToken: field3=token (string)
             token = extract_string_field(data, 3)
             if not token:
-                logger.error(f"CD2 登录成功但未提取到 token，raw data={data[:80]!r}")
+                # T6a: 不记录原始响应（可能含 JWT），只记录长度与状态码
+                logger.error(f"CD2 登录成功但未提取到 token（grpc-status={gstatus}, data_len={len(data)}），原始响应已丢弃")
                 return "", "CloudDrive2 登录成功但未返回 token"
             logger.info("CD2 登录成功，已获取 token")
             return token, ""

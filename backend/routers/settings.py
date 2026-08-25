@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from deps import CurrentUser, DbSession
+from deps import CurrentAdmin, CurrentUser, DbSession
 from models import Setting
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -38,7 +38,7 @@ def get_settings(db: DbSession, _user: CurrentUser):
 
 
 @router.put("")
-def update_settings(payload: dict, db: DbSession, _user: CurrentUser):
+def update_settings(payload: dict, db: DbSession, _user: CurrentAdmin):
     """批量更新配置。值含 *** 的敏感字段跳过（哨兵值保护）。"""
     updated = 0
     skipped = 0

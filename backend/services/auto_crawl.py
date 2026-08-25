@@ -134,6 +134,12 @@ async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
                 "scraper 退出码 %d（累计错误 %d），stderr 见 %s: %s",
                 proc.returncode, _state["errors"], log_path, " ".join(args),
             )
+            # T3: 后台任务失败告警（crawl 事件；无人值守时必须通知）
+            try:
+                from services.notifier import notify
+                await notify("crawl", "自动爬取失败", f"{' '.join(args)[:80]} 退出码 {proc.returncode}")
+            except Exception:
+                pass
             return False
         except asyncio.TimeoutError:
             # 先给 scraper 优雅退出机会（flush/清理浏览器会话），等 10s 未退出再整树强杀
@@ -143,6 +149,12 @@ async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
                 "scraper 超时(%ds)已尝试优雅退出，随后 kill 整树: %s",
                 timeout, " ".join(args),
             )
+            # T3: 超时告警
+            try:
+                from services.notifier import notify
+                await notify("crawl", "自动爬取超时", f"{' '.join(args)[:80]} 超过 {timeout}s 已终止")
+            except Exception:
+                pass
             return False
     except Exception as e:
         logger.error("scraper 执行异常: %s", e)

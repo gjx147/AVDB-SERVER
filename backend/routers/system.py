@@ -6,7 +6,7 @@ import json
 import shutil
 from fastapi import APIRouter, Query
 from config import get_settings
-from deps import CurrentUser
+from deps import CurrentAdmin, CurrentUser
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -100,7 +100,7 @@ def disk_info(_user: CurrentUser):
 
 
 @router.get("/logs")
-def app_logs(_user: CurrentUser, limit: int = 100, filter: str = "", file: str = "app"):
+def app_logs(_user: CurrentAdmin, limit: int = 100, filter: str = "", file: str = "app"):
     """读取日志文件最后 N 行。
 
     file=app: data/app.log（应用日志）

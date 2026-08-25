@@ -322,6 +322,17 @@ class SqliteTaskStore:
             logger.info("magnet_hashes 存量回填: %d 个 hash", len(found))
 
     # ---------- 结果写入 ----------
+    def _retry_write(self, fn, retries: int = 3, delay: float = 0.5):
+        """写操作重试：与 backend 事务并发写时偶发 database is locked（T5）。"""
+        import time
+        for _attempt in range(retries):
+            try:
+                return fn()
+            except sqlite3.OperationalError:
+                if _attempt == retries - 1:
+                    raise
+                time.sleep(delay)
+
     def mark_visited(self, url: str, *, best_magnet: str = None,
                      magnets_json: str = None, video_code: str = None,
                      title: str = None, poster_url: str = None,
@@ -330,27 +341,31 @@ class SqliteTaskStore:
                      release_date: str = None, duration: str = None,
                      director: str = None, maker: str = None, label: str = None,
                      series: str = None, rating: float = None, file_size: str = None) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                """UPDATE tasks SET
-                    status='visited', best_magnet=?, magnets_json=?, video_code=?,
-                    title=?, poster_url=?, thumbnail_urls=?, synopsis=?, description=?,
-                    actors=?, tags=?, release_date=?, duration=?, director=?, maker=?,
-                    label=?, series=?, rating=?, file_size=?,
-                    updated_at=datetime('now')
-                   WHERE url=?""",
-                (best_magnet, magnets_json, video_code, title, poster_url, thumbnail_urls,
-                 synopsis, description, actors, tags, release_date, duration, director,
-                 maker, label, series, rating, file_size, url))
-            conn.commit()
+        def _do():
+            with self._conn() as conn:
+                conn.execute(
+                    """UPDATE tasks SET
+                        status='visited', best_magnet=?, magnets_json=?, video_code=?,
+                        title=?, poster_url=?, thumbnail_urls=?, synopsis=?, description=?,
+                        actors=?, tags=?, release_date=?, duration=?, director=?, maker=?,
+                        label=?, series=?, rating=?, file_size=?,
+                        updated_at=datetime('now')
+                       WHERE url=?""",
+                    (best_magnet, magnets_json, video_code, title, poster_url, thumbnail_urls,
+                     synopsis, description, actors, tags, release_date, duration, director,
+                     maker, label, series, rating, file_size, url))
+                conn.commit()
+        self._retry_write(_do)
 
     def mark_failed(self, url: str, error_message: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                """UPDATE tasks SET status='failed', error_message=?,
-                   retry_count=retry_count+1, updated_at=datetime('now') WHERE url=?""",
-                (error_message[:500] if error_message else None, url))
-            conn.commit()
+        def _do():
+            with self._conn() as conn:
+                conn.execute(
+                    """UPDATE tasks SET status='failed', error_message=?,
+                       retry_count=retry_count+1, updated_at=datetime('now') WHERE url=?""",
+                    (error_message[:500] if error_message else None, url))
+                conn.commit()
+        self._retry_write(_do)
 
     def update_metadata(self, task_id: int, meta: dict) -> None:
         """只更新元数据字段（不影响磁力/状态/海报等）。供 refresh-metadata 用。"""

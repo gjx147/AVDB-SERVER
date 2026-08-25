@@ -224,8 +224,24 @@ async def notify_test(_admin: str = Depends(get_current_admin)):
     return {"results": await test_notify()}
 
 
+# ── 登录限流（内存滑动窗口：每 IP 5 分钟最多 10 次尝试，防暴力破解）──
+_login_attempts: dict[str, list[float]] = {}
+
+
+def _check_login_rate(ip: str) -> None:
+    import time
+    now = time.monotonic()
+    wins = _login_attempts.setdefault(ip, [])
+    while wins and now - wins[0] > 300:
+        wins.pop(0)
+    if len(wins) >= 10:
+        raise HTTPException(status_code=429, detail="尝试过于频繁，请 5 分钟后再试")
+    wins.append(now)
+
+
 @app.post("/api/auth/login")
 def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
@@ -237,6 +253,7 @@ def login(
     """
     from auth import authenticate_user, create_access_token
 
+    _check_login_rate(request.client.host if request.client else "unknown")
     user = authenticate_user(db, username, password)
     if user is None:
         raise HTTPException(
