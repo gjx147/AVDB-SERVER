@@ -17,6 +17,29 @@ export function Settings() {
 
   const load = () => { api.settings.get().then(setS).catch((e) => setError(String((e as Error).message))) }
   useEffect(() => { load() }, [])
+
+  // 数据导入/整理/S3/打标 hooks：必须在条件 return 之前声明，保证渲染间 hooks 数量一致（修复 React #310）
+  const [codesText, setCodesText] = useState('')
+  const [magText, setMagText] = useState('')
+  const [tagBusy, setTagBusy] = useState(false)
+  const [orgCfg, setOrgCfg] = useState<Record<string, string>>({
+    organize_enabled: 'false', organize_target_dir: '', organize_naming: '{code} - {title}',
+  })
+  const [s3, setS3] = useState<Record<string, string>>({ s3_backup_enabled: 'false', s3_endpoint: '', s3_bucket: '', s3_access_key: '', s3_secret_key: '', s3_region: '' })
+  const [s3Status, setS3Status] = useState<Awaited<ReturnType<typeof api.s3Status>> | null>(null)
+  useEffect(() => {
+    api.organize.config().then(setOrgCfg).catch(() => {})
+    api.settings.get().then((r) => {
+      const c = r as unknown as Record<string, string>
+      setS3({
+        s3_backup_enabled: c.s3_backup_enabled || 'false', s3_endpoint: c.s3_endpoint || '',
+        s3_bucket: c.s3_bucket || '', s3_access_key: c.s3_access_key || '',
+        s3_secret_key: c.s3_secret_key || '', s3_region: c.s3_region || '',
+      })
+    }).catch(() => {})
+    api.s3Status().then(setS3Status).catch(() => {})
+  }, [])
+
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={load} /></div>
   if (!s) return <div className="page"><Loading /></div>
 
@@ -77,7 +100,6 @@ export function Settings() {
   }
 
   // ── F1 数据导入导出 ──
-  const [codesText, setCodesText] = useState('')
   const exportCsv = async () => {
     try {
       const blob = await api.exportTasksCsv()
@@ -108,19 +130,6 @@ export function Settings() {
   }
 
   // ── N20 S3 对象存储备份 ──
-  const [s3, setS3] = useState<Record<string, string>>({ s3_backup_enabled: 'false', s3_endpoint: '', s3_bucket: '', s3_access_key: '', s3_secret_key: '', s3_region: '' })
-  const [s3Status, setS3Status] = useState<Awaited<ReturnType<typeof api.s3Status>> | null>(null)
-  useEffect(() => {
-    api.settings.get().then((r) => {
-      const c = r as unknown as Record<string, string>
-      setS3({
-        s3_backup_enabled: c.s3_backup_enabled || 'false', s3_endpoint: c.s3_endpoint || '',
-        s3_bucket: c.s3_bucket || '', s3_access_key: c.s3_access_key || '',
-        s3_secret_key: c.s3_secret_key || '', s3_region: c.s3_region || '',
-      })
-    }).catch(() => {})
-    api.s3Status().then(setS3Status).catch(() => {})
-  }, [])
   const saveS3 = async () => {
     try {
       const payload: Record<string, string> = {}
@@ -143,7 +152,6 @@ export function Settings() {
   }
 
   // ── N17 AI 批量补标签 ──
-  const [tagBusy, setTagBusy] = useState(false)
   const runBatchTags = async () => {
     if (tagBusy) return
     setTagBusy(true)
@@ -155,7 +163,6 @@ export function Settings() {
   }
 
   // ── N11 磁力导入 ──
-  const [magText, setMagText] = useState('')
   const importMagnets = async () => {
     if (!magText.trim()) return
     try {
@@ -166,10 +173,6 @@ export function Settings() {
   }
 
   // ── F7 下载自动整理配置 ──
-  const [orgCfg, setOrgCfg] = useState<Record<string, string>>({
-    organize_enabled: 'false', organize_target_dir: '', organize_naming: '{code} - {title}',
-  })
-  useEffect(() => { api.organize.config().then(setOrgCfg).catch(() => {}) }, [])
   const saveOrgCfg = async () => {
     try { await api.organize.setConfig(orgCfg); toastOk('整理配置已保存') }
     catch (e) { toastErr(String((e as Error).message)) }
