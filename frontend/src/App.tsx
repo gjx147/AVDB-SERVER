@@ -26,6 +26,7 @@ const Downloaders = lazy(() => import('./pages/Downloaders').then(m => ({ defaul
 const Downloads   = lazy(() => import('./pages/Downloads').then(m => ({ default: m.Downloads })))
 const Settings    = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })))
+import { AskOverlay } from './components/AskOverlay'
 const TaskDetail  = lazy(() => import('./pages/TaskDetail').then(m => ({ default: m.TaskDetail })))
 
 // 鉴权守卫：无 token 跳登录
@@ -101,6 +102,7 @@ export default function App() {
 
   return (
     <div className={`app img-mode-${imgMode}`}>
+      <AskOverlay />
       <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         aria-label={mobileMenuOpen ? '关闭菜单' : '打开菜单'} aria-expanded={mobileMenuOpen}>
         {mobileMenuOpen ? '✕' : '☰'}
