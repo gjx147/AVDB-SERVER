@@ -205,6 +205,62 @@ async def actor_dynamics_endpoint(actor_id: int, _user: CurrentUser):
     return await actor_dynamics(actor_id)
 
 
+@router.get("/subscription-suggestions")
+async def sub_suggestions(_user: CurrentUser, limit: int = 5):
+    """S6: 值得订阅的演员推荐（未订阅 + 作品多评分高 + AI 理由）。"""
+    from services.ai_p2 import subscription_suggestions
+    return await subscription_suggestions(limit=min(limit, 10))
+
+
+@router.get("/similar-actors/{actor_id}")
+async def similar_actors_endpoint(actor_id: int, _user: CurrentUser, limit: int = 5):
+    """S7: 相似演员（共演+标签相似 + AI 说明）。"""
+    from services.ai_p2 import similar_actors
+    return await similar_actors(actor_id, limit=min(limit, 10))
+
+
+@router.get("/quarterly-report")
+async def quarterly_report_endpoint(_user: CurrentUser, year: int | None = None, quarter: int | None = None):
+    """A6: 季度观看报告（对比上季度 + AI 点评）。"""
+    from services.ai_p2 import quarterly_report
+    return await quarterly_report(year, quarter)
+
+
+@router.get("/share-summary/{token}")
+async def share_summary_endpoint(token: str, _user: CurrentUser):
+    """A8: 分享页 AI 摘要（收藏夹一句话介绍）。"""
+    from services.ai_p2 import share_summary
+    return await share_summary(token)
+
+
+@router.post("/metadata-audit")
+def metadata_audit_endpoint(_user: CurrentUser):
+    """A9: 元数据异常检测（评分越界/番号格式/乱码/缺标题）。"""
+    from services.ai_p2 import metadata_audit
+    return metadata_audit()
+
+
+@router.post("/tag-normalize-preview")
+async def tag_normalize_preview_endpoint(_user: CurrentUser):
+    """A10: 同义标签预演（返回合并建议，不执行）。"""
+    from services.ai_p2 import tag_normalize_preview
+    return await tag_normalize_preview()
+
+
+class TagNormalizeApplyRequest(BaseModel):
+    groups: list[dict]
+
+
+@router.post("/tag-normalize-apply")
+def tag_normalize_apply_endpoint(req: TagNormalizeApplyRequest, _user: Annotated[str, Depends(_agent_confirm_user)]):
+    """A10: 确认执行标签合并（单用户模式放行，正式模式要求管理员）。"""
+    from services.ai_p2 import tag_normalize_apply
+    result = tag_normalize_apply(req.groups or [])
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("message", "执行失败"))
+    return result
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     """F15: 库内 AI 问答——自然语言 → 结构化筛选 JSON → 查询影片库。

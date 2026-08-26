@@ -6,7 +6,13 @@ import { Loading } from '../components/States'
 export function ShareView() {
   const { token = '' } = useParams()
   const [d, setD] = useState<Awaited<ReturnType<typeof api.publicShare>> | null>(null)
+  const [sum, setSum] = useState('')
   const [err, setErr] = useState('')
+  useEffect(() => {
+    let alive = true
+    api.publicShareSummary(token).then((r) => { if (alive && r.summary) setSum(r.summary) }).catch(() => {})
+    return () => { alive = false }
+  }, [token])
   useEffect(() => {
     let alive = true
     api.publicShare(token).then((r) => { if (alive) setD(r) })
@@ -17,6 +23,9 @@ export function ShareView() {
     <div className="page" style={{ maxWidth: 720, margin: '0 auto' }}>
       <div className="card" style={{ marginTop: 40, padding: '20px 24px' }}>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{d?.title || 'AVDB 分享'}</div>
+        {sum && <div style={{ fontSize: 13, lineHeight: 1.6, background: 'var(--bg-raised, #f5f5f5)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+          ✨ {sum}
+        </div>}
         <div style={{ fontSize: 12, color: 'var(--t-mute)', marginBottom: 14 }}>
           由 AVDB 影片库用户分享{d ? ` · ${d.items.length} 项` : ''}
         </div>

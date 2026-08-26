@@ -80,6 +80,18 @@ async def start_scheduler() -> None:
         from services.config_inspector import weekly_inspection_job
         add_cron_job(weekly_inspection_job, "config-inspection-weekly", day_of_week="mon", hour=9, minute=0)
 
+        # A9: 每周一 9:20 元数据异常检测（发现问题推送）
+        from services.ai_p2 import metadata_audit
+        async def _metadata_audit_job():
+            res = metadata_audit(limit=20)
+            errs = res.get("error_count", 0)
+            if errs:
+                from services.notifier import notify
+                lines = "\n".join(f"- {p['video_code']}：{p['detail']}" for p in res["problems"] if p["level"] == "error")
+                await notify("system", f"元数据异常 {errs} 项", lines)
+            return res
+        add_cron_job(_metadata_audit_job, "metadata-audit-weekly", day_of_week="mon", hour=9, minute=20)
+
         # S4: 每周一 9:10 AI 订阅周报（紧随新作周报之后）
         from services.ai_reports import subscription_weekly_job
         add_cron_job(subscription_weekly_job, "subscription-weekly", day_of_week="mon", hour=9, minute=10)

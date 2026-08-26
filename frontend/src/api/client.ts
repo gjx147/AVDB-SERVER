@@ -473,6 +473,9 @@ export const api = {
   agentConfirm: (token: string) =>
     http.post<{ ok: boolean; result?: { ok: boolean; message?: string } }>(
       '/api/ai/agent/confirm', { token }).then((r) => r.data),
+  publicShareSummary: (token: string) =>
+    http.get<{ ok: boolean; kind?: string; name?: string; count?: number; top_tags?: string[]; summary?: string }>(
+      `/api/shares/public-summary/${token}`).then((r) => r.data),
   aiAsk: (question: string, history: { role: string; content: string }[] = []) =>
     http.post<{ ok: boolean; question: string; query: Record<string, unknown>; total: number; engine: string; items: { task_id: number; video_code: string | null; title: string | null; rating: number | null; poster_url: string | null; tags: string | null; actors: string | null }[] }>(
       '/api/ai/ask', { question, history }).then((r) => r.data),

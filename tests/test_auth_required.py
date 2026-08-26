@@ -13,7 +13,8 @@ WHITELIST = {
     "/api/health/ready",
     "/api/system/login-wall",
     "/api/system/version",
-    "/api/public/share/{token}",  # N21: 公开分享页（免鉴权，token 即凭据）
+    "/api/public/share/{token}",
+    "/api/shares/public-summary/{token}",  # A8: share page AI summary (token = public credential)  # N21: 公开分享页（免鉴权，token 即凭据）
     "/docs",
     "/openapi.json",
     "/redoc",

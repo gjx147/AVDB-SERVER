@@ -32,6 +32,31 @@ export function AskOverlay() {
     setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, 60)
   }
 
+  const [listening, setListening] = useState(false)
+  const recRef = useRef<{ stop: () => void } | null>(null)
+
+  const toggleVoice = () => {
+    const SR = (window as unknown as { webkitSpeechRecognition?: unknown; SpeechRecognition?: unknown }).webkitSpeechRecognition
+      || (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition
+    if (!SR) { alert('当前浏览器不支持语音输入（需 Chrome/Edge）'); return }
+    if (listening) { recRef.current?.stop(); setListening(false); return }
+    try {
+      const rec = new (SR as new () => { lang: string; interimResults: boolean; onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onend: () => void; onerror: () => void; start: () => void; stop: () => void })()
+      rec.lang = 'zh-CN'
+      rec.interimResults = true
+      rec.onresult = (e) => {
+        let t = ''
+        for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript
+        setInput(t)
+      }
+      rec.onend = () => setListening(false)
+      rec.onerror = () => setListening(false)
+      rec.start()
+      recRef.current = rec
+      setListening(true)
+    } catch { alert('语音识别启动失败') }
+  }
+
   const ask = async (raw?: string) => {
     const q = (raw ?? input).trim()
     if (!q || busy) return
@@ -147,7 +172,11 @@ export function AskOverlay() {
       </div>
 
       <div style={{ padding: 10, display: 'flex', gap: 8, borderTop: '1px solid var(--line, #e5e7eb)' }}>
-        <input className="input" value={input} placeholder="检索、订阅、规则、配置、巡检都能聊…"
+        <button onClick={toggleVoice} disabled={busy} title={listening ? '停止录音' : '语音输入'}
+          style={{ border: '1px solid var(--line, #e5e7eb)', background: listening ? 'var(--red, #dc2626)' : 'var(--bg-page, #fff)', color: listening ? '#fff' : 'var(--t-body)', borderRadius: 8, padding: '0 10px', fontSize: 13, cursor: 'pointer' }}>
+          {listening ? '⏹' : '🎤'}
+        </button>
+        <input className="input" value={input} placeholder={listening ? '正在听…' : '检索、订阅、规则、配置、巡检都能聊…'}
           onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') ask() }}
           style={{ flex: 1, fontSize: 12 }} />
         <button className="btn btn--gold btn--sm" onClick={() => ask()} disabled={busy}>发送</button>

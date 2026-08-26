@@ -45,6 +45,13 @@ def list_shares(db: DbSession, _user: CurrentUser):
     ]}
 
 
+@router.get("/public-summary/{token}")
+async def public_summary(token: str):
+    """A8: 分享页 AI 摘要（游客可访问，token 即公开凭证）。"""
+    from services.ai_p2 import share_summary
+    return await share_summary(token)
+
+
 @router.delete("/{token}")
 def delete_share(token: str, db: DbSession, _user: CurrentUser):
     row = db.execute(select(ShareToken).where(ShareToken.token == token)).scalar_one_or_none()
