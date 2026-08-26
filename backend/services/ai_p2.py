@@ -141,6 +141,7 @@ async def quarterly_report(year: int | None = None, quarter: int | None = None) 
     now = datetime.utcnow()
     y = year or now.year
     q = quarter or ((now.month - 1) // 3 + 1)
+    q = min(max(int(q), 1), 4)  # E9: 越界钳制
 
     def q_range(yy: int, qq: int):
         start = datetime(yy, (qq - 1) * 3 + 1, 1)

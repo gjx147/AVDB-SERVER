@@ -92,7 +92,7 @@ def _save_cache(prompt_hash: str, task_type: str, model: str, prompt: str, respo
 
 async def chat(messages: list[dict], *, task_type: str = "chat", model: str | None = None,
                temperature: float = 0.3, use_cache: bool = True) -> str:
-    """通用 ChatCompletion 调用（带缓存+重试）。"""
+    """Generic ChatCompletion call (cache + retry + concurrency limit)."""
     config = await _get_config()
     if config.get("ai_enabled", "").lower() != "true":
         return ""
@@ -101,26 +101,75 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
     api_key = config.get("ai_api_key", "").strip()
     use_model = model or config.get("ai_model", "").strip() or DEFAULT_MODEL
     if not api_key:
-        logger.warning("AI 未配置 api_key")
+        logger.warning("AI key not configured")
         return ""
 
-    # 缓存检查
     prompt_text = str(messages)
     prompt_hash = _hash_prompt(prompt_text)
     if use_cache:
         cached = _get_cached(prompt_hash)
         if cached:
-            logger.debug("AI 命中缓存: %s", prompt_hash[:12])
+            logger.debug("AI cache hit: %s", prompt_hash[:12])
             return cached
 
-    client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=60)
-    # MiniMax-M3 可显式关思考（快+省）；M2.x 不支持该参数，靠下游 _strip_thinking
+    # C5: per-hash lock prevents double LLM billing on concurrent same request
+    lock = await _acquire_chat_lock(prompt_hash)
+    async with lock:
+        if use_cache:
+            cached = _get_cached(prompt_hash)
+            if cached:
+                return cached
+        return await _chat_uncached(base_url, api_key, use_model, messages, temperature,
+                                    use_cache, prompt_hash, task_type, prompt_text)
+
+
+# E1: pooled client (per base_url+api_key), avoids connection leak
+import threading
+_client_pool: dict[tuple[str, str], object] = {}
+_client_pool_guard = threading.Lock()
+
+# C5: per-hash in-process locks, prevent double billing
+_chat_locks: dict[str, asyncio.Lock] = {}
+_chat_locks_guard = threading.Lock()
+
+# E6: global LLM concurrency semaphore
+_llm_semaphore = asyncio.Semaphore(4)
+
+
+def _get_client(base_url: str, api_key: str):
+    """Lazy singleton client; rebuilds when config changes."""
+    key = (base_url, api_key)
+    c = _client_pool.get(key)
+    if c is not None:
+        return c
+    with _client_pool_guard:
+        c = _client_pool.get(key)
+        if c is None:
+            c = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=60)
+            _client_pool[key] = c
+    return c
+
+
+async def _acquire_chat_lock(prompt_hash: str) -> asyncio.Lock:
+    with _chat_locks_guard:
+        lock = _chat_locks.get(prompt_hash)
+        if lock is None:
+            lock = asyncio.Lock()
+            _chat_locks[prompt_hash] = lock
+        return lock
+
+
+async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
+                         use_cache, prompt_hash, task_type, prompt_text) -> str:
+    """Uncached path: pooled client + classified retry (E1/E2)."""
+    import openai
+    client = _get_client(base_url, api_key)
     extra_body = {}
     if use_model.startswith("MiniMax-M3"):
         extra_body["thinking"] = {"type": "disabled"}
+
     async def _call_with_retry() -> str:
-        """重试：空响应 + 可重试错误（指数退避 1s/2s），整体由外层 90s 限时兜底。"""
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 resp = await client.chat.completions.create(
                     model=use_model, messages=messages, temperature=temperature, max_tokens=1000,
@@ -131,20 +180,25 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
                     if use_cache:
                         _save_cache(prompt_hash, task_type, use_model, prompt_text, content)
                     return content.strip()
-                logger.warning("AI 空响应(attempt %d)", attempt + 1)
+                logger.warning("AI empty response (attempt %d)", attempt + 1)
+            except openai.APIStatusError as e:
+                sc = e.status_code
+                if sc < 500 and sc != 429:
+                    logger.warning("AI non-retryable error (%s)", sc)
+                    return ""
+                logger.warning("AI retryable error (%s, attempt %d)", sc, attempt + 1)
             except Exception as e:
-                logger.warning("AI 调用失败(attempt %d): %s", attempt + 1, e)
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)  # 1s, 2s 指数退避
+                logger.warning("AI call failed (attempt %d): %s", attempt + 1, e)
+            if attempt < 1:
+                await asyncio.sleep(1)
         return ""
 
-    # 整体限时 90s：单请求 60s × 3 重试最坏 183s，会拖死请求方（P2-13）
     try:
-        return await asyncio.wait_for(_call_with_retry(), timeout=90)
+        async with _llm_semaphore:
+            return await asyncio.wait_for(_call_with_retry(), timeout=90)
     except asyncio.TimeoutError:
-        logger.error("AI 调用整体超时(>90s): task=%s model=%s base_url=%s", task_type, use_model, base_url)
+        logger.error("AI overall timeout (>90s): task=%s model=%s", task_type, use_model)
         return ""
-
 
 async def test_connection() -> dict:
     """用当前 DB 配置发一句问候，验证 AI 连通性（不写缓存）。"""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Annotated
 from pydantic import BaseModel, Field
@@ -10,6 +11,25 @@ from deps import CurrentUser, DbSession, CurrentAdmin, get_current_admin, get_cu
 from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line, test_connection
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+# E6: 每用户分钟级限流（内存滑动窗口，防 LLM 付费接口被刷）
+_RATE_LIMIT_PER_MIN = 30
+_rate_windows: dict[str, list[float]] = {}
+
+
+def _check_rate_limit(user: str) -> None:
+    now = time.monotonic()
+    win = _rate_windows.setdefault(user, [])
+    while win and now - win[0] > 60:
+        win.pop(0)
+    if len(win) >= _RATE_LIMIT_PER_MIN:
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试（每分钟限 " + str(_RATE_LIMIT_PER_MIN) + " 次）")
+    win.append(now)
+
+
+class RateLimitedUser:
+    def __init__(self, user: str):
+        _check_rate_limit(user)
 
 
 class TranslateRequest(BaseModel):
@@ -124,6 +144,7 @@ class AgentRequest(BaseModel):
 
 @router.post("/agent")
 async def agent_chat(req: AgentRequest, db: DbSession, _user: CurrentUser):
+    RateLimitedUser(_user)
     """机器人助手：意图解析 → 工具调用 → 自然语言回复。写操作返回确认 token。"""
     from services.agent_service import agent_run
     messages = [m for m in (req.messages or []) if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
@@ -264,6 +285,7 @@ def tag_normalize_apply_endpoint(req: TagNormalizeApplyRequest, _user: Annotated
 
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
+    RateLimitedUser(_user)
     """F15: 库内 AI 问答——自然语言 → 结构化筛选 JSON → 查询影片库。
 
     LLM 不可用时降级为关键词规则提取（番号/评分/标签）。

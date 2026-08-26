@@ -76,6 +76,40 @@ AI_WRITABLE_KEYS = {
 
 
 # ---------- 工具执行体 ----------
+def _normalize_query(query: dict) -> dict:
+    """S6: 规范化 LLM 输出的筛选条件（数组/数值/日期/长度钳制）。"""
+    import datetime as _dt
+    q = dict(query or {})
+    for k in ("tags", "actors"):
+        v = q.get(k)
+        if isinstance(v, str):
+            v = [x.strip() for x in v.split(",") if x.strip()]
+        if not isinstance(v, list):
+            v = []
+        q[k] = [str(x).strip()[:20] for x in v[:5]]
+    rm = q.get("rating_min")
+    try:
+        rm = float(rm)
+        q["rating_min"] = min(max(rm, 0.0), 10.0)
+    except (TypeError, ValueError):
+        q.pop("rating_min", None)
+    ra = q.get("release_after")
+    if ra:
+        try:
+            _dt.datetime.strptime(str(ra)[:10], "%Y-%m-%d")
+            q["release_after"] = str(ra)[:10]
+        except ValueError:
+            q.pop("release_after", None)
+    try:
+        q["limit"] = min(max(int(q.get("limit") or 20), 1), 50)
+    except (TypeError, ValueError):
+        q["limit"] = 20
+    for k in ("video_code", "title_keyword", "maker", "label", "series"):
+        if q.get(k) is not None:
+            q[k] = str(q[k])[:100]
+    return q
+
+
 async def _parse_question(question: str):
     """NL → 筛选 JSON（LLM 优先，规则降级）。返回 (query, engine)。"""
     from services.ai_service import _get_cached, _hash_prompt, chat
@@ -130,7 +164,7 @@ async def _parse_question(question: str):
             if tag in question:
                 query.setdefault("tags", []).append(tag)
         query.setdefault("limit", 20)
-    return query, engine
+    return _normalize_query(query), engine
 
 
 def _search(db, args, query=None, engine=""):
@@ -157,7 +191,8 @@ def _search(db, args, query=None, engine=""):
         stmt = stmt.where(Task.video_code == str(vc).upper())
     tk = query.get("title_keyword")
     if tk:
-        stmt = stmt.where(Task.title.like(f"%{tk}%"))
+        esc = tk.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(Task.title.like(f"%{esc}%", escape="\\"))
     rm = query.get("rating_min")
     if rm is not None:
         try:
@@ -166,10 +201,12 @@ def _search(db, args, query=None, engine=""):
             pass
     for t in (query.get("tags") or [])[:5]:
         if t:
-            stmt = stmt.where(Task.tags.like(f"%{t}%"))
+            esc = str(t).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            stmt = stmt.where(Task.tags.like(f"%{esc}%", escape="\\"))
     for a in (query.get("actors") or [])[:5]:
         if a:
-            stmt = stmt.where(Task.actors.like(f"%{a}%"))
+            esc = str(a).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            stmt = stmt.where(Task.actors.like(f"%{esc}%", escape="\\"))
     mk = query.get("maker")
     if mk:
         stmt = stmt.where(Task.maker.like(f"%{mk}%"))
