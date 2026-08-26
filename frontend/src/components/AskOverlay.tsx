@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 
 interface AskItem {
   task_id: number; video_code: string | null; title: string | null
-  rating: number | null; poster_url: string | null; tags: string | null; actors: string | null
+  rating: number | null; poster_url: string | null; tags: string | null; actors: string | null; view_status?: string | null
 }
 
 interface ConfirmCard {
@@ -16,27 +17,44 @@ interface Msg {
   content: string
   items?: AskItem[]
   confirm?: ConfirmCard
-  done?: string
 }
 
 const EXAMPLES = ['8 分以上没看过的巨乳作品', '库里有几部作品？', '查看订阅列表', '巡检一下系统']
 
+/** 打字机渲染：逐字显示，点击立即完成 */
+function Typewriter({ text, onDone }: { text: string; onDone?: () => void }) {
+  const [n, setN] = useState(0)
+  const doneRef = useRef(false)
+  useEffect(() => {
+    if (n >= text.length) {
+      if (!doneRef.current) { doneRef.current = true; onDone?.() }
+      return
+    }
+    const step = Math.max(1, Math.ceil(text.length / 120)) // 约 120 帧内打完
+    const t = setTimeout(() => setN((v) => v + step), 16)
+    return () => clearTimeout(t)
+  }, [n, text.length, onDone])
+  return <span onClick={() => setN(text.length)} style={{ cursor: 'pointer' }}>{text.slice(0, n)}</span>
+}
+
 export function AskOverlay() {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState('') // 执行占位：正在解析/正在检索…
+  const [listening, setListening] = useState(false)
+  const [typing, setTyping] = useState(false)
+  const recRef = useRef<{ stop: () => void } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
   const scrollBottom = () => {
     setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, 60)
   }
 
-  const [listening, setListening] = useState(false)
-  const recRef = useRef<{ stop: () => void } | null>(null)
-
   const toggleVoice = () => {
-    const SR = (window as unknown as { webkitSpeechRecognition?: unknown; SpeechRecognition?: unknown }).webkitSpeechRecognition
+    const SR = (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
       || (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition
     if (!SR) { alert('当前浏览器不支持语音输入（需 Chrome/Edge）'); return }
     if (listening) { recRef.current?.stop(); setListening(false); return }
@@ -64,6 +82,7 @@ export function AskOverlay() {
     const history = msgs.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 200) }))
     setMsgs((p) => [...p, { role: 'user', content: q }])
     setBusy(true)
+    setPhase('正在解析请求…')
     try {
       const r = await api.agentChat([...history, { role: 'user', content: q }])
       if (r.type === 'confirm') {
@@ -73,11 +92,13 @@ export function AskOverlay() {
         }])
       } else {
         setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[] }])
+        setTyping(true)
       }
     } catch (e) {
       setMsgs((p) => [...p, { role: 'assistant', content: `出错：${String((e as Error).message)}` }])
     }
     setBusy(false)
+    setPhase('')
     scrollBottom()
   }
 
@@ -85,20 +106,30 @@ export function AskOverlay() {
     const c = msgs[i].confirm
     if (!c || busy) return
     setBusy(true)
+    setPhase('正在执行…')
     try {
       const r = await api.agentConfirm(c.token)
-      const ok = r.result?.ok
       setMsgs((p) => p.map((m, idx) => idx === i
-        ? { ...m, confirm: undefined, content: ok ? `✅ ${r.result?.message || '已执行'}` : `❌ ${r.result?.message || '执行失败'}` }
+        ? { ...m, confirm: undefined, content: r.result?.ok ? `✅ ${r.result?.message || '已执行'}` : `❌ ${r.result?.message || '执行失败'}` }
         : m))
     } catch (e) {
       setMsgs((p) => p.map((m, idx) => idx === i ? { ...m, confirm: undefined, content: `❌ ${String((e as Error).message)}` } : m))
     }
     setBusy(false)
+    setPhase('')
   }
 
   const cancel = (i: number) => {
     setMsgs((p) => p.map((m, idx) => idx === i ? { ...m, confirm: undefined, content: '已取消' } : m))
+  }
+
+  const markWant = async (item: AskItem, idx: number, iidx: number) => {
+    try {
+      await api.tasks.batchView([item.task_id], 'want')
+      setMsgs((p) => p.map((m, mi) => mi === idx
+        ? { ...m, items: (m.items || []).map((it, ii) => ii === iidx ? { ...it, view_status: 'want' } : it) }
+        : m))
+    } catch { /* 忽略失败，按钮保留 */ }
   }
 
   if (!open) {
@@ -138,7 +169,10 @@ export function AskOverlay() {
               background: m.role === 'user' ? 'var(--gold, #d97706)' : 'var(--bg-raised, #f3f4f6)',
               color: m.role === 'user' ? '#fff' : 'var(--t-body)',
             }}>
-              {m.content}
+              {m.role === 'user' ? m.content : (
+                m.confirm ? m.content
+                  : <Typewriter text={m.content} onDone={() => setTyping(false)} />
+              )}
             </div>
             {m.confirm && (
               <div style={{ width: '88%', marginTop: 6, border: '1px solid var(--line, #e5e7eb)', borderRadius: 10, padding: 10, fontSize: 11, background: 'var(--bg-page, #fff)' }}>
@@ -152,23 +186,34 @@ export function AskOverlay() {
             )}
             {m.items && m.items.length > 0 && (
               <div style={{ width: '88%', display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
-                {m.items.map((t) => (
+                {m.items.map((t, ti) => (
                   <div key={t.task_id} style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid var(--line, #eee)', borderRadius: 8, padding: 6, fontSize: 11 }}>
-                    {t.poster_url
-                      ? <img src={t.poster_url} alt="" style={{ width: 26, height: 37, objectFit: 'cover', borderRadius: 4 }} loading="lazy" referrerPolicy="no-referrer"
-                          onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
-                      : <div style={{ width: 26, height: 37, background: 'var(--bg-raised, #f3f4f6)', borderRadius: 4 }} />}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div>{t.video_code}{t.rating ? <span style={{ color: 'var(--gold, #d97706)' }}> {t.rating}</span> : null}</div>
-                      <div style={{ color: 'var(--t-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || ''}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, cursor: 'pointer' }}
+                      onClick={() => navigate(`/task/${t.task_id}`)} title="查看详情">
+                      {t.poster_url
+                        ? <img src={t.poster_url} alt="" style={{ width: 26, height: 37, objectFit: 'cover', borderRadius: 4 }} loading="lazy" referrerPolicy="no-referrer"
+                            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                        : <div style={{ width: 26, height: 37, background: 'var(--bg-raised, #f3f4f6)', borderRadius: 4 }} />}
+                      <div style={{ minWidth: 0 }}>
+                        <div>{t.video_code}{t.rating ? <span style={{ color: 'var(--gold, #d97706)' }}> {t.rating}</span> : null}</div>
+                        <div style={{ color: 'var(--t-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || ''}</div>
+                      </div>
                     </div>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, whiteSpace: 'nowrap' }}
+                      onClick={() => markWant(t, i, ti)}
+                      disabled={t.view_status === 'want'}
+                      title={t.view_status === 'want' ? '已标记想看' : '标记为想看'}>
+                      {t.view_status === 'want' ? '✓ 想看' : '想看'}
+                    </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
         ))}
-        {busy && <div style={{ fontSize: 11, color: 'var(--t-mute)', textAlign: 'center' }}>思考中…</div>}
+        {busy && <div style={{ fontSize: 11, color: 'var(--t-mute)', textAlign: 'center' }}>
+          {phase || '思考中…'}<span style={{ animation: 'pulse 1s infinite' }}>▍</span>
+        </div>}
       </div>
 
       <div style={{ padding: 10, display: 'flex', gap: 8, borderTop: '1px solid var(--line, #e5e7eb)' }}>
