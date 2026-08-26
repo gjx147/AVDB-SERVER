@@ -6,39 +6,73 @@
 - 未配置 AI 时降级：检索/读取类工具直查，写工具提示需配置
 """
 import json
+import logging
 import re
-import secrets
 import time
 
 from sqlalchemy import select
+
+logger = logging.getLogger("avdb.agent_service")
 from models import Task, Subscription, Setting, Rule
 
-# ---------- 确认 token（内存，10 分钟过期） ----------
-_PENDING: dict[str, dict] = {}
+# ---------- 确认 token（无状态 HMAC 签名，10 分钟过期，多 worker 兼容） ----------
+import base64
+import hashlib
+import hmac as hmac_mod
+import json as _json
+
 _TOKEN_TTL = 600
 
 
-def _issue_token(tool: str, args: dict) -> str:
-    token = secrets.token_hex(8)
-    _PENDING[token] = {"tool": tool, "args": args, "at": time.time()}
-    return token
+def _token_secret() -> bytes:
+    """从持久化 SECRET_KEY 派生（多 worker 共享，重启不失效）。"""
+    from config import get_settings
+    sk = get_settings().SECRET_KEY or "avdb-agent-default-secret"
+    return hashlib.sha256(("agent-confirm:" + sk).encode("utf-8")).digest()
 
 
-def _consume_token(token: str) -> dict | None:
-    p = _PENDING.pop(token, None)
-    if not p:
+def _issue_token(tool: str, args: dict, user: str = "ai") -> str:
+    payload = {"tool": tool, "args": args, "user": user, "exp": int(time.time()) + _TOKEN_TTL}
+    body = base64.urlsafe_b64encode(_json.dumps(payload, ensure_ascii=False).encode("utf-8")).rstrip(b"=").decode()
+    sig = hmac_mod.new(_token_secret(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{sig}"
+
+
+def _consume_token(token: str, user: str | None = None) -> dict | None:
+    """验签 + 过期检查 + （可选）签发人绑定校验。"""
+    try:
+        body, sig = token.split(".", 1)
+    except Exception:
         return None
-    if time.time() - p["at"] > _TOKEN_TTL:
+    expect = hmac_mod.new(_token_secret(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac_mod.compare_digest(sig, expect):
         return None
-    return p
+    try:
+        payload = _json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except Exception:
+        return None
+    if int(payload.get("exp") or 0) < time.time():
+        return None
+    if user and user != "anonymous" and payload.get("user") != user:
+        return None  # token 绑定签发用户
+    return {"tool": payload.get("tool"), "args": payload.get("args") or {}}
 
 
 # ---------- 敏感配置判定（与 settings 路由一致） ----------
-_SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key")
+_SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key",
+                       "cookie", "session", "passwd", "credential", "auth", "jwt")
 
 
 def _is_sensitive(key: str) -> bool:
     return any(p in key.lower() for p in _SENSITIVE_PATTERNS)
+
+
+# S2: AI 可写配置白名单（默认拒绝；新增低风险 key 在此登记）
+AI_WRITABLE_KEYS = {
+    "actor_inactive_days",   # 演员休眠判定阈值
+    "emby_auto_sync",        # Emby 自动同步开关
+    "s3_backup_enabled",     # S3 备份开关
+}
 
 
 # ---------- 工具执行体 ----------
@@ -312,10 +346,13 @@ def _set_view_status(db, args):
 def _config_set(db, args):
     key = str(args.get("key") or "").strip()
     value = args.get("value")
+    operator = str(args.get("_operator") or "ai")
     if not key:
         return {"ok": False, "message": "需要配置 key"}
     if _is_sensitive(key):
-        return {"ok": False, "message": "敏感配置（密码/令牌）请在设置页手动修改，AI 仅可读"}
+        return {"ok": False, "message": "敏感配置（密码/令牌/凭据）请在设置页手动修改，AI 仅可读"}
+    if key not in AI_WRITABLE_KEYS:
+        return {"ok": False, "message": f"配置 {key} 不在 AI 可写白名单，请在设置页手动修改"}
     row = db.get(Setting, key)
     old_value = row.value if row else None
     new_value = str(value) if value is not None else ""
@@ -328,7 +365,7 @@ def _config_set(db, args):
     # G4: 审计留痕
     try:
         from models import ConfigAudit
-        db.add(ConfigAudit(key=key, old_value=old_value, new_value=new_value, operator="ai", source="agent"))
+        db.add(ConfigAudit(key=key, old_value=old_value, new_value=new_value, operator=operator, source="agent"))
     except Exception:
         pass
     db.commit()
@@ -431,11 +468,16 @@ def _pick_tool(name: str):
     return None
 
 
-def _run_read_tool(t, db, args):
+async def _run_read_tool(t, db, args):
+    import inspect
     try:
-        return t["handler"](db, args)
+        h = t["handler"]
+        if inspect.iscoroutinefunction(h):
+            return await h(db, args)
+        return h(db, args)
     except Exception as e:
-        return {"ok": False, "message": f"工具执行失败：{e}"}
+        logger.warning("读工具 %s 执行失败: %s", t["name"], e)
+        return {"ok": False, "message": "工具执行失败，请稍后重试或查看日志"}
 
 
 # ---------- Agent 主流程 ----------
@@ -452,7 +494,14 @@ async def agent_run(messages: list[dict], db, user) -> dict:
     from services.ai_service import _get_cached, _hash_prompt, _save_cache, chat
 
     llm_available = True
-    key = _hash_prompt(f"agent:{question}")
+    # E7: 消息内容截断（防超大 prompt/缓存膨胀）
+    messages = [{"role": m.get("role"), "content": str(m.get("content") or "")[:2000]} for m in messages]
+    question = question[:2000]
+    history_block_key = ""
+    recent = [m for m in messages if m.get("role") in ("user", "assistant")][-8:]
+    if len(recent) > 1:
+        history_block_key = "|" + "".join(str(m.get("content") or "")[:60] for m in recent[:-1])[:300]
+    key = _hash_prompt(f"agent:{question}{history_block_key}")
     cached = _get_cached(key)
     decision = None
     if cached:
@@ -502,6 +551,12 @@ async def agent_run(messages: list[dict], db, user) -> dict:
         llm_available = False
         # 无 LLM 降级：关键词路由（读工具可直查；写工具需 AI 解析参数）
         q = question
+        # 写意图优先（含"修改配置"类，避免被配置读取分支截胡）
+        if any(k in q for k in ("创建订阅", "新建订阅", "删除订阅", "创建规则", "删除规则",
+                                 "修改配置", "把", "改成", "设置为", "开启", "关闭", "标记为", "标为",
+                                 "帮我订阅", "订阅一下")):
+            return {"ok": False, "type": "error",
+                    "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
         if any(k in q for k in ("统计", "多少部", "几部", "概览", "总览")):
             decision = {"tool": "stats", "args": {}, "reason": "关键词：统计"}
         elif "巡检" in q or "体检" in q:
@@ -512,15 +567,15 @@ async def agent_run(messages: list[dict], db, user) -> dict:
             m = re.search(r"(\d+)", q)
             if m:
                 decision = {"tool": "actor_dynamics", "args": {"actor_id": int(m.group(1))}, "reason": "关键词：动态"}
+        elif any(k in q for k in ("查演员", "找演员", "演员")):
+            name = re.sub(r"^(查|找|搜索|搜|看看|看下)?演员|演员", "", q).strip() or q.strip()
+            decision = {"tool": "actor_search", "args": {"name": name}, "reason": "关键词：演员"}
         elif any(k in q for k in ("配置", "设置项", "当前设置")):
             decision = {"tool": "config_get", "args": {}, "reason": "关键词：配置"}
         elif "订阅" in q and any(k in q for k in ("列表", "哪些", "都有", "列出", "查看")):
             decision = {"tool": "subscription_list", "args": {}, "reason": "关键词：订阅列表"}
         elif "规则" in q and any(k in q for k in ("列表", "哪些", "都有", "列出", "查看")):
             decision = {"tool": "rule_list", "args": {}, "reason": "关键词：规则列表"}
-        elif any(k in q for k in ("创建订阅", "新建订阅", "删除订阅", "创建规则", "删除规则", "改成", "修改配置", "标记为", "标为")):
-            return {"ok": False, "type": "error",
-                    "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
         elif re.search(r"[A-Z]{2,5}-\d{2,5}", q.upper()) and ("详情" in q or "是什么" in q or "信息" in q):
             decision = {"tool": "video_detail", "args": {"video_code": re.search(r"[A-Z]{2,5}-\d{2,5}[A-Z0-9]?", q.upper()).group(0)}, "reason": "关键词：详情"}
         else:
@@ -543,7 +598,7 @@ async def agent_run(messages: list[dict], db, user) -> dict:
         # 两段式：预检 → token → 前端确认
         if not llm_available:
             return {"ok": False, "type": "error", "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
-        token = _issue_token(tool_name, args)
+        token = _issue_token(tool_name, args, user=getattr(user, "username", None) or (user if isinstance(user, str) else "ai"))
         # 预检影响
         preview = f"工具：{t['cn']}；参数：{json.dumps(args, ensure_ascii=False)}"
         return {"ok": True, "type": "confirm", "tool": tool_name, "tool_cn": t["cn"],
@@ -557,7 +612,7 @@ async def agent_run(messages: list[dict], db, user) -> dict:
         except Exception:
             result = _search(db, args)
     else:
-        result = _run_read_tool(t, db, args)
+        result = await _run_read_tool(t, db, args)
     if not result.get("ok"):
         return {"ok": True, "type": "answer", "content": f"执行失败：{result.get('message', '未知错误')}"}
 
@@ -622,15 +677,19 @@ async def agent_run(messages: list[dict], db, user) -> dict:
 
 
 def agent_confirm(token: str, db, user) -> dict:
-    """确认执行写工具。"""
-    p = _consume_token(token)
+    """确认执行写工具（token 绑定签发用户）。"""
+    uname = getattr(user, "username", None) or (user if isinstance(user, str) else None)
+    p = _consume_token(token, user=uname)
     if not p:
-        return {"ok": False, "message": "确认已过期或无效，请重新发起"}
+        return {"ok": False, "message": "确认已过期或无效（可能由其他用户发起），请重新发起"}
     t = _pick_tool(p["tool"])
     if not t or not t["is_write"]:
         return {"ok": False, "message": "无效工具"}
+    args = dict(p["args"])
+    args["_operator"] = uname or "ai"
     try:
-        result = t["handler"](db, p["args"])
+        result = t["handler"](db, args)
     except Exception as e:
-        return {"ok": False, "message": f"执行失败：{e}"}
+        logger.warning("写工具 %s 执行失败: %s", t["name"], e)
+        return {"ok": False, "message": "执行失败，请稍后重试或查看日志"}
     return {"ok": True, "result": result}

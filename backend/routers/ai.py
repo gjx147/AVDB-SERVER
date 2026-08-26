@@ -179,7 +179,8 @@ def agent_rollback(req: RollbackRequest, db: DbSession, _user: Annotated[str, De
     a = db.get(ConfigAudit, req.audit_id)
     if not a:
         raise HTTPException(status_code=404, detail="审计记录不存在")
-    if any(p in a.key.lower() for p in ("password", "token", "secret", "key")):
+    from services.agent_service import _is_sensitive
+    if _is_sensitive(a.key):
         raise HTTPException(status_code=400, detail="敏感配置不允许回滚，请在设置页手动处理")
     row = db.get(Setting, a.key)
     if row:
