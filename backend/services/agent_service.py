@@ -441,6 +441,130 @@ async def _actor_dynamics(db, args):
     return await actor_dynamics(int(args.get("actor_id") or 0))
 
 
+def _batch_set_view_status(db, args):
+    """批量标记观看状态：按筛选条件（预解析 _query）或显式 task_ids。"""
+    status = args.get("view_status")
+    if status not in ("viewed", "want", "none"):
+        return {"ok": False, "message": "view_status 需为 viewed/want/none"}
+    task_ids = args.get("task_ids")
+    if isinstance(task_ids, list) and task_ids:
+        ids = [int(x) for x in task_ids[:500] if str(x).isdigit()]
+        rows = db.execute(select(Task.id).where(Task.id.in_(ids))).scalars().all()
+    else:
+        query = args.get("_query")
+        if not query:
+            return {"ok": False, "message": "需要 task_ids 或查询条件 query_text"}
+        rows = _search_rows(db, query)
+    if not rows:
+        return {"ok": False, "message": "没有匹配的作品"}
+    from sqlalchemy import update as sa_update
+    new_status = None if status == "none" else status
+    db.execute(
+        sa_update(Task)
+        .where(Task.id.in_([t.id for t in rows]))
+        .values(view_status=new_status)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    preview = [t.video_code or f"#{t.id}" for t in rows[:5]]
+    return {"ok": True, "updated": len(rows), "preview_codes": preview,
+            "message": f"已批量标记 {len(rows)} 部作品为{'看过' if status == 'viewed' else '想看' if status == 'want' else '未看'}"}
+
+
+def _combo_mark_subscribe(db, args):
+    """组合任务：按条件批量标记 + 创建订阅，一次确认。"""
+    query_text = str(args.get("query_text") or "").strip()
+    status = args.get("view_status") or "want"
+    if status not in ("viewed", "want", "none"):
+        return {"ok": False, "message": "view_status 需为 viewed/want/none"}
+
+    query = args.get("_query")
+    if query is None:
+        return {"ok": False, "message": "条件解析失败（需要查询条件）"}
+    rows = _search_rows(db, query)
+    if not rows:
+        return {"ok": False, "message": "没有匹配的作品，未执行任何操作"}
+
+    from sqlalchemy import update as sa_update
+    new_status = None if status == "none" else status
+    db.execute(
+        sa_update(Task).where(Task.id.in_([t.id for t in rows])).values(view_status=new_status)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    marked = len(rows)
+
+    filters = {k: v for k, v in query.items() if k in ("makers", "labels", "series", "exclude_codes", "min_rating", "date_from") and v}
+    if query.get("tags"):
+        filters["genres"] = query["tags"]
+    if query.get("actors"):
+        filters.setdefault("genres", []).extend(query["actors"])
+    name = str(args.get("sub_name") or "").strip() or f"AI 组合订阅（{query_text[:12] or '条件'}）"
+    sub = Subscription(
+        name=name[:100],
+        sub_type="composite",
+        filters_json=json.dumps(filters, ensure_ascii=False) if filters else None,
+        auto_add=True,
+        enabled=True,
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return {"ok": True, "marked": marked, "subscription_id": sub.id, "subscription_name": sub.name,
+            "message": f"已标记 {marked} 部 + 创建订阅「{sub.name}」"}
+
+
+def _search_rows(db, query: dict) -> list:
+    """按筛选条件取任务行（_search 的查询逻辑复用）。"""
+    stmt = select(Task).where(Task.video_code.isnot(None))
+    vc = query.get("video_code")
+    if vc:
+        stmt = stmt.where(Task.video_code == str(vc).upper())
+    tk = query.get("title_keyword")
+    if tk:
+        stmt = stmt.where(Task.title.like(f"%{tk}%"))
+    rm = query.get("rating_min")
+    if rm is not None:
+        try:
+            stmt = stmt.where(Task.rating >= float(rm))
+        except Exception:
+            pass
+    for t in (query.get("tags") or [])[:5]:
+        if t:
+            stmt = stmt.where(Task.tags.like(f"%{t}%"))
+    for a in (query.get("actors") or [])[:5]:
+        if a:
+            stmt = stmt.where(Task.actors.like(f"%{a}%"))
+    vs = query.get("view_status")
+    if vs in ("viewed", "want"):
+        stmt = stmt.where(Task.view_status == vs)
+    try:
+        limit = min(int(query.get("limit") or 50), 500)
+    except Exception:
+        limit = 500
+    return db.execute(stmt.limit(limit)).scalars().all()
+
+
+async def _preview_write(tool_name: str, args: dict, db) -> str:
+    """写操作确认预览（批量/组合显示影响数与前 5 清单）。"""
+    try:
+        if tool_name in ("batch_set_view_status", "combo_mark_subscribe"):
+            task_ids = args.get("task_ids")
+            if isinstance(task_ids, list) and task_ids:
+                ids = [int(x) for x in task_ids[:500] if str(x).isdigit()]
+                rows = db.execute(select(Task.id).where(Task.id.in_(ids))).scalars().all()
+            else:
+                query = args.get("_query")
+                rows = _search_rows(db, query) if query else []
+            codes = [r.video_code or f"#{r.id}" for r in rows[:5]]
+            head = "、".join(str(c) for c in codes) if codes else "（无）"
+            extra = f"；将创建订阅「{str(args.get('sub_name') or '')[:20]}」" if tool_name == "combo_mark_subscribe" else ""
+            return f"将影响 {len(rows)} 部作品（前 5：{head}）{extra}；确认后执行"
+        return f"工具：{tool_name}；参数：{json.dumps(args, ensure_ascii=False)}"
+    except Exception:
+        return f"工具：{tool_name}；参数：{json.dumps(args, ensure_ascii=False)}"
+
+
 # ---------- 工具注册表 ----------
 TOOLS = [
     {"name": "search", "cn": "检索作品", "is_write": False,
@@ -490,6 +614,16 @@ TOOLS = [
     {"name": "config_set", "cn": "修改配置", "is_write": True,
      "desc": "修改系统配置（敏感配置不可改）", "args": {"key": "配置键", "value": "新值"},
      "handler": _config_set},
+    {"name": "batch_set_view_status", "cn": "批量标记", "is_write": True,
+     "desc": "按筛选条件或指定 ID 批量标记观看状态（最多 500 部）",
+     "args": {"query_text": "筛选条件（如：8分以上没看过的巨乳作品）", "task_ids": "作品 ID 数组（可选，二选一）",
+              "view_status": "viewed|want|none"},
+     "handler": _batch_set_view_status},
+    {"name": "combo_mark_subscribe", "cn": "组合任务", "is_write": True,
+     "desc": "按条件批量标记 + 创建同条件订阅，一次完成",
+     "args": {"query_text": "筛选条件", "view_status": "viewed|want|none（默认 want）",
+              "sub_name": "订阅名称（可选）"},
+     "handler": _combo_mark_subscribe},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -595,7 +729,17 @@ async def _execute_step(t, tool_name, args, reason, db, user, llm_available) -> 
         if not llm_available:
             return {"ok": False, "type": "error", "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
         token = _issue_token(tool_name, args, user=getattr(user, "username", None) or (user if isinstance(user, str) else "ai"))
-        preview = f"工具：{t['cn']}；参数：{json.dumps(args, ensure_ascii=False)}"
+        # 批量/组合工具：async 层预解析条件，供预览与执行共用
+        if tool_name in ("batch_set_view_status", "combo_mark_subscribe") \
+                and args.get("query_text") and not args.get("task_ids"):
+            try:
+                _q, _e = await _parse_question(str(args.get("query_text") or ""))
+                args = dict(args)
+                args["_query"] = _q
+            except Exception:
+                pass
+        # 批量/组合工具预检：展示影响数量与清单
+        preview = await _preview_write(tool_name, args, db)
         return {"ok": True, "type": "confirm", "tool": tool_name, "tool_cn": t["cn"],
                 "args": args, "reason": reason, "preview": preview, "token": token}
 
