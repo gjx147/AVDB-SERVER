@@ -439,6 +439,27 @@ def ai_usage(db: DbSession, _user: CurrentUser, days: int = 7):
                          "completion_tokens": r[3] or 0} for r in by_type]}
 
 
+@router.post("/tag-translate-preview")
+async def tag_translate_preview_endpoint(_user: CurrentUser):
+    """标签翻译预演：英文标签 → 中文映射（不执行）。"""
+    from services.tag_translate import tag_translate_preview
+    return await tag_translate_preview()
+
+
+class TagTranslateApplyRequest(BaseModel):
+    mapping: dict
+
+
+@router.post("/tag-translate-apply")
+def tag_translate_apply_endpoint(req: TagTranslateApplyRequest, _user: Annotated[str, Depends(_agent_confirm_user)]):
+    """标签翻译应用：英文标签替换为中文（单用户放行/正式模式管理员）。"""
+    from services.tag_translate import tag_translate_apply
+    result = tag_translate_apply(req.mapping or {})
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("message", "执行失败"))
+    return result
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     RateLimitedUser(_user)

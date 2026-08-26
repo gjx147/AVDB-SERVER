@@ -228,6 +228,14 @@ def _search(db, args, query=None, engine=""):
         if t:
             esc = str(t).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             stmt = stmt.where(Task.tags.like(f"%{esc}%", escape="\\"))
+            # 中英兼容：同时匹配别名（如「巨乳」匹配 Big Tits）
+            try:
+                from services.tag_translate import cn_aliases
+                for alias in cn_aliases(str(t))[1:]:
+                    esc2 = str(alias).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    stmt = stmt.or_(Task.tags.like(f"%{esc2}%", escape="\\"))
+            except Exception:
+                pass
     for a in (query.get("actors") or [])[:5]:
         if a:
             esc = str(a).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -505,6 +513,139 @@ def _pref_clear(db, args):
     return {"ok": True, "message": "偏好已清空"}
 
 
+async def _tag_translate(db, args):
+    """标签翻译预览（英文→中文映射）。"""
+    from services.tag_translate import tag_translate_preview
+    try:
+        return await tag_translate_preview()
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def _tag_translate_apply(db, args):
+    """应用标签映射（英文→中文）。"""
+    from services.tag_translate import tag_translate_apply
+    mapping = args.get("mapping") or {}
+    if not isinstance(mapping, dict):
+        return {"ok": False, "message": "mapping 需为对象"}
+    return tag_translate_apply(mapping)
+
+
+def _fill_works(db, args):
+    """全部补齐作品（后台任务）。"""
+    try:
+        from services import actor_works_batch
+        wait = min(int(args.get("wait_limit_min") or 60), 600)
+        ok, msg = actor_works_batch.start(wait_limit_min=wait, max_co_star=int(args.get("max_co_star") or 0))
+        if not ok:
+            return {"ok": False, "message": msg}
+        return {"ok": True, "message": f"已启动全部补齐作品：{msg}"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _actor_crawl_works(db, args):
+    """爬取单个演员的全部作品（后台线程）。"""
+    from models import Actor
+    actor_id = int(args.get("actor_id") or 0)
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        return {"ok": False, "message": "演员不存在"}
+    url = actor.source_url or ""
+    if not url and actor.note and actor.note.startswith("source_url: "):
+        url = actor.note[len("source_url: "):]
+    if not url:
+        return {"ok": False, "message": f"演员 {actor.name} 无来源 URL，需先在演员库添加"}
+    try:
+        from services.new_works_monitor import check_actor_new_works
+        import asyncio as _aio
+        import threading
+        def _run():
+            try:
+                _aio.run(check_actor_new_works(actor_id, auto_add=False))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（后台进行）"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _collection_list(db, args):
+    from models import Collection, task_collections
+    rows = db.execute(select(Collection).order_by(Collection.id.desc()).limit(30)).scalars().all()
+    items = []
+    for c in rows:
+        cnt = db.execute(select(task_collections.c.task_id).where(task_collections.c.collection_id == c.id)).scalars().all()
+        items.append({"id": c.id, "name": c.name, "count": len(cnt)})
+    return {"ok": True, "items": items}
+
+
+def _collection_create(db, args):
+    from models import Collection
+    name = str(args.get("name") or "").strip()[:100]
+    if not name:
+        return {"ok": False, "message": "需要收藏夹名称"}
+    c = Collection(name=name, description=str(args.get("description") or "")[:500] or None)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return {"ok": True, "message": f"收藏夹「{c.name}」已创建", "id": c.id}
+
+
+def _collection_add(db, args):
+    from models import Collection, task_collections
+    cid = int(args.get("collection_id") or 0)
+    tid = int(args.get("task_id") or 0)
+    c = db.get(Collection, cid)
+    if not c:
+        return {"ok": False, "message": "收藏夹不存在"}
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    exists = db.execute(select(task_collections.c.id).where(
+        task_collections.c.collection_id == cid, task_collections.c.task_id == tid)).scalar()
+    if exists:
+        return {"ok": True, "message": f"已在收藏夹「{c.name}」中"}
+    db.execute(task_collections.insert().values(collection_id=cid, task_id=tid))
+    db.commit()
+    return {"ok": True, "message": f"{t.video_code} 已加入收藏夹「{c.name}」"}
+
+
+def _download_list(db, args):
+    from models import Download
+    rows = db.execute(select(Download).order_by(Download.id.desc()).limit(15)).scalars().all()
+    items = [{"id": d.id, "video_code": d.video_code, "status": d.status,
+              "progress": getattr(d, "progress", None), "downloader": d.downloader} for d in rows]
+    return {"ok": True, "items": items}
+
+
+def _notify_list(db, args):
+    from models import NotifyLog
+    rows = db.execute(select(NotifyLog).order_by(NotifyLog.id.desc()).limit(15)).scalars().all()
+    items = [{"id": n.id, "event": n.event, "title": n.title, "ok": n.ok,
+              "created_at": n.created_at.strftime("%Y-%m-%d %H:%M") if n.created_at else None} for n in rows]
+    return {"ok": True, "items": items}
+
+
+def _batch_retry(db, args):
+    """批量重试失败任务。"""
+    from sqlalchemy import update as sa_update
+    limit = min(int(args.get("limit") or 50), 200)
+    failed_ids = db.execute(
+        select(Task.id).where(Task.status == "failed").limit(limit)
+    ).scalars().all()
+    if not failed_ids:
+        return {"ok": True, "message": "没有失败任务可重试"}
+    db.execute(
+        sa_update(Task).where(Task.id.in_(failed_ids))
+        .values(status="pending", error_message=None)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    return {"ok": True, "message": f"已重新排队 {len(failed_ids)} 个失败任务"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -609,6 +750,12 @@ def _search_rows(db, query: dict) -> list:
     for t in (query.get("tags") or [])[:5]:
         if t:
             stmt = stmt.where(Task.tags.like(f"%{t}%"))
+            try:
+                from services.tag_translate import cn_aliases
+                for alias in cn_aliases(str(t))[1:]:
+                    stmt = stmt.or_(Task.tags.like(f"%{alias}%"))
+            except Exception:
+                pass
     for a in (query.get("actors") or [])[:5]:
         if a:
             stmt = stmt.where(Task.actors.like(f"%{a}%"))
@@ -625,6 +772,11 @@ def _search_rows(db, query: dict) -> list:
 async def _preview_write(tool_name: str, args: dict, db) -> str:
     """写操作确认预览（批量/组合显示影响数与前 5 清单）。"""
     try:
+        if tool_name == "tag_translate_apply":
+            mp = args.get("mapping") or {}
+            if isinstance(mp, dict) and mp:
+                head = "、".join(f"{k}→{v}" for k, v in list(mp.items())[:5])
+                return f"将把 {len(mp)} 个英文标签替换为中文（前 5：{head}）；确认后执行"
         if tool_name in ("batch_set_view_status", "combo_mark_subscribe"):
             task_ids = args.get("task_ids")
             if isinstance(task_ids, list) and task_ids:
@@ -709,6 +861,33 @@ TOOLS = [
      "handler": _pref_set},
     {"name": "pref_clear", "cn": "清除偏好", "is_write": True,
      "desc": "清除全部检索偏好", "args": {}, "handler": _pref_clear},
+    {"name": "tag_translate", "cn": "标签翻译", "is_write": False,
+     "desc": "把库内英文标签翻译为中文（返回映射预览，确认后应用）",
+     "args": {}, "handler": _tag_translate},
+    {"name": "tag_translate_apply", "cn": "应用标签翻译", "is_write": True,
+     "desc": "应用标签中英映射（把英文标签替换为中文）",
+     "args": {"mapping": "英文→中文映射对象"}, "handler": _tag_translate_apply},
+    {"name": "fill_works", "cn": "全部补齐作品", "is_write": True,
+     "desc": "启动全部补齐作品后台任务（爬取所有订阅演员的作品）",
+     "args": {"wait_limit_min": "等待上限分钟（可选）"}, "handler": _fill_works},
+    {"name": "actor_crawl_works", "cn": "爬取演员作品", "is_write": True,
+     "desc": "爬取指定演员的全部作品（后台进行）",
+     "args": {"actor_id": "演员 ID"}, "handler": _actor_crawl_works},
+    {"name": "collection_list", "cn": "收藏夹列表", "is_write": False,
+     "desc": "查看收藏夹列表", "args": {}, "handler": _collection_list},
+    {"name": "collection_create", "cn": "创建收藏夹", "is_write": True,
+     "desc": "创建收藏夹", "args": {"name": "收藏夹名称", "description": "描述（可选）"},
+     "handler": _collection_create},
+    {"name": "collection_add", "cn": "加入收藏夹", "is_write": True,
+     "desc": "把作品加入收藏夹", "args": {"collection_id": "收藏夹 ID", "task_id": "作品 ID"},
+     "handler": _collection_add},
+    {"name": "download_list", "cn": "下载列表", "is_write": False,
+     "desc": "查看最近下载任务", "args": {}, "handler": _download_list},
+    {"name": "notify_list", "cn": "通知记录", "is_write": False,
+     "desc": "查看最近通知记录", "args": {}, "handler": _notify_list},
+    {"name": "batch_retry", "cn": "批量重试", "is_write": True,
+     "desc": "重新排队失败任务（最多 200 个）",
+     "args": {"limit": "数量（可选）"}, "handler": _batch_retry},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -884,6 +1063,22 @@ def _result_to_text(tool_name: str, result: dict) -> str:
     if tool_name == "config_get":
         lines = [f"{k} = {v}" for k, v in list(result.get("settings", {}).items())[:40]]
         return "当前配置（敏感值已脱敏）：\n" + "\n".join(lines) if lines else "无配置"
+    if tool_name == "tag_translate":
+        mp = result.get("mapping") or {}
+        if not mp:
+            return result.get("message") or "无待翻译标签"
+        lines = [f"- {k} → {v}" for k, v in list(mp.items())[:15]]
+        more = f"…共 {len(mp)} 个映射" if len(mp) > 15 else ""
+        return "标签翻译映射（说「应用标签翻译」确认执行）：\n" + "\n".join(lines) + (f"\n{more}" if more else "")
+    if tool_name in ("collection_list", "download_list", "notify_list"):
+        items = result.get("items", [])
+        if not items:
+            return "暂无数据"
+        if tool_name == "collection_list":
+            return "\n".join(f"- #{c['id']} {c['name']}（{c['count']} 部）" for c in items)
+        if tool_name == "download_list":
+            return "\n".join(f"- {d['video_code'] or d['id']}：{d['status']}{(' ' + str(d['progress']) + '%') if d.get('progress') is not None else ''}（{d['downloader']}）" for d in items)
+        return "\n".join(f"- {n['title'] or n['event']}（{'✓' if n['ok'] else '✗'} {n['created_at']}）" for n in items)
     if tool_name == "inspect":
         probs = result.get("problems", [])
         tips = result.get("tips", [])
