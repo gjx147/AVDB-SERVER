@@ -57,8 +57,10 @@ RUN pip install --upgrade pip \
 # 只装完整 chromium（npmmirror 不提供 chromium-headless-shell，browser_pool 用 channel="chromium" 启动完整 chromium）
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-RUN PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
-    python -m playwright install chromium
+# chromium 必须成功（失败即终止构建）；ffmpeg（视频转码用，本系统不依赖）
+# 若镜像源缺失则显式警告继续，避免"假成功"与"假失败"两种极端
+RUN python -m playwright install chromium || \
+    (ls /ms-playwright/chromium-* >/dev/null 2>&1 && echo "WARN: playwright ffmpeg 下载失败（不影响爬虫/截图主功能），继续构建" || exit 1)
 
 # 复制应用代码
 COPY backend/ ./backend/
