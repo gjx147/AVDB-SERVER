@@ -49,6 +49,9 @@ export function AskOverlay() {
   const [phase, setPhase] = useState('') // 执行占位：正在解析/正在检索…
   const [listening, setListening] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [sessions, setSessions] = useState<{ id: number; title: string }[]>([])
+  const [sessionId, setSessionId] = useState<number | null>(null)
+  const [showSessions, setShowSessions] = useState(false)
   const recRef = useRef<{ stop: () => void } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
@@ -78,6 +81,41 @@ export function AskOverlay() {
     } catch { alert('语音识别启动失败') }
   }
 
+  const loadSessions = async () => {
+    try {
+      const r = await api.chatSessions()
+      setSessions(r.items || [])
+    } catch { /* 忽略 */ }
+  }
+
+  const newSession = async () => {
+    try {
+      const r = await api.chatCreateSession()
+      setSessionId(r.session.id)
+      setMsgs([])
+      setShowSessions(false)
+      loadSessions()
+    } catch { /* 忽略 */ }
+  }
+
+  const openSession = async (id: number) => {
+    try {
+      const r = await api.chatSessionMessages(id)
+      setMsgs((r.messages || []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })))
+      setSessionId(id)
+      setShowSessions(false)
+      scrollBottom()
+    } catch { /* 忽略 */ }
+  }
+
+  const delSession = async (id: number) => {
+    try {
+      await api.chatDeleteSession(id)
+      if (sessionId === id) { setSessionId(null); setMsgs([]) }
+      loadSessions()
+    } catch { /* 忽略 */ }
+  }
+
   const ask = async (raw?: string) => {
     const q = (raw ?? input).trim()
     if (!q || busy) return
@@ -90,7 +128,7 @@ export function AskOverlay() {
       const isCmd = q.startsWith('/')
       const r = isCmd
         ? await api.agentCommand(q.split(/\s+/)[0], q.replace(/^\/\S+\s*/, ''))
-        : await api.agentChat([...history, { role: 'user', content: q }])
+        : await api.agentChat([...history, { role: 'user', content: q }], sessionId)
       if (r.type === 'confirm') {
         setMsgs((p) => [...p, {
           role: 'assistant', content: `需要确认：${r.tool_cn || r.tool || ''}`,
@@ -152,11 +190,29 @@ export function AskOverlay() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--line, #e5e7eb)' }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>库内 AI 助手</span>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn--ghost btn--sm" onClick={() => { loadSessions(); setShowSessions(!showSessions) }} title="会话列表">☰</button>
           {msgs.length > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setMsgs([])}>清空</button>}
           <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="关闭">✕</button>
         </div>
       </div>
 
+      {showSessions && (
+        <div style={{ borderBottom: '1px solid var(--line, #e5e7eb)', maxHeight: 180, overflow: 'auto', padding: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--t-mute)' }}>会话历史</span>
+            <button className="btn btn--gold btn--sm" onClick={newSession}>＋ 新建</button>
+          </div>
+          {sessions.length === 0 && <div style={{ fontSize: 10, color: 'var(--t-faint, #aaa)', textAlign: 'center', padding: 6 }}>暂无会话</div>}
+          {sessions.map((sess) => (
+            <div key={sess.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+              background: sessionId === sess.id ? 'var(--bg-raised, #f3f4f6)' : 'transparent' }}
+              onClick={() => openSession(sess.id)} title="切换会话">
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sess.title}</span>
+              <span style={{ color: 'var(--t-faint, #aaa)', fontSize: 10, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); delSession(sess.id) }}>✕</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div ref={bodyRef} style={{ flex: 1, overflow: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {msgs.length === 0 && (
           <div style={{ fontSize: 11, color: 'var(--t-mute)', textAlign: 'center', padding: '14px 0' }}>

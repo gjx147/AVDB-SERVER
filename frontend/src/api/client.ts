@@ -467,9 +467,17 @@ export const api = {
       '/api/insights/recommendations').then((r) => r.data),
   recommendReason: (taskId: number) =>
     http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
-  agentChat: (messages: { role: string; content: string }[]) =>
+  agentChat: (messages: { role: string; content: string }[], sessionId?: number | null) =>
     http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; query?: Record<string, unknown>; tool?: string; tool_cn?: string; args?: Record<string, unknown>; reason?: string; preview?: string; token?: string; steps?: { tool: string; reason?: string; content?: string }[] }>(
-      '/api/ai/agent', { messages }).then((r) => r.data),
+      '/api/ai/agent', { messages, session_id: sessionId ?? undefined }).then((r) => r.data),
+  chatSessions: () =>
+    http.get<{ ok: boolean; items: { id: number; title: string; created_at?: string }[] }>('/api/ai/sessions').then((r) => r.data),
+  chatCreateSession: (title?: string) =>
+    http.post<{ ok: boolean; session: { id: number; title: string } }>('/api/ai/sessions', { title: title || '' }).then((r) => r.data),
+  chatDeleteSession: (id: number) =>
+    http.delete<{ ok: boolean }>(`/api/ai/sessions/${id}`).then((r) => r.data),
+  chatSessionMessages: (id: number) =>
+    http.get<{ ok: boolean; messages: { role: string; content: string }[] }>(`/api/ai/sessions/${id}/messages`).then((r) => r.data),
   agentCommand: (command: string, argText: string) =>
     http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; steps?: unknown[]; token?: string; tool?: string; tool_cn?: string; preview?: string; args?: Record<string, unknown>; reason?: string }>(
       '/api/ai/agent/command', { command, arg_text: argText }).then((r) => r.data),

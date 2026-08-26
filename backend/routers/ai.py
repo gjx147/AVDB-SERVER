@@ -140,6 +140,7 @@ class AskRequest(BaseModel):
 class AgentRequest(BaseModel):
     """A1+: 机器人助手对话（工具调用模式）。"""
     messages: list[dict] = Field(default_factory=list, description="对话消息 [{'role','content'}]，最后一条为用户请求")
+    session_id: int | None = Field(default=None, description="会话 ID（持久化对话历史）")
 
 
 @router.post("/agent")
@@ -147,10 +148,21 @@ async def agent_chat(req: AgentRequest, db: DbSession, _user: CurrentUser):
     RateLimitedUser(_user)
     """机器人助手：意图解析 → 工具调用 → 自然语言回复。写操作返回确认 token。"""
     from services.agent_service import agent_run
+    from services.chat_history import save_messages, auto_title
     messages = [m for m in (req.messages or []) if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
     if not messages or messages[-1].get("role") != "user":
         raise HTTPException(status_code=400, detail="messages 最后一条必须为用户消息")
-    return await agent_run(messages[-12:], db, _user)
+    messages = messages[-12:]
+    result = await agent_run(messages, db, _user)
+    if req.session_id:
+        try:
+            save_messages(db, _user, req.session_id, [messages[-1]])
+            if result.get("type") in ("answer", "error"):
+                save_messages(db, _user, req.session_id, [{"role": "assistant", "content": result.get("content") or ""}])
+            auto_title(db, req.session_id, str(messages[-1].get("content") or "")[:20])
+        except Exception:
+            pass
+    return result
 
 
 def _agent_confirm_user(request: Request, db: DbSession) -> str:
@@ -320,6 +332,51 @@ def breaker_status_endpoint(_user: CurrentUser):
 class CommandRequest(BaseModel):
     command: str = Field(min_length=1, max_length=30)
     arg_text: str = Field(default="", max_length=500)
+
+
+@router.get("/sessions")
+def list_sessions(db: DbSession, _user: CurrentUser):
+    from services.chat_history import list_sessions as _ls
+    return {"ok": True, "items": _ls(db, _user)}
+
+
+class SessionCreateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/sessions")
+def create_session(req: SessionCreateRequest, db: DbSession, _user: CurrentUser):
+    from services.chat_history import create_session as _cs
+    return {"ok": True, "session": _cs(db, _user, req.title or "New chat")}
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int, db: DbSession, _user: CurrentUser):
+    from services.chat_history import delete_session as _ds
+    if not _ds(db, _user, session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"ok": True}
+
+
+class SessionRenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+@router.patch("/sessions/{session_id}")
+def rename_session(session_id: int, req: SessionRenameRequest, db: DbSession, _user: CurrentUser):
+    from services.chat_history import rename_session as _rs
+    if not _rs(db, _user, session_id, req.title):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"ok": True}
+
+
+@router.get("/sessions/{session_id}/messages")
+def session_messages_endpoint(session_id: int, db: DbSession, _user: CurrentUser):
+    from services.chat_history import session_messages as _sm
+    msgs = _sm(db, _user, session_id)
+    if msgs is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"ok": True, "messages": msgs}
 
 
 @router.post("/agent/command")
