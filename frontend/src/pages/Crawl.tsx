@@ -208,9 +208,9 @@ export function Crawl() {
 
         <div className="terminal">
           <div className="term-head">
-            <div className="term-dot" style={{ background: '#ff4d6d' }} />
-            <div className="term-dot" style={{ background: '#ffb454' }} />
-            <div className="term-dot" style={{ background: '#3ddc97' }} />
+            <div className="term-dot" style={{ background: 'var(--red)' }} />
+            <div className="term-dot" style={{ background: 'var(--amber)' }} />
+            <div className="term-dot" style={{ background: 'var(--green)' }} />
             <div className="term-title">实时日志</div>
             {/* 日志来源切换：数据库 / 应用 app.log / 爬虫子进程 / 下载器 / 演员资料 */}
             <div className="seg" style={{ marginLeft: 10, background: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,143,179,.25)' }}>

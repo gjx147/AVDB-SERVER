@@ -31,7 +31,7 @@ export function AskOverlay() {
     )
   }
   return (
-    <div style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 999, width: 360, maxWidth: 'calc(100vw - 36px)', maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page, #fff)', border: '1px solid var(--line, #e5e7eb)', borderRadius: 14, boxShadow: '0 8px 30px rgba(0,0,0,.25)', overflow: 'hidden' }}>
+    <div className="modal-pop" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 999, width: 360, maxWidth: 'calc(100vw - 36px)', maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-page, #fff)', border: '1px solid var(--line, #e5e7eb)', borderRadius: 14, boxShadow: '0 8px 30px rgba(0,0,0,.25)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--line, #e5e7eb)' }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>库内 AI 问答</span>
         <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="关闭">✕</button>

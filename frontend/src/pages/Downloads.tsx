@@ -98,9 +98,9 @@ export function Downloads() {
               </div>
               <div className="row-tags">
                 <span className="chip" style={{ fontSize: 10 }}>{d.downloader === 'qbittorrent' ? 'qB' : 'CD2'}</span>
-                {d.organized && <span className="chip" style={{ fontSize: 10, background: '#d1fae5', color: '#047857' }}>已整理</span>}
+                {d.organized && <span className="chip chip-green" style={{ fontSize: 10 }}>已整理</span>}
                 {d.organized && <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '1px 8px' }} onClick={() => uploadSub(d)}>字幕</button>}
-                {unhealthy.has(d.id) && <span className="chip" style={{ fontSize: 10, background: '#fee2e2', color: '#b91c1c' }}>低健康</span>}
+                {unhealthy.has(d.id) && <span className="chip chip-red" style={{ fontSize: 10 }}>低健康</span>}
                 <span className={`chip ${statusCls[d.status] || ''}`}>{statusLabel[d.status] || d.status}</span>
                 {d.status === 'downloading' && d.progress > 0 && (
                   <span className="chip chip-amber" style={{ fontFamily: 'var(--ff-mono)' }}>{Math.round(d.progress)}%</span>

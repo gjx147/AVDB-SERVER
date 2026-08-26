@@ -85,6 +85,8 @@
 .rc-nav:hover{background:rgba(255,255,255,.85)}
 .rc-nav:active{transform:translateY(-50%) scale(.94)}
 .rc-nav--prev{left:-6px}
+.card{transition:box-shadow .25s var(--e-silk),transform .25s var(--e-silk)}  /* UI 美化 U2: 悬停微浮起 */
+.card:hover{box-shadow:var(--shadow-float)}
 .rc-nav--next{right:-6px}
 .rc-progress{height:3px;border-radius:2px;background:var(--gold-wash);margin-top:12px;overflow:hidden}
 .rc-progress-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--gold),var(--gold-bright));transition:width .3s}

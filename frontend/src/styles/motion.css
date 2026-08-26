@@ -35,6 +35,9 @@
 /* 封面加载「掀纱」 */
 @keyframes focusIn{0%{opacity:0;filter:blur(10px);transform:scale(1.06)}70%{opacity:1;filter:blur(0);transform:scale(.995)}100%{transform:scale(1)}}
 .recent-thumb{animation:focusIn .9s cubic-bezier(.23,1,.32,1)}
+/* UI 美化 U2: 浮层/Modal 出现动画 */
+@keyframes panelIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.modal-pop{animation:panelIn .28s var(--e-silk)}
 
 /* 滚动显现（配合 html.reveal 由 JS 切换） */
 html.reveal .poster:not(.rv){animation-play-state:paused;opacity:0;transform:translateY(18px)}

@@ -237,7 +237,7 @@ export function Subscriptions() {
                   {s.auto_add && <span className="chip chip-amber">自动下载</span>}
                   {s.sub_type === 'actor' && s.actor_id && statusMap[s.actor_id]?.days_since != null && (
                     statusMap[s.actor_id].days_since! > 180
-                      ? <span className="chip" style={{ background: '#fee2e2', color: '#b91c1c', fontSize: 10 }}>休止?</span>
+                      ? <span className="chip chip-red" style={{ fontSize: 10 }}>休止?</span>
                       : statusMap[s.actor_id].days_since! > 90
                         ? <span className="chip chip-amber" style={{ fontSize: 10 }}>久无新作</span>
                         : null

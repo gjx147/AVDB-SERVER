@@ -34,6 +34,7 @@
 .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px 2px 8px;border-radius:999px;font-size:10px;font-weight:600}
 .chip::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
 .chip:active{transform:scale(.96)}
+.btn:active{transform:scale(.97)}  /* UI 美化 U9: 按压反馈 */
 .chip-green{color:var(--green);background:var(--green-wash)}
 .chip-amber{color:var(--amber);background:var(--amber-wash)}
 .chip-red{color:var(--red);background:var(--red-wash)}
