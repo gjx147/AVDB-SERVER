@@ -12,11 +12,14 @@ interface ConfirmCard {
   args: Record<string, unknown>; preview: string; reason?: string
 }
 
+interface StepInfo { tool: string; reason?: string; content?: string }
+
 interface Msg {
   role: 'user' | 'assistant'
   content: string
   items?: AskItem[]
   confirm?: ConfirmCard
+  steps?: StepInfo[]
 }
 
 const EXAMPLES = ['8 分以上没看过的巨乳作品', '库里有几部作品？', '查看订阅列表', '巡检一下系统']
@@ -91,7 +94,7 @@ export function AskOverlay() {
           confirm: { token: r.token || '', tool: r.tool || '', tool_cn: r.tool_cn || r.tool || '', args: r.args || {}, preview: r.preview || '', reason: r.reason },
         }])
       } else {
-        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[] }])
+        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[], steps: r.steps }])
         setTyping(true)
       }
     } catch (e) {
@@ -164,6 +167,18 @@ export function AskOverlay() {
         )}
         {msgs.map((m, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            {m.steps && m.steps.length > 1 && (
+              <div style={{ maxWidth: '88%', marginBottom: 4, fontSize: 10, color: 'var(--t-faint, #999)', display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                {m.steps.map((st, si) => (
+                  <span key={si} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {si > 0 && <span>→</span>}
+                    <span style={{ border: '1px solid var(--line, #eee)', borderRadius: 6, padding: '1px 6px', background: 'var(--bg-raised, #fafafa)' }}>
+                      {st.tool}{st.reason ? `：${st.reason.slice(0, 24)}` : ''}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
             <div style={{
               maxWidth: '88%', padding: '7px 11px', borderRadius: 10, fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap',
               background: m.role === 'user' ? 'var(--gold, #d97706)' : 'var(--bg-raised, #f3f4f6)',

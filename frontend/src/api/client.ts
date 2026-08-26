@@ -468,7 +468,7 @@ export const api = {
   recommendReason: (taskId: number) =>
     http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
   agentChat: (messages: { role: string; content: string }[]) =>
-    http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; query?: Record<string, unknown>; tool?: string; tool_cn?: string; args?: Record<string, unknown>; reason?: string; preview?: string; token?: string }>(
+    http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; query?: Record<string, unknown>; tool?: string; tool_cn?: string; args?: Record<string, unknown>; reason?: string; preview?: string; token?: string; steps?: { tool: string; reason?: string; content?: string }[] }>(
       '/api/ai/agent', { messages }).then((r) => r.data),
   agentConfirm: (token: string) =>
     http.post<{ ok: boolean; result?: { ok: boolean; message?: string } }>(

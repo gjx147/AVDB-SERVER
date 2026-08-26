@@ -589,6 +589,107 @@ async def _run_read_tool(t, db, args):
 
 
 # ---------- Agent 主流程 ----------
+async def _execute_step(t, tool_name, args, reason, db, user, llm_available) -> dict:
+    """执行单步：写工具→确认卡片；读工具→执行并返回文本结果（供回喂）。"""
+    if t["is_write"]:
+        if not llm_available:
+            return {"ok": False, "type": "error", "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
+        token = _issue_token(tool_name, args, user=getattr(user, "username", None) or (user if isinstance(user, str) else "ai"))
+        preview = f"工具：{t['cn']}；参数：{json.dumps(args, ensure_ascii=False)}"
+        return {"ok": True, "type": "confirm", "tool": tool_name, "tool_cn": t["cn"],
+                "args": args, "reason": reason, "preview": preview, "token": token}
+
+    if tool_name == "search":
+        try:
+            query, engine = await _parse_question(str(args.get("question") or ""))
+            result = _search(db, args, query=query, engine=engine)
+        except Exception:
+            result = _search(db, args)
+    else:
+        result = await _run_read_tool(t, db, args)
+
+    if not result.get("ok"):
+        return {"ok": True, "type": "answer", "content": f"执行失败：{result.get('message', '未知错误')}"}
+
+    text = _result_to_text(tool_name, result)
+    if tool_name == "search" and result.get("items"):
+        return {"ok": True, "type": "answer", "content": text, "items": result.get("items"),
+                "query": result.get("query"), "feed": text}
+    return {"ok": True, "type": "answer", "content": text, "feed": text}
+
+
+def _result_to_text(tool_name: str, result: dict) -> str:
+    """工具结果 → 紧凑文本（回喂 LLM 与最终展示共用）。"""
+    if tool_name == "search":
+        items = result.get("items", [])
+        if not items:
+            return f"没有找到匹配的作品（引擎：{result.get('engine', '?')}）。可换个说法或放宽条件。"
+        lines = [f"找到 {len(items)} 部："]
+        for it in items[:10]:
+            rating = f" {it['rating']}" if it.get("rating") else ""
+            lines.append(f"- {it['video_code']}{rating} {(it.get('title') or '')[:30]}")
+        return "\n".join(lines)
+    if tool_name == "video_detail":
+        it = result["item"]
+        return (f"{it['video_code']} {it['title'] or ''}\n"
+                f"评分：{it['rating'] or '-'} | 状态：{it['view_status'] or '未看'}\n"
+                f"标签：{it['tags'] or '-'}\n演员：{it['actors'] or '-'}\n"
+                f"厂商：{it['maker'] or '-'} | 厂牌：{it['label'] or '-'} | 系列：{it['series'] or '-'}\n"
+                f"日期：{it['release_date'] or '-'}\n备注：{it['note'] or '-'}")
+    if tool_name == "stats":
+        st = result["stats"]
+        return (f"库统计：共 {st['total']} 部 | 已看 {st['viewed']} | 想看 {st['want']} | "
+                f"收藏 {st['favorites']} | 已评分 {st['rated']}\n订阅 {st['subscriptions']} 个 | 规则 {st['rules']} 条")
+    if tool_name == "actor_search":
+        items = result.get("items", [])
+        return "没找到该演员" if not items else "\n".join(f"- {a['name']}（ID {a['actor_id']}）" for a in items)
+    if tool_name == "subscription_list":
+        items = result.get("items", [])
+        return "还没有订阅，可以说「创建订阅」" if not items else "\n".join(
+            f"- #{s['id']} {s['name']}（{s['sub_type']}，{'启用' if s['enabled'] else '停用'}）" for s in items)
+    if tool_name == "rule_list":
+        items = result.get("items", [])
+        return "还没有规则" if not items else "\n".join(
+            f"- #{r['id']} {r['name'] or r['task_type']}（{'启用' if r['enabled'] else '停用'}）" for r in items)
+    if tool_name == "config_get":
+        lines = [f"{k} = {v}" for k, v in list(result.get("settings", {}).items())[:40]]
+        return "当前配置（敏感值已脱敏）：\n" + "\n".join(lines) if lines else "无配置"
+    if tool_name == "inspect":
+        probs = result.get("problems", [])
+        tips = result.get("tips", [])
+        if not probs and not tips:
+            return "巡检通过：未发现问题"
+        lines = [f"{'🔴' if p['level'] == 'error' else '🟡'} {p['item']}：{p['detail']}" for p in probs]
+        lines += [f"💡 {tp}" for tp in tips]
+        return "巡检结果：\n" + "\n".join(lines)
+    return str(result)
+
+
+def _agent_prompt(messages: list[dict], question: str) -> str:
+    """Construct agent decision prompt: tool list + history + request."""
+    history_block = ""
+    recent = [m for m in messages if m.get("role") in ("user", "assistant")][-8:]
+    if len(recent) > 1:
+        lines = []
+        for h in recent[:-1]:
+            role = "User" if h.get("role") == "user" else "Assistant"
+            lines.append(f"{role}: {str(h.get('content', ''))[:100]}")
+        history_block = "Previous conversation:\n" + "\n".join(lines) + "\n"
+    return (
+        "You are the AVDB library assistant. Choose and call ONE tool per step.\n"
+        f"Tools:\n{_TOOL_PROMPT}\n\n"
+        f"{history_block}"
+        f"User request: {question}\n\n"
+        "Output JSON: {\"tool\": \"name\", \"args\": {...}, \"reason\": \"one-line note\"}\n"
+        "Rules:\n"
+        "1. Search/list/variant queries -> read-only tools (search/video_detail/stats/...)\n"
+        "2. Create/delete/modify/mark -> write tools\n"
+        "3. No relevant tool (greeting/small talk) -> {\"tool\": \"none\", \"args\": {}, \"reason\": \"chat\"}\n"
+        "4. Complex questions may need multiple steps: call one tool, wait for the result, then decide next\n"
+        "5. Output JSON only"
+    )
+
+
 async def agent_run(messages: list[dict], db, user) -> dict:
     """messages: [{'role','content'}...]，最后一条为用户请求。"""
     question = ""
@@ -619,26 +720,7 @@ async def agent_run(messages: list[dict], db, user) -> dict:
             decision = None
 
     if decision is None:
-        history_block = ""
-        recent = [m for m in messages if m.get("role") in ("user", "assistant")][-8:]
-        if len(recent) > 1:
-            lines = []
-            for h in recent[:-1]:
-                role = "用户" if h.get("role") == "user" else "助手"
-                lines.append(f"{role}: {str(h.get('content', ''))[:100]}")
-            history_block = "之前的对话：\n" + "\n".join(lines) + "\n"
-        prompt = (
-            "你是 AVDB 影片库的智能助手。根据用户请求选择并调用一个工具。\n"
-            f"可用工具：\n{_TOOL_PROMPT}\n\n"
-            f"{history_block}"
-            f"用户请求：{question}\n\n"
-            "输出 JSON：{\"tool\": \"工具名\", \"args\": {参数}, \"reason\": \"一句话说明\"}\n"
-            "要求：\n"
-            "1. 检索/查询/列表演变体 → search / video_detail / stats 等只读工具\n"
-            "2. 创建/删除/修改/标记 → 对应写工具\n"
-            "3. 用户请求与工具都无关（打招呼/闲聊）→ {\"tool\": \"none\", \"args\": {}, \"reason\": \"闲聊\"}\n"
-            "4. 只输出 JSON，不要其它文字"
-        )
+        prompt = _agent_prompt(messages, question)
         try:
             raw = await chat(
                 [{"role": "system", "content": "你是 AVDB 影片库助手，只输出 JSON。"},
@@ -702,86 +784,61 @@ async def agent_run(messages: list[dict], db, user) -> dict:
         args = {}
     reason = str(decision.get("reason") or "")
 
-    if t["is_write"]:
-        # 两段式：预检 → token → 前端确认
-        if not llm_available:
-            return {"ok": False, "type": "error", "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
-        token = _issue_token(tool_name, args, user=getattr(user, "username", None) or (user if isinstance(user, str) else "ai"))
-        # 预检影响
-        preview = f"工具：{t['cn']}；参数：{json.dumps(args, ensure_ascii=False)}"
-        return {"ok": True, "type": "confirm", "tool": tool_name, "tool_cn": t["cn"],
-                "args": args, "reason": reason, "preview": preview, "token": token}
+    # ReAct 循环：读工具结果回喂 LLM 继续规划（最多 4 步）；写工具即止走确认
+    steps: list[dict] = []
+    loop_messages = list(messages)
+    max_steps = 4
+    for step_i in range(max_steps):
+        step_result = await _execute_step(t, tool_name, args, reason, db, user, llm_available)
 
-    # 读工具直接执行（search 先异步解析再查）
-    if tool_name == "search":
+        if step_result.get("type") == "confirm":
+            step_result["steps"] = steps
+            return step_result  # 写操作：确认后终止，不链式执行
+
+        if step_result.get("type") != "answer":
+            step_result["steps"] = steps
+            return step_result
+
+        steps.append({"tool": tool_name, "reason": reason, "content": (step_result.get("content") or "")[:200]})
+
+        # 已带最终展示数据（search 结果）→ 直接返回
+        if step_result.get("items"):
+            step_result["steps"] = steps
+            return step_result
+
+        feed = step_result.get("feed") or step_result.get("content") or ""
+        if not feed or step_i == max_steps - 1:
+            step_result["steps"] = steps
+            return step_result
+
+        # 回喂结果，让 LLM 决定下一步或终止
+        loop_messages.append({"role": "assistant", "content": f"已执行「{tool_name}」：{feed[:500]}"})
+        loop_messages.append({"role": "user", "content": "基于以上结果继续（如果已满足要求，输出 tool=none 并给出总结）"})
+        decision = None
         try:
-            query, engine = await _parse_question(str(args.get("question") or ""))
-            result = _search(db, args, query=query, engine=engine)
+            raw = await chat(
+                [{"role": "system", "content": "你是 AVDB 影片库助手，只输出 JSON。"},
+                 {"role": "user", "content": _agent_prompt(loop_messages, question)}],
+                task_type="agent",
+            )
+            m2 = re.search(r"\{[\s\S]*\}", raw or "")
+            if m2:
+                decision = json.loads(m2.group(0))
         except Exception:
-            result = _search(db, args)
-    else:
-        result = await _run_read_tool(t, db, args)
-    if not result.get("ok"):
-        return {"ok": True, "type": "answer", "content": f"执行失败：{result.get('message', '未知错误')}"}
-
-    if tool_name == "search":
-        items = result.get("items", [])
-        if not items:
-            return {"ok": True, "type": "answer", "content": f"没有找到匹配的作品（引擎：{result.get('engine', '?')}）。可换个说法或放宽条件。"}
-        lines = [f"找到 {len(items)} 部："]
-        for it in items[:10]:
-            rating = f" {it['rating']}" if it.get("rating") else ""
-            title = (it.get("title") or "")[:30]
-            lines.append(f"- {it['video_code']}{rating} {title}")
-        return {"ok": True, "type": "answer", "content": "\n".join(lines), "items": items, "query": result.get("query")}
-    if tool_name == "video_detail":
-        it = result["item"]
-        return {"ok": True, "type": "answer",
-                "content": (f"{it['video_code']} {it['title'] or ''}\n"
-                            f"评分：{it['rating'] or '-'} | 状态：{it['view_status'] or '未看'}\n"
-                            f"标签：{it['tags'] or '-'}\n演员：{it['actors'] or '-'}\n"
-                            f"厂商：{it['maker'] or '-'} | 厂牌：{it['label'] or '-'} | 系列：{it['series'] or '-'}\n"
-                            f"日期：{it['release_date'] or '-'}\n备注：{it['note'] or '-'}"),
-                "item": it}
-    if tool_name == "stats":
-        s = result["stats"]
-        return {"ok": True, "type": "answer",
-                "content": (f"📊 库统计：共 {s['total']} 部 | 已看 {s['viewed']} | 想看 {s['want']} | "
-                            f"收藏 {s['favorites']} | 已评分 {s['rated']}\n订阅 {s['subscriptions']} 个 | 规则 {s['rules']} 条")}
-    if tool_name == "actor_search":
-        items = result.get("items", [])
-        if not items:
-            return {"ok": True, "type": "answer", "content": "没找到该演员"}
-        return {"ok": True, "type": "answer",
-                "content": "\n".join(f"- {a['name']}（ID {a['actor_id']}）" for a in items)}
-    if tool_name == "subscription_list":
-        items = result.get("items", [])
-        if not items:
-            return {"ok": True, "type": "answer", "content": "还没有订阅，可以说「创建订阅」"}
-        return {"ok": True, "type": "answer",
-                "content": "\n".join(f"- #{s['id']} {s['name']}（{s['sub_type']}，{'启用' if s['enabled'] else '停用'}）" for s in items)}
-    if tool_name == "rule_list":
-        items = result.get("items", [])
-        if not items:
-            return {"ok": True, "type": "answer", "content": "还没有规则，可以说「创建规则」"}
-        return {"ok": True, "type": "answer",
-                "content": "\n".join(f"- #{r['id']} {r['name'] or r['task_type']}（{'启用' if r['enabled'] else '停用'}）" for r in items)}
-    if tool_name == "config_get":
-        s = result.get("settings", {})
-        lines = [f"{k} = {v}" for k, v in list(s.items())[:40]]
-        return {"ok": True, "type": "answer", "content": "当前配置（敏感值已脱敏）：\n" + "\n".join(lines) if lines else "无配置"}
-    if tool_name == "inspect":
-        probs = result.get("problems", [])
-        tips = result.get("tips", [])
-        if not probs and not tips:
-            return {"ok": True, "type": "answer", "content": "✅ 巡检通过：未发现问题"}
-        lines = []
-        for p in probs:
-            lines.append(f"{'🔴' if p['level'] == 'error' else '🟡'} {p['item']}：{p['detail']}")
-        for tp in tips:
-            lines.append(f"💡 {tp}")
-        return {"ok": True, "type": "answer", "content": "巡检结果：\n" + "\n".join(lines)}
-    return {"ok": True, "type": "answer", "content": str(result)}
+            decision = None
+        if not decision or not isinstance(decision, dict) or str(decision.get("tool") or "none") == "none":
+            step_result["steps"] = steps
+            return step_result
+        tool_name = str(decision.get("tool") or "none")
+        t = _pick_tool(tool_name)
+        if not t:
+            step_result["steps"] = steps
+            return step_result
+        args = decision.get("args") or {}
+        if not isinstance(args, dict):
+            args = {}
+        reason = str(decision.get("reason") or "")
+    return {"ok": True, "type": "answer", "content": "已完成多步处理", "steps": steps}
 
 
 def agent_confirm(token: str, db, user) -> dict:
