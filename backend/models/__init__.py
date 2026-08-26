@@ -20,6 +20,7 @@ from models.notify_log import NotifyLog
 from models.rating_history import RatingHistory
 from models.rule import Rule
 from models.share_token import ShareToken
+from models.config_audit import ConfigAudit
 from models.user import User
 
 __all__ = [

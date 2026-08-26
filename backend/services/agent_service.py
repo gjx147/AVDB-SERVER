@@ -318,12 +318,21 @@ def _config_set(db, args):
         return {"ok": False, "message": "敏感配置（密码/令牌）请在设置页手动修改，AI 仅可读"}
     row = db.get(Setting, key)
     old_value = row.value if row else None
+    new_value = str(value) if value is not None else ""
+    if old_value == new_value:
+        return {"ok": True, "message": f"配置 {key} 无变化（已是 {new_value}）", "key": key, "old": old_value, "new": new_value}
     if row:
-        row.value = str(value) if value is not None else ""
+        row.value = new_value
     else:
-        db.add(Setting(key=key, value=str(value) if value is not None else ""))
+        db.add(Setting(key=key, value=new_value))
+    # G4: 审计留痕
+    try:
+        from models import ConfigAudit
+        db.add(ConfigAudit(key=key, old_value=old_value, new_value=new_value, operator="ai", source="agent"))
+    except Exception:
+        pass
     db.commit()
-    return {"ok": True, "message": f"配置 {key} 已更新", "key": key, "old": old_value, "new": str(value)}
+    return {"ok": True, "message": f"配置 {key} 已更新", "key": key, "old": old_value, "new": new_value}
 
 
 def _inspect(db, args):

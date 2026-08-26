@@ -155,6 +155,42 @@ class ConfirmRequest(BaseModel):
     token: str = Field(min_length=1, max_length=64)
 
 
+@router.get("/agent/audit")
+def agent_audit(db: DbSession, _user: CurrentUser, limit: int = 20):
+    """G4: 配置修改审计记录（谁/何时/旧值→新值）。"""
+    from models import ConfigAudit
+    from sqlalchemy import select
+    rows = db.execute(select(ConfigAudit).order_by(ConfigAudit.id.desc()).limit(min(limit, 100))).scalars().all()
+    return {"ok": True, "items": [
+        {"id": a.id, "key": a.key, "old_value": a.old_value, "new_value": a.new_value,
+         "operator": a.operator, "source": a.source,
+         "created_at": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else None}
+        for a in rows]}
+
+
+class RollbackRequest(BaseModel):
+    audit_id: int
+
+
+@router.post("/agent/rollback")
+def agent_rollback(req: RollbackRequest, db: DbSession, _user: Annotated[str, Depends(_agent_confirm_user)]):
+    """G4: 按审计记录回滚配置（旧值还原，敏感配置不可回滚）。"""
+    from models import ConfigAudit, Setting
+    a = db.get(ConfigAudit, req.audit_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="审计记录不存在")
+    if any(p in a.key.lower() for p in ("password", "token", "secret", "key")):
+        raise HTTPException(status_code=400, detail="敏感配置不允许回滚，请在设置页手动处理")
+    row = db.get(Setting, a.key)
+    if row:
+        row.value = a.old_value
+    else:
+        db.add(Setting(key=a.key, value=a.old_value))
+    db.add(ConfigAudit(key=a.key, old_value=a.new_value, new_value=a.old_value, operator=_user or "rollback", source="rollback"))
+    db.commit()
+    return {"ok": True, "message": f"配置 {a.key} 已回滚到 {a.old_value}"}
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     """F15: 库内 AI 问答——自然语言 → 结构化筛选 JSON → 查询影片库。
