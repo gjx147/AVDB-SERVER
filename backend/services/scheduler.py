@@ -80,6 +80,14 @@ async def start_scheduler() -> None:
         from services.config_inspector import weekly_inspection_job
         add_cron_job(weekly_inspection_job, "config-inspection-weekly", day_of_week="mon", hour=9, minute=0)
 
+        # S4: 每周一 9:10 AI 订阅周报（紧随新作周报之后）
+        from services.ai_reports import subscription_weekly_job
+        add_cron_job(subscription_weekly_job, "subscription-weekly", day_of_week="mon", hour=9, minute=10)
+
+        # A7: 每日 9:00 AI 推荐推送
+        from services.ai_reports import daily_recommend_job
+        add_cron_job(daily_recommend_job, "daily-recommend", hour=9, minute=0)
+
         # F4: 每周一 9:00 推送本周新作 Top10（需在通知设置启用 weekly_report 事件）
         from services.weekly_report import run_weekly_report
         add_cron_job(run_weekly_report, "weekly-report", day_of_week="mon", hour=9, minute=0)

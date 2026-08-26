@@ -354,6 +354,19 @@ def _inspect(db, args):
     return {"ok": True, "problems": problems, "tips": tips}
 
 
+async def _health_advice(db, args):
+    from services.ai_reports import library_health_advice
+    try:
+        return await library_health_advice()
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+async def _actor_dynamics(db, args):
+    from services.ai_reports import actor_dynamics
+    return await actor_dynamics(int(args.get("actor_id") or 0))
+
+
 # ---------- 工具注册表 ----------
 TOOLS = [
     {"name": "search", "cn": "检索作品", "is_write": False,
@@ -376,6 +389,10 @@ TOOLS = [
      "desc": "读取系统配置（敏感值脱敏）", "args": {}, "handler": _config_get},
     {"name": "inspect", "cn": "系统巡检", "is_write": False,
      "desc": "巡检系统配置：缺失/异常/建议", "args": {}, "handler": _inspect},
+    {"name": "health_advice", "cn": "库健康建议", "is_write": False,
+     "desc": "影片库健康分 + 指标 + 3 条行动建议", "args": {}, "handler": _health_advice},
+    {"name": "actor_dynamics", "cn": "演员动态解读", "is_write": False,
+     "desc": "解读演员动态（活跃/休止/趋势）", "args": {"actor_id": "演员 ID"}, "handler": _actor_dynamics},
     # ---- 写工具 ----
     {"name": "subscription_create", "cn": "创建订阅", "is_write": True,
      "desc": "创建订阅（类型：actor=演员新作 / ranking=排行榜 / tag=标签筛选 / keyword=关键词）",
@@ -489,6 +506,12 @@ async def agent_run(messages: list[dict], db, user) -> dict:
             decision = {"tool": "stats", "args": {}, "reason": "关键词：统计"}
         elif "巡检" in q or "体检" in q:
             decision = {"tool": "inspect", "args": {}, "reason": "关键词：巡检"}
+        elif "健康" in q and any(k in q for k in ("库", "建议", "怎么样", "如何", "状态")):
+            decision = {"tool": "health_advice", "args": {}, "reason": "关键词：健康"}
+        elif "动态" in q or "活跃" in q or "休止" in q:
+            m = re.search(r"(\d+)", q)
+            if m:
+                decision = {"tool": "actor_dynamics", "args": {"actor_id": int(m.group(1))}, "reason": "关键词：动态"}
         elif any(k in q for k in ("配置", "设置项", "当前设置")):
             decision = {"tool": "config_get", "args": {}, "reason": "关键词：配置"}
         elif "订阅" in q and any(k in q for k in ("列表", "哪些", "都有", "列出", "查看")):

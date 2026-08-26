@@ -72,6 +72,7 @@ def recommendations(db: DbSession, _user: CurrentUser, limit: int = Query(6, le=
     对未看作品打分排序（偏好权重 + 评分加成）。"""
     import time
     from collections import Counter
+    from sqlalchemy import select
     from models import Task, task_collections
 
     now = time.monotonic()
@@ -220,6 +221,7 @@ def yearly_report(db: DbSession, _user: CurrentUser, year: int | None = None):
 @router.get("/library-health")
 def library_health(db: DbSession, _user: CurrentUser):
     """N1 库健康度：字段覆盖率加权评分 + 最该补的 Top20（高评分缺磁力）。"""
+    from sqlalchemy import select
     from models import Download, Task
 
     # 打磨：单次扫描统计各字段覆盖率（原实现 6 次全表 count）

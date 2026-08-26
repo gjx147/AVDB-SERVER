@@ -191,6 +191,20 @@ def agent_rollback(req: RollbackRequest, db: DbSession, _user: Annotated[str, De
     return {"ok": True, "message": f"配置 {a.key} 已回滚到 {a.old_value}"}
 
 
+@router.get("/library-health-advice")
+async def library_health_advice_endpoint(_user: CurrentUser):
+    """A3: 库健康 AI 建议（健康分 + 指标 + 3 条行动建议）。"""
+    from services.ai_reports import library_health_advice
+    return await library_health_advice()
+
+
+@router.get("/actor-dynamics/{actor_id}")
+async def actor_dynamics_endpoint(actor_id: int, _user: CurrentUser):
+    """S5: 演员动态 AI 解读。"""
+    from services.ai_reports import actor_dynamics
+    return await actor_dynamics(actor_id)
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     """F15: 库内 AI 问答——自然语言 → 结构化筛选 JSON → 查询影片库。
