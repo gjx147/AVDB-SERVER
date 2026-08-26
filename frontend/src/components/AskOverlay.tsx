@@ -87,14 +87,17 @@ export function AskOverlay() {
     setBusy(true)
     setPhase('正在解析请求…')
     try {
-      const r = await api.agentChat([...history, { role: 'user', content: q }])
+      const isCmd = q.startsWith('/')
+      const r = isCmd
+        ? await api.agentCommand(q.split(/\s+/)[0], q.replace(/^\/\S+\s*/, ''))
+        : await api.agentChat([...history, { role: 'user', content: q }])
       if (r.type === 'confirm') {
         setMsgs((p) => [...p, {
           role: 'assistant', content: `需要确认：${r.tool_cn || r.tool || ''}`,
           confirm: { token: r.token || '', tool: r.tool || '', tool_cn: r.tool_cn || r.tool || '', args: r.args || {}, preview: r.preview || '', reason: r.reason },
         }])
       } else {
-        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[], steps: r.steps }])
+        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[], steps: (r.steps as StepInfo[] | undefined) }])
         setTyping(true)
       }
     } catch (e) {
@@ -236,7 +239,7 @@ export function AskOverlay() {
           style={{ border: '1px solid var(--line, #e5e7eb)', background: listening ? 'var(--red, #dc2626)' : 'var(--bg-page, #fff)', color: listening ? '#fff' : 'var(--t-body)', borderRadius: 8, padding: '0 10px', fontSize: 13, cursor: 'pointer' }}>
           {listening ? '⏹' : '🎤'}
         </button>
-        <input className="input" value={input} placeholder={listening ? '正在听…' : '检索、订阅、规则、配置、巡检都能聊…'}
+        <input className="input" value={input} placeholder={listening ? '正在听…' : '问助手，或 /stats /sub /mark /combo…'}
           onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') ask() }}
           style={{ flex: 1, fontSize: 12 }} />
         <button className="btn btn--gold btn--sm" onClick={() => ask()} disabled={busy}>发送</button>

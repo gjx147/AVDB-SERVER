@@ -317,6 +317,18 @@ def breaker_status_endpoint(_user: CurrentUser):
     return {"ok": True, "breaker": breaker_status()}
 
 
+class CommandRequest(BaseModel):
+    command: str = Field(min_length=1, max_length=30)
+    arg_text: str = Field(default="", max_length=500)
+
+
+@router.post("/agent/command")
+async def agent_command(req: CommandRequest, db: DbSession, _user: CurrentUser):
+    """斜杠命令：跳过 LLM 直达工具（/stats /inspect /sub /mark /combo 等）。"""
+    from services.agent_service import run_command
+    return await run_command(req.command, req.arg_text or "", db, _user)
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     RateLimitedUser(_user)

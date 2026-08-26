@@ -76,6 +76,31 @@ AI_WRITABLE_KEYS = {
 
 
 # ---------- 工具执行体 ----------
+def _get_prefs(db, user: str | None = None) -> dict:
+    """读取用户偏好（无记录返回空 dict）。"""
+    try:
+        from models import UserPref
+        key = (getattr(user, "username", None) or (user if isinstance(user, str) else None)) or "default"
+        row = db.get(UserPref, key)
+        return json.loads(row.prefs_json or "{}") if row else {}
+    except Exception:
+        return {}
+
+
+def _apply_prefs(query: dict, prefs: dict) -> dict:
+    """偏好注入：用户未显式指定的字段用偏好默认。"""
+    q = dict(query or {})
+    if prefs.get("rating_min") is not None and q.get("rating_min") is None:
+        q["rating_min"] = float(prefs["rating_min"])
+    if prefs.get("tags") and not q.get("tags"):
+        q["tags"] = list(prefs["tags"])[:5]
+    if prefs.get("only_unviewed") and q.get("view_status") is None:
+        q["view_status"] = "want"
+    if prefs.get("sort") and q.get("sort") is None:
+        q["sort"] = prefs["sort"]
+    return q
+
+
 def _normalize_query(query: dict) -> dict:
     """S6: 规范化 LLM 输出的筛选条件（数组/数值/日期/长度钳制）。"""
     import datetime as _dt
@@ -428,6 +453,58 @@ def _inspect(db, args):
     return {"ok": True, "problems": problems, "tips": tips}
 
 
+def _pref_get(db, args):
+    """查看当前偏好。"""
+    prefs = _get_prefs(db, args.get("_operator"))
+    if not prefs:
+        return {"ok": True, "prefs": {}, "message": "暂无偏好设置"}
+    lines = [f"- {k} = {v}" for k, v in prefs.items()]
+    return {"ok": True, "prefs": prefs, "message": "当前偏好：\n" + "\n".join(lines)}
+
+
+def _pref_set(db, args):
+    """设置偏好（写，确认制）。支持：rating_min/tags/only_unviewed/sort。"""
+    from models import UserPref
+    key = str(args.get("key") or "")
+    value = args.get("value")
+    valid_keys = {"rating_min", "tags", "only_unviewed", "sort"}
+    if key not in valid_keys:
+        return {"ok": False, "message": f"支持偏好：{'/'.join(valid_keys)}"}
+    prefs = _get_prefs(db, args.get("_operator"))
+    if key == "rating_min":
+        try:
+            prefs[key] = min(max(float(value), 0.0), 10.0)
+        except (TypeError, ValueError):
+            return {"ok": False, "message": "rating_min 需为 0-10 数字"}
+    elif key == "tags":
+        if isinstance(value, str):
+            value = [x.strip() for x in value.split(",") if x.strip()]
+        prefs[key] = [str(x)[:20] for x in (value or [])[:5]]
+    elif key == "only_unviewed":
+        prefs[key] = bool(value)
+    elif key == "sort":
+        prefs[key] = str(value)[:20]
+    uname = args.get("_operator") or "default"
+    row = db.get(UserPref, uname)
+    if row:
+        row.prefs_json = json.dumps(prefs, ensure_ascii=False)
+    else:
+        db.add(UserPref(user=uname, prefs_json=json.dumps(prefs, ensure_ascii=False)))
+    db.commit()
+    return {"ok": True, "message": f"偏好已更新：{key} = {prefs[key]}"}
+
+
+def _pref_clear(db, args):
+    """清除全部偏好。"""
+    from models import UserPref
+    uname = args.get("_operator") or "default"
+    row = db.get(UserPref, uname)
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True, "message": "偏好已清空"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -624,6 +701,14 @@ TOOLS = [
      "args": {"query_text": "筛选条件", "view_status": "viewed|want|none（默认 want）",
               "sub_name": "订阅名称（可选）"},
      "handler": _combo_mark_subscribe},
+    {"name": "pref_get", "cn": "查看偏好", "is_write": False,
+     "desc": "查看检索偏好（默认评分/标签/只看未看/排序）", "args": {}, "handler": _pref_get},
+    {"name": "pref_set", "cn": "设置偏好", "is_write": True,
+     "desc": "设置检索偏好（如：以后默认只看 8 分以上）",
+     "args": {"key": "rating_min|tags|only_unviewed|sort", "value": "新值"},
+     "handler": _pref_set},
+    {"name": "pref_clear", "cn": "清除偏好", "is_write": True,
+     "desc": "清除全部检索偏好", "args": {}, "handler": _pref_clear},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -746,6 +831,7 @@ async def _execute_step(t, tool_name, args, reason, db, user, llm_available) -> 
     if tool_name == "search":
         try:
             query, engine = await _parse_question(str(args.get("question") or ""))
+            query = _apply_prefs(query, _get_prefs(db, user))
             result = _search(db, args, query=query, engine=engine)
         except Exception:
             result = _search(db, args)
@@ -983,6 +1069,88 @@ async def agent_run(messages: list[dict], db, user) -> dict:
             args = {}
         reason = str(decision.get("reason") or "")
     return {"ok": True, "type": "answer", "content": "已完成多步处理", "steps": steps}
+
+
+# ---------- 斜杠命令路由（跳过 LLM，直达工具） ----------
+COMMANDS = {
+    "help": {"cn": "帮助", "tool": None, "desc": "显示全部命令"},
+    "stats": {"cn": "库统计", "tool": "stats", "args": {}},
+    "inspect": {"cn": "系统巡检", "tool": "inspect", "args": {}},
+    "health": {"cn": "库健康建议", "tool": "health_advice", "args": {}},
+    "subs": {"cn": "订阅列表", "tool": "subscription_list", "args": {}},
+    "rules": {"cn": "规则列表", "tool": "rule_list", "args": {}},
+    "prefs": {"cn": "查看偏好", "tool": "pref_get", "args": {}},
+    "recommend": {"cn": "推荐新片", "tool": "search", "args": {"question": "高分未看过的作品"}},
+    "weekly": {"cn": "本周新作", "tool": "search", "args": {"question": "最近发布的高分作品"}},
+}
+
+
+async def run_command(cmd: str, arg_text: str, db, user) -> dict:
+    """执行斜杠命令（命令体参数走 NL 解析兜底）。"""
+    cmd = cmd.lower().strip().lstrip("/")
+    if cmd in ("help", "?"):
+        lines = ["可用命令："]
+        for k, v in COMMANDS.items():
+            lines.append(f"- /{k}：{v['cn']}")
+        lines.append("- /sub <条件>：创建订阅（如 /sub 8分以上巨乳）")
+        lines.append("- /mark <条件> <看过|想看>：批量标记（如 /mark 8分以上 想看）")
+        lines.append("- /combo <条件>：标记+建订阅一次完成")
+        return {"ok": True, "type": "answer", "content": "\n".join(lines), "steps": []}
+
+    if cmd == "sub":
+        if not arg_text:
+            return {"ok": True, "type": "error", "content": "用法：/sub <条件>，如 /sub 8分以上巨乳"}
+        t = _pick_tool("subscription_create")
+        args = {"sub_type": "composite", "name": f"命令订阅（{arg_text[:12]}）", "filters_json": None}
+        # 解析条件 → filters
+        try:
+            q, _e = await _parse_question(arg_text)
+            filters = {k: v for k, v in q.items() if k in ("makers", "labels", "series", "exclude_codes", "min_rating", "date_from") and v}
+            if q.get("tags"):
+                filters["genres"] = q["tags"]
+            args["filters_json"] = json.dumps(filters, ensure_ascii=False) if filters else None
+        except Exception:
+            pass
+        return await _execute_step(t, "subscription_create", args, f"命令 /sub {arg_text}", db, user, True)
+
+    if cmd == "mark":
+        # /mark <条件> <状态>；状态关键词解析
+        status = "want"
+        for k in ("看过", "想看", "未看"):
+            if k in arg_text:
+                status = {"看过": "viewed", "想看": "want", "未看": "none"}[k]
+                arg_text = arg_text.replace(k, "").strip()
+                break
+        t = _pick_tool("batch_set_view_status")
+        args = {"query_text": arg_text or "高分作品", "view_status": status}
+        try:
+            q, _e = await _parse_question(arg_text or "高分作品")
+            args["_query"] = q
+        except Exception:
+            pass
+        return await _execute_step(t, "batch_set_view_status", args, f"命令 /mark", db, user, True)
+
+    if cmd == "combo":
+        t = _pick_tool("combo_mark_subscribe")
+        args = {"query_text": arg_text or "高分作品", "view_status": "want"}
+        try:
+            q, _e = await _parse_question(arg_text or "高分作品")
+            args["_query"] = q
+        except Exception:
+            pass
+        return await _execute_step(t, "combo_mark_subscribe", args, f"命令 /combo", db, user, True)
+
+    c = COMMANDS.get(cmd)
+    if not c or not c["tool"]:
+        return {"ok": True, "type": "answer",
+                "content": f"未知命令 /{cmd}。输入 /help 查看全部命令。", "steps": []}
+    t = _pick_tool(c["tool"])
+    if not t:
+        return {"ok": True, "type": "error", "content": f"命令 /{cmd} 暂不可用", "steps": []}
+    args = dict(c["args"])
+    if arg_text and c["tool"] == "search":
+        args["question"] = arg_text
+    return await _execute_step(t, c["tool"], args, f"命令 /{cmd}", db, user, True)
 
 
 def agent_confirm(token: str, db, user) -> dict:

@@ -470,6 +470,9 @@ export const api = {
   agentChat: (messages: { role: string; content: string }[]) =>
     http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; query?: Record<string, unknown>; tool?: string; tool_cn?: string; args?: Record<string, unknown>; reason?: string; preview?: string; token?: string; steps?: { tool: string; reason?: string; content?: string }[] }>(
       '/api/ai/agent', { messages }).then((r) => r.data),
+  agentCommand: (command: string, argText: string) =>
+    http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; steps?: unknown[]; token?: string; tool?: string; tool_cn?: string; preview?: string; args?: Record<string, unknown>; reason?: string }>(
+      '/api/ai/agent/command', { command, arg_text: argText }).then((r) => r.data),
   agentConfirm: (token: string) =>
     http.post<{ ok: boolean; result?: { ok: boolean; message?: string } }>(
       '/api/ai/agent/confirm', { token }).then((r) => r.data),
