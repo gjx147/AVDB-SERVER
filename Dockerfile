@@ -5,7 +5,7 @@
 ARG PYTHON_VERSION=3.12
 
 # ── Stage 1: 前端构建（node:20-alpine）──
-FROM node:22-alpine AS frontend-build  # Node 22 LTS（20 已 EOL）
+FROM node:22-alpine AS frontend-build
 WORKDIR /app/frontend
 # 先复制 package.json 与锁文件，命中缓存时跳过 npm ci
 COPY frontend/package.json frontend/package-lock.json ./
