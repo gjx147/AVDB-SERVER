@@ -41,3 +41,9 @@ _SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key"
 
 def is_sensitive_key(key: str) -> bool:
     return any(p in key.lower() for p in _SENSITIVE_PATTERNS)
+
+
+def utcnow():
+    """统一 UTC 时间（aware，避免 naive/aware 混用崩溃；Python 3.12 起 utcnow 弃用）。"""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)

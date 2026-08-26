@@ -9,7 +9,7 @@
 
 services:
   avdb-server:
-    image: gjx147/avdb-server:latest
+    image: gjx147/avdb-server:latest@sha256:624b300a16e2fdbf651a6d3e491922900054af5ed090fad9198f8b5b22d061d6
     container_name: avdb-server
     restart: unless-stopped
     # 使用 host 网络模式：容器直接用宿主网络

@@ -46,4 +46,13 @@ __all__ = [
     "Download",
     "NotifyLog",
     "User",
+    "ConfigAudit",
+    "AgentAction",
+    "UserPref",
+    "ChatSession",
+    "ChatMessage",
+    "AiUsage",
+    "RatingHistory",
+    "Rule",
+    "ShareToken",
 ]
