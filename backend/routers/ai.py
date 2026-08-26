@@ -173,7 +173,7 @@ def agent_confirm(req: ConfirmRequest, db: DbSession, _user: Annotated[str, Depe
 
 
 class ConfirmRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=64)
+    token: str = Field(min_length=1, max_length=512)
 
 
 @router.get("/agent/audit")
@@ -281,6 +281,40 @@ def tag_normalize_apply_endpoint(req: TagNormalizeApplyRequest, _user: Annotated
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("message", "执行失败"))
     return result
+
+
+@router.get("/agent/actions")
+def agent_actions(db: DbSession, _user: CurrentUser, limit: int = 20):
+    """工程底座: 最近写操作审计列表（可撤销项提示）。"""
+    from models import AgentAction
+    from sqlalchemy import select
+    rows = db.execute(select(AgentAction).order_by(AgentAction.id.desc()).limit(min(limit, 100))).scalars().all()
+    return {"ok": True, "items": [
+        {"id": a.id, "tool": a.tool, "result": a.result, "operator": a.operator,
+         "ok": a.ok, "undone": a.undone, "args": (a.args_json or "")[:300],
+         "created_at": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else None}
+        for a in rows]}
+
+
+class UndoRequest(BaseModel):
+    action_id: int
+
+
+@router.post("/agent/undo")
+def agent_undo(req: UndoRequest, db: DbSession, _user: Annotated[str, Depends(_agent_confirm_user)]):
+    """工程底座: 撤销写操作（view_status 还原/toggle 反转/配置还原/删除类给参数快照）。"""
+    from services.agent_service import _undo_action
+    result = _undo_action(req.action_id, db, _user)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("message", "撤销失败"))
+    return result
+
+
+@router.get("/breaker-status")
+def breaker_status_endpoint(_user: CurrentUser):
+    """熔断器状态查看。"""
+    from services.ai_service import breaker_status
+    return {"ok": True, "breaker": breaker_status()}
 
 
 @router.post("/ask")

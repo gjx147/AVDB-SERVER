@@ -104,6 +104,10 @@ async def chat(messages: list[dict], *, task_type: str = "chat", model: str | No
         logger.warning("AI key not configured")
         return ""
 
+    if not _breaker_allows():
+        logger.warning("AI breaker open, skip LLM call (fallback)")
+        return ""
+
     prompt_text = str(messages)
     prompt_hash = _hash_prompt(prompt_text)
     if use_cache:
@@ -134,6 +138,46 @@ _chat_locks_guard = threading.Lock()
 
 # E6: global LLM concurrency semaphore
 _llm_semaphore = asyncio.Semaphore(4)
+
+# Circuit breaker: 5 consecutive failures -> open 5min -> half-open probe
+_breaker = {"state": "closed", "failures": 0, "opened_at": None}
+_BREAKER_THRESHOLD = 5
+_BREAKER_OPEN_SECONDS = 300
+
+
+def breaker_status() -> dict:
+    """当前熔断器状态。"""
+    st = dict(_breaker)
+    if st["state"] == "open":
+        remain = _BREAKER_OPEN_SECONDS - (time.monotonic() - (st["opened_at"] or 0))
+        st["remaining_seconds"] = max(0, int(remain))
+    return st
+
+
+def _breaker_allows() -> bool:
+    st = _breaker
+    if st["state"] == "closed":
+        return True
+    if st["state"] == "open":
+        if time.monotonic() - (st["opened_at"] or 0) > _BREAKER_OPEN_SECONDS:
+            st["state"] = "half-open"
+            return True
+        return False
+    # half-open: allow single probe
+    return True
+
+
+def _breaker_record(success: bool) -> None:
+    st = _breaker
+    if success:
+        st["state"] = "closed"
+        st["failures"] = 0
+        st["opened_at"] = None
+    else:
+        st["failures"] += 1
+        if st["failures"] >= _BREAKER_THRESHOLD:
+            st["state"] = "open"
+            st["opened_at"] = time.monotonic()
 
 
 def _get_client(base_url: str, api_key: str):
@@ -191,13 +235,18 @@ async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
                 logger.warning("AI call failed (attempt %d): %s", attempt + 1, e)
             if attempt < 1:
                 await asyncio.sleep(1)
+        _breaker_record(False)
         return ""
 
     try:
         async with _llm_semaphore:
-            return await asyncio.wait_for(_call_with_retry(), timeout=90)
+            text = await asyncio.wait_for(_call_with_retry(), timeout=90)
+        if text:
+            _breaker_record(True)
+        return text
     except asyncio.TimeoutError:
         logger.error("AI overall timeout (>90s): task=%s model=%s", task_type, use_model)
+        _breaker_record(False)
         return ""
 
 async def test_connection() -> dict:

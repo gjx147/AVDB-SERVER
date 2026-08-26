@@ -505,6 +505,77 @@ def _pick_tool(name: str):
     return None
 
 
+def _record_action(db, tool: str, args: dict, operator: str, result: str, ok: bool = True) -> None:
+    """写操作审计留痕（参数快照 + 结果摘要）。"""
+    try:
+        from models import AgentAction
+        db.add(AgentAction(
+            tool=tool,
+            args_json=json.dumps(args, ensure_ascii=False, default=str)[:2000],
+            operator=operator or "ai",
+            result=str(result)[:500],
+            ok=ok,
+        ))
+        db.commit()
+    except Exception:
+        pass
+
+
+def _undo_action(action_id: int, db, user) -> dict:
+    """撤销写操作：可逆操作反转执行；删除类保留参数快照提示重建。"""
+    from models import AgentAction
+    a = db.get(AgentAction, action_id)
+    if not a:
+        return {"ok": False, "message": "操作记录不存在"}
+    if a.undone:
+        return {"ok": False, "message": "该操作已撤销过"}
+    try:
+        args = json.loads(a.args_json or "{}")
+    except Exception:
+        args = {}
+    op = getattr(user, "username", None) or (user if isinstance(user, str) else "ai")
+
+    if a.tool == "set_view_status":
+        # 还原旧观看状态（记录旧值）
+        old_status = args.get("_old_view_status")
+        tid = int(args.get("task_id") or 0)
+        t = db.get(Task, tid)
+        if not t:
+            return {"ok": False, "message": "作品不存在，无法撤销"}
+        t.view_status = old_status or None
+        db.commit()
+        msg = f"已还原作品 #{tid} 观看状态"
+    elif a.tool == "subscription_toggle":
+        # 反转开关
+        sid = int(args.get("subscription_id") or 0)
+        sub = db.get(Subscription, sid)
+        if not sub:
+            return {"ok": False, "message": "订阅已不存在（可能已删除）"}
+        sub.enabled = not sub.enabled
+        db.commit()
+        msg = f"订阅「{sub.name}」开关已反转"
+    elif a.tool == "config_set":
+        from models import Setting
+        key = str(args.get("key") or "")
+        old_value = args.get("_old_value")
+        row = db.get(Setting, key)
+        if row:
+            row.value = old_value
+        else:
+            db.add(Setting(key=key, value=old_value))
+        db.commit()
+        msg = f"配置 {key} 已还原"
+    else:
+        # 删除类/创建类：参数快照已留，提示手动重建
+        return {"ok": False, "message": f"该操作（{a.tool}）不可自动撤销；参数快照已保留，可据此手动恢复",
+                "args_snapshot": args}
+
+    a.undone = True
+    db.commit()
+    _record_action(db, f"undo_{a.tool}", {"action_id": action_id}, op, msg)
+    return {"ok": True, "message": msg}
+
+
 async def _run_read_tool(t, db, args):
     import inspect
     try:
@@ -725,8 +796,19 @@ def agent_confirm(token: str, db, user) -> dict:
     args = dict(p["args"])
     args["_operator"] = uname or "ai"
     try:
+        # config_set 撤销需旧值：预读并注入
+        if t["name"] == "config_set" and args.get("key"):
+            from models import Setting
+            _row = db.get(Setting, str(args["key"]))
+            args["_old_value"] = _row.value if _row else None
+        if t["name"] == "set_view_status" and args.get("task_id"):
+            _t = db.get(Task, int(args["task_id"]))
+            args["_old_view_status"] = getattr(_t, "view_status", None) if _t else None
         result = t["handler"](db, args)
     except Exception as e:
         logger.warning("写工具 %s 执行失败: %s", t["name"], e)
         return {"ok": False, "message": "执行失败，请稍后重试或查看日志"}
+    _record_action(db, t["name"], {k: v for k, v in args.items() if not k.startswith("_")},
+                   uname or "ai", (result.get("message") if isinstance(result, dict) else str(result)),
+                   ok=bool(result.get("ok", True)))
     return {"ok": True, "result": result}
