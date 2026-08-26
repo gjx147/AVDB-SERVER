@@ -112,6 +112,8 @@ async def recommend_reason(payload: dict, db: DbSession, _user: CurrentUser):
 
 class AskRequest(BaseModel):
     question: str = Field(max_length=1000)
+    # A1: 多轮对话上下文（[{role: user|assistant, content}], 保留最近 6 轮）
+    history: list[dict] = Field(default_factory=list)
 
 
 @router.post("/ask")
@@ -130,7 +132,18 @@ async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     if not question:
         raise HTTPException(status_code=400, detail="问题不能为空")
 
-    key = _hash_prompt(f"ask:{question}")
+    # A1: 历史参与缓存键与提示（避免不同上下文命中同一缓存）
+    history = req.history or []
+    history_snippet = ""
+    if history:
+        import json as _json
+        recent = history[-6:]
+        lines = []
+        for h in recent:
+            role = "用户" if h.get("role") == "user" else "助手"
+            lines.append(f"{role}: {str(h.get('content', ''))[:120]}")
+        history_snippet = "\n".join(lines)
+    key = _hash_prompt(f"ask:{question}|{history_snippet[:300]}")
     cached = _get_cached(key)
     query: dict | None = None
     if cached:
@@ -151,6 +164,8 @@ async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
         )
         prompt = (
             "你是一个影片库查询助手。把用户的自然语言问题转换成 JSON 筛选条件，只输出 JSON，不要其它文字。\n"
+            + (f"以下是之前的对话（追问会基于上文条件叠加）：\n{history_snippet}\n" if history_snippet else "")
+            + "\n"
             f"可用字段（全部可选，未知就 null）：{schema}\n"
             f"用户问题：{question}\n"
             "注意：标签/演员数组最多 5 个元素；评分按 0-10 分制；番号需大写（如 ABC-123）。"

@@ -467,9 +467,9 @@ export const api = {
       '/api/insights/recommendations').then((r) => r.data),
   recommendReason: (taskId: number) =>
     http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
-  aiAsk: (question: string) =>
+  aiAsk: (question: string, history: { role: string; content: string }[] = []) =>
     http.post<{ ok: boolean; question: string; query: Record<string, unknown>; total: number; engine: string; items: { task_id: number; video_code: string | null; title: string | null; rating: number | null; poster_url: string | null; tags: string | null; actors: string | null }[] }>(
-      '/api/ai/ask', { question }).then((r) => r.data),
+      '/api/ai/ask', { question, history }).then((r) => r.data),
   actorInsights: (actorId: number) =>
     http.get<{ years: { year: string; count: number }[]; co_stars: { name: string; count: number }[] }>(
       `/api/actors/${actorId}/profile-insights`).then((r) => r.data),
