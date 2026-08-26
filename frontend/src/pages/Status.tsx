@@ -4,9 +4,10 @@ import { PageHead, Loading } from '../components/States'
 
 export function Status() {
   const [d, setD] = useState<Awaited<ReturnType<typeof api.systemStatus>> | null>(null)
+  const [err, setErr] = useState('')
   useEffect(() => {
     let alive = true
-    api.systemStatus().then((r) => { if (alive) setD(r) }).catch(() => {})
+    api.systemStatus().then((r) => { if (alive) setD(r) }).catch((e) => { if (alive) setErr(String((e as Error).message)) })
     return () => { alive = false }
   }, [])
   const fmt = (s: string) => (s ? s.replace('T', ' ').slice(0, 19) : '—')
@@ -16,7 +17,11 @@ export function Status() {
         sub="调度任务、队列、下载器活跃度、最近错误与备份。">
         {d && <span style={{ fontSize: 11, color: 'var(--t-mute)' }}>服务器时间 {d.server_time}</span>}
       </PageHead>
-      {!d ? <Loading /> : (
+      {err && !d ? (
+        <div className="card" style={{ padding: '20px', textAlign: 'center', fontSize: 12, color: 'var(--red, #dc2626)' }}>
+          系统状态获取失败：{err}
+        </div>
+      ) : !d ? <Loading /> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
           <div className="card" style={{ padding: '14px 16px' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>调度任务</div>
