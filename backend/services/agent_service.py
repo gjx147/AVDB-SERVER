@@ -1016,6 +1016,303 @@ def _task_extract(db, args):
         return {"ok": False, "message": f"提取失败：{e}"}
 
 
+def _task_note(db, args):
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    t.note = str(args.get("note") or "")[:2000] or None
+    db.commit()
+    return {"ok": True, "message": f"{t.video_code or tid} 备注已更新"}
+
+
+def _task_favorite(db, args):
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    fav = bool(args.get("favorite", True))
+    t.is_favorite = fav
+    if fav:
+        from datetime import datetime as _dt
+        t.favorite_at = _dt.utcnow()
+    db.commit()
+    return {"ok": True, "message": f"{t.video_code} 已{'收藏' if fav else '取消收藏'}"}
+
+
+def _favorites_list(db, args):
+    rows = db.execute(select(Task).where(Task.is_favorite == True).order_by(Task.favorite_at.desc()).limit(20)).scalars().all()  # noqa: E712
+    items = [{"task_id": t.id, "video_code": t.video_code, "title": t.title, "rating": t.rating} for t in rows]
+    return {"ok": True, "items": items}
+
+
+def _collection_delete(db, args):
+    from models import Collection
+    cid = int(args.get("collection_id") or 0)
+    c = db.get(Collection, cid)
+    if not c:
+        return {"ok": False, "message": "收藏夹不存在"}
+    db.delete(c)
+    db.commit()
+    return {"ok": True, "message": f"收藏夹「{c.name}」已删除"}
+
+
+def _collection_remove(db, args):
+    from models import Collection, task_collections
+    cid = int(args.get("collection_id") or 0)
+    tid = int(args.get("task_id") or 0)
+    c = db.get(Collection, cid)
+    if not c:
+        return {"ok": False, "message": "收藏夹不存在"}
+    db.execute(task_collections.delete().where(
+        task_collections.c.collection_id == cid, task_collections.c.task_id == tid))
+    db.commit()
+    return {"ok": True, "message": f"作品 #{tid} 已移出收藏夹「{c.name}」"}
+
+
+def _collection_tasks(db, args):
+    from models import Collection, task_collections
+    cid = int(args.get("collection_id") or 0)
+    c = db.get(Collection, cid)
+    if not c:
+        return {"ok": False, "message": "收藏夹不存在"}
+    rows = db.execute(
+        select(Task).join(task_collections, task_collections.c.task_id == Task.id)
+        .where(task_collections.c.collection_id == cid).limit(20)
+    ).scalars().all()
+    items = [{"task_id": t.id, "video_code": t.video_code, "title": t.title, "rating": t.rating} for t in rows]
+    return {"ok": True, "items": items, "collection": c.name}
+
+
+def _actor_refresh_profile(db, args):
+    """后台刷新演员资料。"""
+    from models import Actor
+    aid = int(args.get("actor_id") or 0)
+    a = db.get(Actor, aid)
+    if not a:
+        return {"ok": False, "message": "演员不存在"}
+    try:
+        from services.actor_profile import refresh_profile
+        import asyncio as _aio
+        import threading
+        def _run():
+            try:
+                _aio.run(refresh_profile(aid))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": f"已开始刷新 {a.name} 的资料（后台）"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _subscription_update(db, args):
+    sid = int(args.get("subscription_id") or 0)
+    sub = db.get(Subscription, sid)
+    if not sub:
+        return {"ok": False, "message": "订阅不存在"}
+    if "auto_add" in args:
+        sub.auto_add = bool(args["auto_add"])
+    if "enabled" in args:
+        sub.enabled = bool(args["enabled"])
+    if "check_interval_hours" in args:
+        try:
+            sub.check_interval_hours = min(max(int(args["check_interval_hours"]), 1), 168)
+        except (TypeError, ValueError):
+            pass
+    if "name" in args:
+        sub.name = str(args["name"])[:100]
+    db.commit()
+    return {"ok": True, "message": f"订阅「{sub.name}」已更新（auto_add={sub.auto_add}）"}
+
+
+def _download_stats(db, args):
+    from models import Download
+    from sqlalchemy import func
+    total = db.execute(select(func.count(Download.id))).scalar() or 0
+    ok = db.execute(select(func.count(Download.id)).where(Download.status == "completed")).scalar() or 0
+    return {"ok": True, "stats": {"total": total, "completed": ok,
+                                  "success_rate": round(ok / total, 3) if total else 0}}
+
+
+def _drive115_status(db, args):
+    try:
+        from services.drive115_client import get_quota, list_offline_tasks
+        import asyncio as _aio
+        async def _g():
+            q = await get_quota()
+            tasks = await list_offline_tasks()
+            return q, tasks
+        q, tasks = _aio.run(_g())
+        return {"ok": True, "quota": q, "offline_tasks": len(tasks) if tasks else 0}
+    except Exception as e:
+        return {"ok": False, "message": f"115 状态获取失败：{e}"}
+
+
+def _media_check(db, args):
+    from routers.media_server import check_in_library
+    vc = str(args.get("video_code") or "").strip().upper()
+    if not vc:
+        return {"ok": False, "message": "需要番号"}
+    try:
+        r = check_in_library(vc, db, "anonymous")
+        return {"ok": True, "video_code": vc, "result": r}
+    except Exception as e:
+        return {"ok": False, "message": f"查询失败：{e}"}
+
+
+def _media_sync(db, args):
+    """后台触发媒体服务器同步。"""
+    try:
+        from routers.media_server import sync
+        import asyncio as _aio
+        import threading
+        force = bool(args.get("force"))
+        def _run():
+            try:
+                _aio.run(sync("anonymous", limit=200, force=force))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": "媒体服务器同步已开始（后台）"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _organize_config(db, args):
+    from routers.organize import get_config
+    try:
+        r = get_config(db, "anonymous")
+        return {"ok": True, "config": r if isinstance(r, dict) else {}}
+    except Exception as e:
+        return {"ok": False, "message": f"读取失败：{e}"}
+
+
+def _organize_run(db, args):
+    try:
+        from routers.organize import run_all
+        import asyncio as _aio
+        import threading
+        def _run():
+            try:
+                _aio.run(run_all("anonymous"))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": "整理任务已开始（后台）"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _organize_undo(db, args):
+    from routers.organize import undo
+    try:
+        r = undo(int(args.get("dl_id") or 0), "anonymous")
+        msg = r.get("message") if isinstance(r, dict) else str(r)
+        return {"ok": True, "message": f"已解除整理：{msg}"}
+    except Exception as e:
+        return {"ok": False, "message": f"操作失败：{e}"}
+
+
+def _system_status(db, args):
+    from routers.system import system_status
+    try:
+        r = system_status(db, "anonymous")
+        return {"ok": True, "status": r}
+    except Exception as e:
+        return {"ok": False, "message": f"读取失败：{e}"}
+
+
+def _backup_now(db, args):
+    from routers.settings import backup_settings
+    try:
+        r = backup_settings(db, "anonymous")
+        return {"ok": True, "message": f"设置已备份（{len(r.get('settings', {}))} 项）"}
+    except Exception as e:
+        return {"ok": False, "message": f"备份失败：{e}"}
+
+
+def _dnd_set(db, args):
+    from models import Setting
+    start = str(args.get("start") or "").strip()[:5]
+    end = str(args.get("end") or "").strip()[:5]
+    for key, val in (("notify_dnd_start", start), ("notify_dnd_end", end)):
+        row = db.get(Setting, key)
+        if row:
+            row.value = val
+        else:
+            db.add(Setting(key=key, value=val))
+    db.commit()
+    return {"ok": True, "message": f"免打扰时段已设置：{start or '--'}~{end or '--'}"}
+
+
+def _notify_test(db, args):
+    try:
+        from routers.notifications import test_notify
+        import asyncio as _aio
+        async def _run():
+            return await test_notify("anonymous")
+        r = _aio.run(_run())
+        return {"ok": True, "message": f"测试通知已发送：{r}"}
+    except Exception as e:
+        return {"ok": False, "message": f"发送失败：{e}"}
+
+
+def _list_source_list(db, args):
+    from models import ListSource
+    rows = db.execute(select(ListSource).order_by(ListSource.id)).scalars().all()
+    items = [{"id": r.id, "list_code": r.list_code, "list_path": r.list_path,
+              "max_pages": r.max_pages} for r in rows]
+    return {"ok": True, "items": items}
+
+
+def _list_source_add(db, args):
+    from models import ListSource
+    code = str(args.get("list_code") or "").strip()[:50]
+    path = str(args.get("list_path") or "").strip()[:200]
+    if not code or not path:
+        return {"ok": False, "message": "需要 list_code 与 list_path"}
+    ls = ListSource(list_code=code, list_path=path,
+                    list_params=str(args.get("list_params") or "")[:100] or "f=download",
+                    max_pages=min(int(args.get("max_pages") or 100), 1000))
+    db.add(ls)
+    db.commit()
+    db.refresh(ls)
+    return {"ok": True, "message": f"列表源 {code} 已添加", "id": ls.id}
+
+
+def _list_source_delete(db, args):
+    from models import ListSource
+    lid = int(args.get("source_id") or 0)
+    ls = db.get(ListSource, lid)
+    if not ls:
+        return {"ok": False, "message": "列表源不存在"}
+    db.delete(ls)
+    db.commit()
+    return {"ok": True, "message": f"列表源 {ls.list_code} 已删除"}
+
+
+def _yearly_report(db, args):
+    from routers.insights import yearly_report
+    try:
+        y = int(args.get("year") or 0) or None
+        r = yearly_report(db, "anonymous", year=y)
+        return {"ok": True, "report": r}
+    except Exception as e:
+        return {"ok": False, "message": f"生成失败：{e}"}
+
+
+def _wishlist_gaps(db, args):
+    from routers.tasks import wishlist_gaps
+    try:
+        r = wishlist_gaps(db, "anonymous", limit=50)
+        items = r.get("items") if isinstance(r, dict) else []
+        out = [{"task_id": it.get("task_id"), "video_code": it.get("video_code"), "title": it.get("title")} for it in items[:20]]
+        return {"ok": True, "items": out}
+    except Exception as e:
+        return {"ok": False, "message": f"查询失败：{e}"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -1342,6 +1639,66 @@ TOOLS = [
     {"name": "task_extract", "cn": "重新提取", "is_write": True,
      "desc": "触发作品元数据提取（后台）",
      "args": {"task_id": "作品 ID"}, "handler": _task_extract},
+    {"name": "task_note", "cn": "作品备注", "is_write": True,
+     "desc": "给作品添加/更新备注", "args": {"task_id": "作品 ID", "note": "备注内容"},
+     "handler": _task_note},
+    {"name": "task_favorite", "cn": "收藏作品", "is_write": True,
+     "desc": "收藏/取消收藏作品（与收藏夹不同）",
+     "args": {"task_id": "作品 ID", "favorite": "true/false"}, "handler": _task_favorite},
+    {"name": "favorites_list", "cn": "收藏列表", "is_write": False,
+     "desc": "查看已收藏作品", "args": {}, "handler": _favorites_list},
+    {"name": "collection_delete", "cn": "删除收藏夹", "is_write": True,
+     "desc": "删除收藏夹", "args": {"collection_id": "收藏夹 ID"}, "handler": _collection_delete},
+    {"name": "collection_remove", "cn": "移出收藏夹", "is_write": True,
+     "desc": "把作品移出收藏夹",
+     "args": {"collection_id": "收藏夹 ID", "task_id": "作品 ID"}, "handler": _collection_remove},
+    {"name": "collection_tasks", "cn": "收藏夹内容", "is_write": False,
+     "desc": "查看收藏夹内的作品", "args": {"collection_id": "收藏夹 ID"}, "handler": _collection_tasks},
+    {"name": "actor_refresh_profile", "cn": "刷新演员资料", "is_write": True,
+     "desc": "后台刷新演员资料", "args": {"actor_id": "演员 ID"}, "handler": _actor_refresh_profile},
+    {"name": "subscription_update", "cn": "更新订阅", "is_write": True,
+     "desc": "更新订阅（auto_add/启用/间隔/名称）",
+     "args": {"subscription_id": "订阅 ID", "auto_add": "可选", "enabled": "可选",
+              "check_interval_hours": "可选", "name": "可选"},
+     "handler": _subscription_update},
+    {"name": "download_stats", "cn": "下载统计", "is_write": False,
+     "desc": "下载完成率统计", "args": {}, "handler": _download_stats},
+    {"name": "drive115_status", "cn": "115 状态", "is_write": False,
+     "desc": "115 配额与离线任务状态", "args": {}, "handler": _drive115_status},
+    {"name": "media_check", "cn": "媒体库检查", "is_write": False,
+     "desc": "检查作品是否在媒体服务器（Emby）",
+     "args": {"video_code": "番号"}, "handler": _media_check},
+    {"name": "media_sync", "cn": "媒体库同步", "is_write": True,
+     "desc": "触发媒体服务器同步（后台）",
+     "args": {"force": "全量同步（可选）"}, "handler": _media_sync},
+    {"name": "organize_config", "cn": "整理配置", "is_write": False,
+     "desc": "查看文件整理配置", "args": {}, "handler": _organize_config},
+    {"name": "organize_run", "cn": "运行整理", "is_write": True,
+     "desc": "手动触发全量整理（后台）", "args": {}, "handler": _organize_run},
+    {"name": "organize_undo", "cn": "解除整理", "is_write": True,
+     "desc": "解除指定下载的整理", "args": {"dl_id": "下载 ID"}, "handler": _organize_undo},
+    {"name": "system_status", "cn": "系统状态", "is_write": False,
+     "desc": "系统状态全景（调度/队列/活跃下载/最近错误/备份）",
+     "args": {}, "handler": _system_status},
+    {"name": "backup_now", "cn": "立即备份", "is_write": True,
+     "desc": "导出全部设置为备份", "args": {}, "handler": _backup_now},
+    {"name": "dnd_set", "cn": "免打扰设置", "is_write": True,
+     "desc": "设置通知免打扰时段（HH:MM，空值清除）",
+     "args": {"start": "开始（可选）", "end": "结束（可选）"}, "handler": _dnd_set},
+    {"name": "notify_test", "cn": "测试通知", "is_write": True,
+     "desc": "发送测试通知验证通道", "args": {}, "handler": _notify_test},
+    {"name": "list_source_list", "cn": "列表源列表", "is_write": False,
+     "desc": "查看列表源", "args": {}, "handler": _list_source_list},
+    {"name": "list_source_add", "cn": "添加列表源", "is_write": True,
+     "desc": "添加列表源", "args": {"list_code": "代码", "list_path": "路径",
+              "list_params": "参数（可选）", "max_pages": "最大页数（可选）"},
+     "handler": _list_source_add},
+    {"name": "list_source_delete", "cn": "删除列表源", "is_write": True,
+     "desc": "删除列表源", "args": {"source_id": "列表源 ID"}, "handler": _list_source_delete},
+    {"name": "yearly_report", "cn": "年度报告", "is_write": False,
+     "desc": "查看年度回顾报告", "args": {"year": "年份（可选）"}, "handler": _yearly_report},
+    {"name": "wishlist_gaps", "cn": "想看缺口", "is_write": False,
+     "desc": "想看但无磁力/不在库的作品", "args": {}, "handler": _wishlist_gaps},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -1555,6 +1912,25 @@ def _result_to_text(tool_name: str, result: dict) -> str:
         return f"补齐进度：{st}"
     if tool_name == "crawl_status":
         return f"爬虫{'运行中' if result.get('running') else '空闲'}" + (f"（{result.get('owner')}）" if result.get('owner') else "")
+    if tool_name in ("favorites_list", "collection_tasks", "wishlist_gaps"):
+        items = result.get("items", [])
+        if not items:
+            return "暂无数据"
+        label = {"favorites_list": "收藏", "collection_tasks": f"收藏夹「{result.get('collection', '')}」",
+                 "wishlist_gaps": "想看缺口"}[tool_name]
+        return f"{label}：\n" + "\n".join(
+            f"- {it['video_code']}{' ' + str(it['rating']) if it.get('rating') else ''} {it.get('title') or ''}" for it in items[:15])
+    if tool_name == "list_source_list":
+        items = result.get("items", [])
+        if not items:
+            return "暂无列表源"
+        return "\n".join(f"- #{r['id']} {r['list_code']}（{r['list_path']}）" for r in items)
+    if tool_name == "download_stats":
+        st = result.get("stats", {})
+        return f"下载统计：共 {st.get('total', 0)} 个，完成 {st.get('completed', 0)} 个，成功率 {st.get('success_rate', 0) * 100:.0f}%"
+    if tool_name == "system_status":
+        st = result.get("status", {})
+        return f"系统状态：{st}"
     if tool_name == "tag_translate":
         mp = result.get("mapping") or {}
         if not mp:

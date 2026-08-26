@@ -128,6 +128,7 @@ def app_logs(_user: CurrentAdmin, limit: int = 100, filter: str = "", file: str 
 def system_status(db: DbSession, _user: CurrentUser):
     """N14: 系统状态全景——调度任务/队列/活跃下载/最近错误/备份。"""
     from datetime import datetime, timedelta
+    from sqlalchemy import select
     from models import CrawlLog, Download, NotifyLog, Task
 
     jobs = []
