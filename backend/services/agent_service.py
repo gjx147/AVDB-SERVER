@@ -847,6 +847,175 @@ def _drive115_offline_add(db, args):
         return {"ok": False, "message": f"115 添加失败：{e}"}
 
 
+def _actor_detail(db, args):
+    """演员档案详情。"""
+    from models import Actor, actor_movies
+    actor_id = int(args.get("actor_id") or 0)
+    a = db.get(Actor, actor_id)
+    if not a:
+        return {"ok": False, "message": "演员不存在"}
+    works = db.execute(select(actor_movies.c.task_id).where(actor_movies.c.actor_id == actor_id)).scalars().all()
+    return {"ok": True, "actor": {
+        "id": a.id, "name": a.name, "intro": getattr(a, "intro", None),
+        "birth_date": getattr(a, "birth_date", None), "height": getattr(a, "height", None),
+        "cup": getattr(a, "cup", None), "measurements": getattr(a, "measurements", None),
+        "gender": getattr(a, "gender", None), "works_count": len(works),
+        "is_followed": getattr(a, "is_followed", None),
+    }}
+
+
+def _actor_blacklist(db, args):
+    """切换演员黑名单。"""
+    from models import Actor
+    actor_id = int(args.get("actor_id") or 0)
+    a = db.get(Actor, actor_id)
+    if not a:
+        return {"ok": False, "message": "演员不存在"}
+    current = bool(getattr(a, "blacklisted", False))
+    a.blacklisted = not current
+    db.commit()
+    return {"ok": True, "message": f"已{'拉黑' if not current else '取消拉黑'}演员 {a.name}"}
+
+
+def _filter_rule_list(db, args):
+    """内容过滤规则列表。"""
+    from models import ContentFilterRule
+    rows = db.execute(select(ContentFilterRule).order_by(ContentFilterRule.id)).scalars().all()
+    items = [{"id": r.id, "name": r.name, "keyword": r.keyword, "action": r.action,
+              "enabled": bool(r.enabled)} for r in rows]
+    return {"ok": True, "items": items}
+
+
+def _filter_rule_create(db, args):
+    """创建内容过滤规则。"""
+    from models import ContentFilterRule
+    name = str(args.get("name") or "").strip()[:100]
+    keyword = str(args.get("keyword") or "").strip()[:200]
+    if not name or not keyword:
+        return {"ok": False, "message": "需要名称与关键词"}
+    action = str(args.get("action") or "hide")[:20]
+    if action not in ("hide", "block", "mark", "exclude"):
+        action = "hide"
+    r = ContentFilterRule(
+        name=name, keyword=keyword,
+        is_regex=bool(args.get("is_regex")), case_sensitive=bool(args.get("case_sensitive")),
+        action=action,
+        fields_json=str(args.get("fields_json") or "")[:500] or None,
+        message=str(args.get("message") or "")[:200] or None,
+        enabled=True,
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return {"ok": True, "message": f"过滤规则「{r.name}」已创建", "id": r.id}
+
+
+def _filter_rule_delete(db, args):
+    """删除内容过滤规则。"""
+    from models import ContentFilterRule
+    rid = int(args.get("rule_id") or 0)
+    r = db.get(ContentFilterRule, rid)
+    if not r:
+        return {"ok": False, "message": "规则不存在"}
+    db.delete(r)
+    db.commit()
+    return {"ok": True, "message": f"过滤规则「{r.name}」已删除"}
+
+
+def _task_dedupe(db, args):
+    """去重：dry_run 默认预览，执行需显式 dry_run=false（确认制）。"""
+    from routers.tasks import dedupe_tasks
+    dry_run = bool(args.get("dry_run", True))
+    try:
+        r = dedupe_tasks(db, "anonymous", dry_run=dry_run)
+        if dry_run:
+            return {"ok": True, "dry_run": True, "message": f"发现 {r.get('groups', 0)} 组重复，可删除 {r.get('to_delete', 0)} 个任务（确认后执行）"}
+        return {"ok": True, "message": f"已去重：删除 {r.get('deleted', 0)} 个重复任务"}
+    except Exception as e:
+        return {"ok": False, "message": f"去重失败：{e}"}
+
+
+def _crawl_status(db, args):
+    """爬虫运行状态。"""
+    try:
+        from services.scraper_lock import is_running, get_info
+        info = get_info() or {}
+        return {"ok": True, "running": is_running(), "owner": info.get("name") or info.get("cmd") or ""}
+    except Exception:
+        return {"ok": False, "message": "无法获取爬虫状态"}
+
+
+def _crawl_control(db, args):
+    """爬虫控制：pause/resume/stop。"""
+    action = str(args.get("action") or "")
+    if action not in ("pause", "resume", "stop"):
+        return {"ok": False, "message": "action 需为 pause/resume/stop"}
+    try:
+        if action == "stop" or action == "pause":
+            from routers.crawl import stop_crawl
+            r = stop_crawl("anonymous")
+            return {"ok": True, "message": f"爬虫已停止：{r.get('message', '')}"}
+        from routers.crawl import resume_crawl
+        r = resume_crawl("anonymous")
+        return {"ok": True, "message": f"爬虫已恢复：{r.get('message', '')}"}
+    except Exception as e:
+        return {"ok": False, "message": f"控制失败：{e}"}
+
+
+def _fill_works_status(db, args):
+    """补齐作品进度。"""
+    from services import actor_works_batch
+    try:
+        st = actor_works_batch.status()
+        return {"ok": True, "status": st}
+    except Exception as e:
+        return {"ok": False, "message": f"查询失败：{e}"}
+
+
+def _recommendations(db, args):
+    """个性化推荐。"""
+    from routers.insights import recommendations
+    limit = min(int(args.get("limit") or 5), 10)
+    try:
+        r = recommendations(db, "anonymous", limit=limit)
+        items = r.get("items") or []
+        out = [{"task_id": it.get("task_id"), "video_code": it.get("video_code"),
+                "title": it.get("title"), "rating": it.get("rating")} for it in items]
+        return {"ok": True, "items": out}
+    except Exception as e:
+        return {"ok": False, "message": f"推荐失败：{e}"}
+
+
+def _similar_works(db, args):
+    """相似作品推荐。"""
+    from routers.v2 import similar_tasks
+    tid = int(args.get("task_id") or 0)
+    limit = min(int(args.get("limit") or 5), 10)
+    try:
+        r = similar_tasks(tid, db, "anonymous", limit=limit)
+        items = r.get("items") or []
+        out = [{"task_id": it.get("task_id"), "video_code": it.get("video_code"),
+                "title": it.get("title"), "rating": it.get("rating")} for it in items]
+        return {"ok": True, "items": out}
+    except Exception as e:
+        return {"ok": False, "message": f"相似推荐失败：{e}"}
+
+
+def _task_extract(db, args):
+    """触发任务元数据提取（后台）。"""
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    try:
+        from routers.tasks import extract_single
+        r = extract_single(tid, db, "anonymous")
+        msg = r.get("message") if isinstance(r, dict) else "已触发提取"
+        return {"ok": True, "message": f"{t.video_code} 提取已触发：{msg}"}
+    except Exception as e:
+        return {"ok": False, "message": f"提取失败：{e}"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -982,6 +1151,15 @@ async def _preview_write(tool_name: str, args: dict, db) -> str:
         if tool_name == "push_download":
             t = db.get(Task, int(args.get("task_id") or 0))
             return f"将推送 {t.video_code if t else args.get('task_id')} 给下载器；确认后执行"
+        if tool_name == "task_dedupe":
+            dry = bool(args.get("dry_run", True))
+            return "去重将执行（dry_run=false，删除重复任务）；建议先预览再确认" if not dry else "去重预览（dry_run=true）"
+        if tool_name == "actor_blacklist":
+            from models import Actor
+            a = db.get(Actor, int(args.get("actor_id") or 0))
+            return f"将{'拉黑' if a and not getattr(a, 'blacklisted', False) else '取消拉黑'}演员 {a.name if a else args.get('actor_id')}；确认后执行"
+        if tool_name == "crawl_control":
+            return f"将{ {'pause': '暂停', 'resume': '恢复', 'stop': '停止'}.get(str(args.get('action')), '控制') }爬虫；确认后执行"
         if tool_name == "tag_translate_apply":
             mp = args.get("mapping") or {}
             if isinstance(mp, dict) and mp:
@@ -1132,6 +1310,38 @@ TOOLS = [
      "desc": "把磁力添加到 115 离线下载",
      "args": {"magnet": "磁力链接", "task_id": "作品 ID（可选，二选一）"},
      "handler": _drive115_offline_add},
+    {"name": "actor_detail", "cn": "演员详情", "is_write": False,
+     "desc": "查看演员档案（简介/生日/身高/三围/作品数）",
+     "args": {"actor_id": "演员 ID"}, "handler": _actor_detail},
+    {"name": "actor_blacklist", "cn": "拉黑演员", "is_write": True,
+     "desc": "切换演员黑名单状态",
+     "args": {"actor_id": "演员 ID"}, "handler": _actor_blacklist},
+    {"name": "filter_rule_list", "cn": "过滤规则列表", "is_write": False,
+     "desc": "查看内容过滤规则（与自动规则不同模块）", "args": {}, "handler": _filter_rule_list},
+    {"name": "filter_rule_create", "cn": "创建过滤规则", "is_write": True,
+     "desc": "创建内容过滤规则（按关键词过滤标题/演员/标签）",
+     "args": {"name": "规则名", "keyword": "关键词", "action": "hide|block|mark|exclude",
+              "fields_json": "字段 JSON（可选）", "is_regex": "是否正则（可选）"},
+     "handler": _filter_rule_create},
+    {"name": "filter_rule_delete", "cn": "删除过滤规则", "is_write": True,
+     "desc": "删除内容过滤规则", "args": {"rule_id": "规则 ID"}, "handler": _filter_rule_delete},
+    {"name": "task_dedupe", "cn": "批量去重", "is_write": True,
+     "desc": "番号归一化去重（先预览再确认执行）",
+     "args": {"dry_run": "默认 true 预览；false 执行"}, "handler": _task_dedupe},
+    {"name": "crawl_status", "cn": "爬虫状态", "is_write": False,
+     "desc": "查看爬虫运行状态", "args": {}, "handler": _crawl_status},
+    {"name": "crawl_control", "cn": "爬虫控制", "is_write": True,
+     "desc": "暂停/恢复/停止爬虫", "args": {"action": "pause|resume|stop"}, "handler": _crawl_control},
+    {"name": "fill_works_status", "cn": "补齐进度", "is_write": False,
+     "desc": "查看全部补齐作品任务进度", "args": {}, "handler": _fill_works_status},
+    {"name": "recommendations", "cn": "推荐作品", "is_write": False,
+     "desc": "按口味偏好推荐作品", "args": {"limit": "数量（可选）"}, "handler": _recommendations},
+    {"name": "similar_works", "cn": "相似作品", "is_write": False,
+     "desc": "找与指定作品相似的作品",
+     "args": {"task_id": "作品 ID", "limit": "数量（可选）"}, "handler": _similar_works},
+    {"name": "task_extract", "cn": "重新提取", "is_write": True,
+     "desc": "触发作品元数据提取（后台）",
+     "args": {"task_id": "作品 ID"}, "handler": _task_extract},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -1322,6 +1532,29 @@ def _result_to_text(tool_name: str, result: dict) -> str:
             return result.get("message") or "暂无榜单数据"
         return f"榜单 {result.get('rank_type')} {result.get('date')}：\n" + "\n".join(
             f"- {r['rank']}. {r['video_code']}{' ' + str(r['rating']) if r.get('rating') else ''} {r.get('title') or ''}" for r in items[:20])
+    if tool_name == "actor_detail":
+        a = result["actor"]
+        return (f"演员：{a['name']}（ID {a['id']}）\n"
+                f"生日：{a.get('birth_date') or '-'} | 身高：{a.get('height') or '-'} | 罩杯：{a.get('cup') or '-'} | 三围：{a.get('measurements') or '-'}\n"
+                f"作品数：{a.get('works_count')} | 关注：{'是' if a.get('is_followed') else '否'}\n"
+                f"简介：{(a.get('intro') or '-')[:100]}")
+    if tool_name in ("filter_rule_list",):
+        items = result.get("items", [])
+        if not items:
+            return "暂无内容过滤规则"
+        return "\n".join(f"- #{r['id']} {r['name']}：{r['keyword']}（{r['action']}，{'启用' if r['enabled'] else '停用'}）" for r in items)
+    if tool_name in ("recommendations", "similar_works"):
+        items = result.get("items", [])
+        if not items:
+            return "暂无推荐"
+        label = "推荐" if tool_name == "recommendations" else "相似作品"
+        return f"{label}：\n" + "\n".join(
+            f"- {it['video_code']}{' ' + str(it['rating']) if it.get('rating') else ''} {it.get('title') or ''}" for it in items[:8])
+    if tool_name == "fill_works_status":
+        st = result.get("status", {})
+        return f"补齐进度：{st}"
+    if tool_name == "crawl_status":
+        return f"爬虫{'运行中' if result.get('running') else '空闲'}" + (f"（{result.get('owner')}）" if result.get('owner') else "")
     if tool_name == "tag_translate":
         mp = result.get("mapping") or {}
         if not mp:
