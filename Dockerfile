@@ -32,6 +32,9 @@ RUN if [ "$USE_CN_MIRROR" = "true" ] && [ -f /etc/apt/sources.list.d/debian.sour
     fi
 
 # 安装 Playwright Chromium 运行时依赖 + curl(healthcheck) + 中日韩字体
+# 换国内 apt 源（deb.debian.org 直连超时，构建环境适配；不影响运行时）
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl \
         libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
