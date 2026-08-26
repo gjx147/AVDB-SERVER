@@ -100,6 +100,10 @@ async def start_scheduler() -> None:
         from services.ai_reports import daily_recommend_job
         add_cron_job(daily_recommend_job, "daily-recommend", hour=9, minute=0)
 
+        # 数据保留清理：每周一 9:30（LLMCache 30 天/用量 90 天/会话 90 天/审计 180 天）
+        from services.cleanup import cleanup_job
+        add_cron_job(cleanup_job, "data-cleanup-weekly", day_of_week="mon", hour=9, minute=30)
+
         # F4: 每周一 9:00 推送本周新作 Top10（需在通知设置启用 weekly_report 事件）
         from services.weekly_report import run_weekly_report
         add_cron_job(run_weekly_report, "weekly-report", day_of_week="mon", hour=9, minute=0)

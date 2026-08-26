@@ -194,10 +194,15 @@ def _get_client(base_url: str, api_key: str):
     return c
 
 
+_CHAT_LOCKS_MAX = 500
+
+
 async def _acquire_chat_lock(prompt_hash: str) -> asyncio.Lock:
     with _chat_locks_guard:
         lock = _chat_locks.get(prompt_hash)
         if lock is None:
+            if len(_chat_locks) > _CHAT_LOCKS_MAX:
+                _chat_locks.clear()  # 防内存膨胀（锁重建代价可忽略）
             lock = asyncio.Lock()
             _chat_locks[prompt_hash] = lock
         return lock

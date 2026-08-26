@@ -13,6 +13,32 @@ import time
 from sqlalchemy import select
 
 logger = logging.getLogger("avdb.agent_service")
+
+# 后台任务线程池（统一受控，替代裸 threading.Thread；单飞去重防重复触发）
+from concurrent.futures import ThreadPoolExecutor
+_bg_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-bg")
+_bg_running: set[str] = set()
+_bg_guard = __import__("threading").Lock()
+
+
+def _bg_submit(key: str, fn) -> bool:
+    """提交后台任务；同 key 在跑则跳过（单飞）。返回是否实际提交。"""
+    with _bg_guard:
+        if key in _bg_running:
+            return False
+        _bg_running.add(key)
+
+    def _wrapper():
+        try:
+            fn()
+        except Exception as e:
+            logger.warning("后台任务 %s 失败: %s", key, e)
+        finally:
+            with _bg_guard:
+                _bg_running.discard(key)
+
+    _bg_executor.submit(_wrapper)
+    return True
 from models import Task, Subscription, Setting, Rule
 
 # ---------- 确认 token（无状态 HMAC 签名，10 分钟过期，多 worker 兼容） ----------
@@ -581,13 +607,9 @@ def _actor_crawl_works(db, args):
     try:
         from services.new_works_monitor import check_actor_new_works
         import asyncio as _aio
-        import threading
         def _run():
-            try:
-                _aio.run(check_actor_new_works(actor_id, auto_add=False))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(check_actor_new_works(actor_id, auto_add=False))
+        _bg_submit(f"crawl_works:{actor_id}", _run)
         return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（后台进行）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -702,14 +724,10 @@ def _push_download(db, args):
         return {"ok": False, "message": f"{t.video_code} 没有磁力链接，可先对话「搜索磁力」"}
     try:
         import asyncio as _aio
-        import threading
         from services.download_strategy import push_to_downloader
         def _run():
-            try:
-                _aio.run(push_to_downloader(t.id, magnet))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(push_to_downloader(t.id, magnet))
+        _bg_submit(f"push:{t.id}", _run)
         return {"ok": True, "message": f"已推送 {t.video_code} 下载（后台）"}
     except Exception as e:
         return {"ok": False, "message": f"推送失败：{e}"}
@@ -724,16 +742,12 @@ def _batch_push(db, args):
     rows = db.execute(select(Task).where(Task.id.in_(ids[:50]))).scalars().all()
     ok, skip = 0, 0
     import asyncio as _aio
-    import threading
     from services.download_strategy import push_to_downloader
     for t in rows:
         if t.best_magnet:
             def _run(tid=t.id, mag=t.best_magnet):
-                try:
-                    _aio.run(push_to_downloader(tid, mag))
-                except Exception:
-                    pass
-            threading.Thread(target=_run, daemon=True).start()
+                _aio.run(push_to_downloader(tid, mag))
+            _bg_submit(f"push:{t.id}", _run)
             ok += 1
         else:
             skip += 1
@@ -777,14 +791,10 @@ def _new_release_check_all(db, args):
     """全量检查所有订阅演员的新作（后台）。"""
     try:
         import asyncio as _aio
-        import threading
         from routers.new_releases import check_all_now
         def _run():
-            try:
-                _aio.run(check_all_now(db, "anonymous"))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(check_all_now(db, "anonymous"))
+        _bg_submit("check_all", _run)
         return {"ok": True, "message": "已开始全量检查新作（后台进行）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1116,13 +1126,9 @@ def _actor_refresh_profile(db, args):
     try:
         from services.actor_profile import refresh_profile
         import asyncio as _aio
-        import threading
         def _run():
-            try:
-                _aio.run(refresh_profile(aid))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(refresh_profile(aid))
+        _bg_submit(f"refresh_profile:{aid}", _run)
         return {"ok": True, "message": f"已开始刷新 {a.name} 的资料（后台）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1188,14 +1194,10 @@ def _media_sync(db, args):
     try:
         from routers.media_server import sync
         import asyncio as _aio
-        import threading
         force = bool(args.get("force"))
         def _run():
-            try:
-                _aio.run(sync("anonymous", limit=200, force=force))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(sync("anonymous", limit=200, force=force))
+        _bg_submit("media_sync", _run)
         return {"ok": True, "message": "媒体服务器同步已开始（后台）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1214,13 +1216,9 @@ def _organize_run(db, args):
     try:
         from routers.organize import run_all
         import asyncio as _aio
-        import threading
         def _run():
-            try:
-                _aio.run(run_all("anonymous"))
-            except Exception:
-                pass
-        threading.Thread(target=_run, daemon=True).start()
+            _aio.run(run_all("anonymous"))
+        _bg_submit("organize_run", _run)
         return {"ok": True, "message": "整理任务已开始（后台）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}

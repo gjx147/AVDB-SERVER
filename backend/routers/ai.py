@@ -25,6 +25,8 @@ def _check_rate_limit(user: str) -> None:
     if len(win) >= _RATE_LIMIT_PER_MIN:
         raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试（每分钟限 " + str(_RATE_LIMIT_PER_MIN) + " 次）")
     win.append(now)
+    if len(_rate_windows) > 1000:
+        _rate_windows.clear()  # 防内存膨胀（限流窗口重置）
 
 
 class RateLimitedUser:
