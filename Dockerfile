@@ -58,7 +58,7 @@ RUN pip install --upgrade pip \
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 RUN PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
-    python -m playwright install chromium; exit 0
+    python -m playwright install chromium
 
 # 复制应用代码
 COPY backend/ ./backend/

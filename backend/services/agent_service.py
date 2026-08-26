@@ -38,8 +38,13 @@ def _issue_token(tool: str, args: dict, user: str = "ai") -> str:
     return f"{body}.{sig}"
 
 
+# E: token 已消费集合（防重复确认；上限 10000 条防内存膨胀）
+_consumed_tokens: set[str] = set()
+_CONSUMED_MAX = 10000
+
+
 def _consume_token(token: str, user: str | None = None) -> dict | None:
-    """验签 + 过期检查 + （可选）签发人绑定校验。"""
+    """验签 + 过期检查 + 签发人绑定 + 一次性消费（幂等）。"""
     try:
         body, sig = token.split(".", 1)
     except Exception:
@@ -55,6 +60,11 @@ def _consume_token(token: str, user: str | None = None) -> dict | None:
         return None
     if user and user != "anonymous" and payload.get("user") != user:
         return None  # token 绑定签发用户
+    if token in _consumed_tokens:
+        return None  # 已消费：重复确认拒绝
+    _consumed_tokens.add(token)
+    if len(_consumed_tokens) > _CONSUMED_MAX:
+        _consumed_tokens.clear()  # 简单防膨胀（TTL 内大量消费场景极少）
     return {"tool": payload.get("tool"), "args": payload.get("args") or {}}
 
 
@@ -226,16 +236,17 @@ def _search(db, args, query=None, engine=""):
             pass
     for t in (query.get("tags") or [])[:5]:
         if t:
-            esc = str(t).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            stmt = stmt.where(Task.tags.like(f"%{esc}%", escape="\\"))
-            # 中英兼容：同时匹配别名（如「巨乳」匹配 Big Tits）
+            # 中英兼容：主标签+别名合并为 OR 条件组（任一命中即可）
             try:
+                from sqlalchemy import or_
                 from services.tag_translate import cn_aliases
-                for alias in cn_aliases(str(t))[1:]:
-                    esc2 = str(alias).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                    stmt = stmt.or_(Task.tags.like(f"%{esc2}%", escape="\\"))
-            except Exception:
-                pass
+                conds = [Task.tags.like(f"%{str(t).replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')}%", escape=chr(92))]
+                for a in cn_aliases(str(t))[1:]:
+                    ea = str(a).replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')
+                    conds.append(Task.tags.like(f"%{ea}%", escape=chr(92)))
+                stmt = stmt.where(or_(*conds) if len(conds) > 1 else conds[0])
+            except Exception as e:
+                logger.warning("标签别名匹配失败: %s", e)
     for a in (query.get("actors") or [])[:5]:
         if a:
             esc = str(a).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -352,6 +363,8 @@ def _subscription_create(db, args):
         return {"ok": False, "message": "ranking 类型需指定 rank_type"}
     if payload.sub_type == "actor" and not payload.actor_id:
         return {"ok": False, "message": "actor 类型需指定 actor_id"}
+    if payload.filters_json and len(payload.filters_json) > 5000:
+        return {"ok": False, "message": "订阅条件过长"}
     sub = Subscription(**payload.model_dump())
     db.add(sub)
     db.commit()
@@ -360,7 +373,7 @@ def _subscription_create(db, args):
 
 
 def _subscription_delete(db, args):
-    sid = int(args.get("subscription_id") or 0)
+    sid = _int(args.get("subscription_id"))
     sub = db.get(Subscription, sid)
     if not sub:
         return {"ok": False, "message": "订阅不存在"}
@@ -371,7 +384,7 @@ def _subscription_delete(db, args):
 
 
 def _subscription_toggle(db, args):
-    sid = int(args.get("subscription_id") or 0)
+    sid = _int(args.get("subscription_id"))
     sub = db.get(Subscription, sid)
     if not sub:
         return {"ok": False, "message": "订阅不存在"}
@@ -391,7 +404,7 @@ def _rule_create(db, args):
 
 
 def _rule_delete(db, args):
-    rid = int(args.get("rule_id") or 0)
+    rid = _int(args.get("rule_id"))
     r = db.get(Rule, rid)
     if not r:
         return {"ok": False, "message": "规则不存在"}
@@ -401,7 +414,7 @@ def _rule_delete(db, args):
 
 
 def _set_view_status(db, args):
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -547,7 +560,7 @@ def _fill_works(db, args):
 def _actor_crawl_works(db, args):
     """爬取单个演员的全部作品（后台线程）。"""
     from models import Actor
-    actor_id = int(args.get("actor_id") or 0)
+    actor_id = _int(args.get("actor_id"))
     actor = db.get(Actor, actor_id)
     if not actor:
         return {"ok": False, "message": "演员不存在"}
@@ -595,8 +608,8 @@ def _collection_create(db, args):
 
 def _collection_add(db, args):
     from models import Collection, task_collections
-    cid = int(args.get("collection_id") or 0)
-    tid = int(args.get("task_id") or 0)
+    cid = _int(args.get("collection_id"))
+    tid = _int(args.get("task_id"))
     c = db.get(Collection, cid)
     if not c:
         return {"ok": False, "message": "收藏夹不存在"}
@@ -671,7 +684,7 @@ async def _magnet_search(db, args):
 def _push_download(db, args):
     """推送单任务下载。"""
     from models import Task
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -735,14 +748,14 @@ def _new_releases_list(db, args):
 
 def _new_release_add(db, args):
     from routers.new_releases import add_to_library_api
-    nid = int(args.get("new_release_id") or 0)
+    nid = _int(args.get("new_release_id"))
     r = add_to_library_api(nid, db, "anonymous")
     return {"ok": True, "message": f"新作已加入库：{r.get('message', '')}"}
 
 
 def _new_release_read(db, args):
     from models import NewRelease
-    nid = int(args.get("new_release_id") or 0)
+    nid = _int(args.get("new_release_id"))
     r = db.get(NewRelease, nid)
     if not r:
         return {"ok": False, "message": "新作记录不存在"}
@@ -812,7 +825,7 @@ def _ranking_add_tasks(db, args):
 
 
 def _task_delete(db, args):
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -850,7 +863,7 @@ def _drive115_offline_add(db, args):
 def _actor_detail(db, args):
     """演员档案详情。"""
     from models import Actor, actor_movies
-    actor_id = int(args.get("actor_id") or 0)
+    actor_id = _int(args.get("actor_id"))
     a = db.get(Actor, actor_id)
     if not a:
         return {"ok": False, "message": "演员不存在"}
@@ -867,7 +880,7 @@ def _actor_detail(db, args):
 def _actor_blacklist(db, args):
     """切换演员黑名单。"""
     from models import Actor
-    actor_id = int(args.get("actor_id") or 0)
+    actor_id = _int(args.get("actor_id"))
     a = db.get(Actor, actor_id)
     if not a:
         return {"ok": False, "message": "演员不存在"}
@@ -913,7 +926,7 @@ def _filter_rule_create(db, args):
 def _filter_rule_delete(db, args):
     """删除内容过滤规则。"""
     from models import ContentFilterRule
-    rid = int(args.get("rule_id") or 0)
+    rid = _int(args.get("rule_id"))
     r = db.get(ContentFilterRule, rid)
     if not r:
         return {"ok": False, "message": "规则不存在"}
@@ -989,7 +1002,7 @@ def _recommendations(db, args):
 def _similar_works(db, args):
     """相似作品推荐。"""
     from routers.v2 import similar_tasks
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     limit = min(int(args.get("limit") or 5), 10)
     try:
         r = similar_tasks(tid, db, "anonymous", limit=limit)
@@ -1003,7 +1016,7 @@ def _similar_works(db, args):
 
 def _task_extract(db, args):
     """触发任务元数据提取（后台）。"""
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -1017,7 +1030,7 @@ def _task_extract(db, args):
 
 
 def _task_note(db, args):
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -1027,7 +1040,7 @@ def _task_note(db, args):
 
 
 def _task_favorite(db, args):
-    tid = int(args.get("task_id") or 0)
+    tid = _int(args.get("task_id"))
     t = db.get(Task, tid)
     if not t:
         return {"ok": False, "message": "作品不存在"}
@@ -1048,7 +1061,7 @@ def _favorites_list(db, args):
 
 def _collection_delete(db, args):
     from models import Collection
-    cid = int(args.get("collection_id") or 0)
+    cid = _int(args.get("collection_id"))
     c = db.get(Collection, cid)
     if not c:
         return {"ok": False, "message": "收藏夹不存在"}
@@ -1059,8 +1072,8 @@ def _collection_delete(db, args):
 
 def _collection_remove(db, args):
     from models import Collection, task_collections
-    cid = int(args.get("collection_id") or 0)
-    tid = int(args.get("task_id") or 0)
+    cid = _int(args.get("collection_id"))
+    tid = _int(args.get("task_id"))
     c = db.get(Collection, cid)
     if not c:
         return {"ok": False, "message": "收藏夹不存在"}
@@ -1072,7 +1085,7 @@ def _collection_remove(db, args):
 
 def _collection_tasks(db, args):
     from models import Collection, task_collections
-    cid = int(args.get("collection_id") or 0)
+    cid = _int(args.get("collection_id"))
     c = db.get(Collection, cid)
     if not c:
         return {"ok": False, "message": "收藏夹不存在"}
@@ -1087,7 +1100,7 @@ def _collection_tasks(db, args):
 def _actor_refresh_profile(db, args):
     """后台刷新演员资料。"""
     from models import Actor
-    aid = int(args.get("actor_id") or 0)
+    aid = _int(args.get("actor_id"))
     a = db.get(Actor, aid)
     if not a:
         return {"ok": False, "message": "演员不存在"}
@@ -1107,7 +1120,7 @@ def _actor_refresh_profile(db, args):
 
 
 def _subscription_update(db, args):
-    sid = int(args.get("subscription_id") or 0)
+    sid = _int(args.get("subscription_id"))
     sub = db.get(Subscription, sid)
     if not sub:
         return {"ok": False, "message": "订阅不存在"}
@@ -1283,7 +1296,7 @@ def _list_source_add(db, args):
 
 def _list_source_delete(db, args):
     from models import ListSource
-    lid = int(args.get("source_id") or 0)
+    lid = _int(args.get("source_id"))
     ls = db.get(ListSource, lid)
     if not ls:
         return {"ok": False, "message": "列表源不存在"}
@@ -1407,7 +1420,8 @@ def _search_rows(db, query: dict) -> list:
         stmt = stmt.where(Task.video_code == str(vc).upper())
     tk = query.get("title_keyword")
     if tk:
-        stmt = stmt.where(Task.title.like(f"%{tk}%"))
+        esc = str(tk).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(Task.title.like(f"%{esc}%", escape="\\"))
     rm = query.get("rating_min")
     if rm is not None:
         try:
@@ -1416,16 +1430,20 @@ def _search_rows(db, query: dict) -> list:
             pass
     for t in (query.get("tags") or [])[:5]:
         if t:
-            stmt = stmt.where(Task.tags.like(f"%{t}%"))
             try:
+                from sqlalchemy import or_
                 from services.tag_translate import cn_aliases
-                for alias in cn_aliases(str(t))[1:]:
-                    stmt = stmt.or_(Task.tags.like(f"%{alias}%"))
-            except Exception:
-                pass
+                conds = [Task.tags.like(f"%{str(t).replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')}%", escape=chr(92))]
+                for a in cn_aliases(str(t))[1:]:
+                    ea = str(a).replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')
+                    conds.append(Task.tags.like(f"%{ea}%", escape=chr(92)))
+                stmt = stmt.where(or_(*conds) if len(conds) > 1 else conds[0])
+            except Exception as e:
+                logger.warning("标签别名匹配失败: %s", e)
     for a in (query.get("actors") or [])[:5]:
         if a:
-            stmt = stmt.where(Task.actors.like(f"%{a}%"))
+            esc_a = str(a).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            stmt = stmt.where(Task.actors.like(f"%{esc_a}%", escape="\\"))
     vs = query.get("view_status")
     if vs in ("viewed", "want"):
         stmt = stmt.where(Task.view_status == vs)
@@ -1507,8 +1525,8 @@ TOOLS = [
      "desc": "解读演员动态（活跃/休止/趋势）", "args": {"actor_id": "演员 ID"}, "handler": _actor_dynamics},
     # ---- 写工具 ----
     {"name": "subscription_create", "cn": "创建订阅", "is_write": True,
-     "desc": "创建订阅（类型：actor=演员新作 / ranking=排行榜 / tag=标签筛选 / keyword=关键词）",
-     "args": {"sub_type": "actor|ranking|tag|keyword", "name": "订阅名称",
+     "desc": "创建订阅（类型：actor=演员新作 / ranking=排行榜 / composite=综合条件）",
+     "args": {"sub_type": "actor|ranking|composite", "name": "订阅名称",
               "actor_id": "actor 类型必填", "rank_type": "ranking 类型必填",
               "tags": "tag 类型标签数组", "keyword": "keyword 类型关键词"},
      "handler": _subscription_create},
@@ -1707,6 +1725,14 @@ _TOOL_PROMPT = "\n".join(
 )
 
 
+def _int(v, default: int = 0) -> int:
+    """安全整型转换（LLM 输出参数不可信）。"""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 def _pick_tool(name: str):
     for t in TOOLS:
         if t["name"] == name:
@@ -1747,7 +1773,7 @@ def _undo_action(action_id: int, db, user) -> dict:
     if a.tool == "set_view_status":
         # 还原旧观看状态（记录旧值）
         old_status = args.get("_old_view_status")
-        tid = int(args.get("task_id") or 0)
+        tid = _int(args.get("task_id"))
         t = db.get(Task, tid)
         if not t:
             return {"ok": False, "message": "作品不存在，无法撤销"}
@@ -1756,7 +1782,7 @@ def _undo_action(action_id: int, db, user) -> dict:
         msg = f"已还原作品 #{tid} 观看状态"
     elif a.tool == "subscription_toggle":
         # 反转开关
-        sid = int(args.get("subscription_id") or 0)
+        sid = _int(args.get("subscription_id"))
         sub = db.get(Subscription, sid)
         if not sub:
             return {"ok": False, "message": "订阅已不存在（可能已删除）"}

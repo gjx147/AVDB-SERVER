@@ -28,6 +28,7 @@ jobs:
           DATABASE_URL: "sqlite:///:memory:"
           SECRET_KEY: "ci-test-secret"
           AUTH_DISABLED: "true"
+          DEBUG: "true"
 
   build:
     runs-on: ubuntu-latest

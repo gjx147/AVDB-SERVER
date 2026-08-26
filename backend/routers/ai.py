@@ -55,24 +55,28 @@ class WhisperRequest(BaseModel):
 
 @router.post("/translate")
 async def ai_translate(req: TranslateRequest, _user: CurrentUser):
+    RateLimitedUser(_user)
     result = await translate(req.text, model=req.model)
     return {"ok": bool(result), "translated": result}
 
 
 @router.post("/tags")
 async def ai_tags(req: TagsRequest, _user: CurrentUser):
+    RateLimitedUser(_user)
     tags = await generate_tags(req.text, model=req.model)
     return {"ok": bool(tags), "tags": tags}
 
 
 @router.post("/summary")
 async def ai_summary(req: SummaryRequest, _user: CurrentUser):
+    RateLimitedUser(_user)
     result = await summarize(req.text, model=req.model)
     return {"ok": bool(result), "summary": result}
 
 
 @router.post("/enrich/{task_id}")
 async def ai_enrich(task_id: int, _user: CurrentUser):
+    RateLimitedUser(_user)
     """对任务执行 AI 增强（翻译标题+生成标签，写回 ai_title_translated/ai_tags）。"""
     result = await enrich_task(task_id)
     if not result.get("ok"):
@@ -82,6 +86,7 @@ async def ai_enrich(task_id: int, _user: CurrentUser):
 
 @router.post("/whisper")
 async def ai_whisper(req: WhisperRequest, _user: CurrentUser):
+    RateLimitedUser(_user)
     """AI 耳语：按影片元数据生成一句挑逗推荐语（影库女主人人格，llm_cache 自动缓存）。
     AI 未配置/调用失败时 ok=false，前端静默回退静态文案池。"""
     line = await whisper_line(req.task_id, tone=req.tone, night=req.night)
@@ -97,6 +102,7 @@ async def ai_test(_user: CurrentUser):
 
 @router.post("/recommend-reason")
 async def recommend_reason(payload: dict, db: DbSession, _user: CurrentUser):
+    RateLimitedUser(_user)
     """为推荐作品生成一句话推荐理由（F8）。LLM 结果按 task_id 缓存，重复请求不花钱。"""
     from fastapi import HTTPException
     from models import Task
@@ -227,6 +233,7 @@ def agent_rollback(req: RollbackRequest, db: DbSession, _user: Annotated[str, De
 
 @router.get("/library-health-advice")
 async def library_health_advice_endpoint(_user: CurrentUser):
+    RateLimitedUser(_user)
     """A3: 库健康 AI 建议（健康分 + 指标 + 3 条行动建议）。"""
     from services.ai_reports import library_health_advice
     return await library_health_advice()
@@ -234,6 +241,7 @@ async def library_health_advice_endpoint(_user: CurrentUser):
 
 @router.get("/actor-dynamics/{actor_id}")
 async def actor_dynamics_endpoint(actor_id: int, _user: CurrentUser):
+    RateLimitedUser(_user)
     """S5: 演员动态 AI 解读。"""
     from services.ai_reports import actor_dynamics
     return await actor_dynamics(actor_id)
@@ -241,6 +249,7 @@ async def actor_dynamics_endpoint(actor_id: int, _user: CurrentUser):
 
 @router.get("/subscription-suggestions")
 async def sub_suggestions(_user: CurrentUser, limit: int = 5):
+    RateLimitedUser(_user)
     """S6: 值得订阅的演员推荐（未订阅 + 作品多评分高 + AI 理由）。"""
     from services.ai_p2 import subscription_suggestions
     return await subscription_suggestions(limit=min(limit, 10))
@@ -248,6 +257,7 @@ async def sub_suggestions(_user: CurrentUser, limit: int = 5):
 
 @router.get("/similar-actors/{actor_id}")
 async def similar_actors_endpoint(actor_id: int, _user: CurrentUser, limit: int = 5):
+    RateLimitedUser(_user)
     """S7: 相似演员（共演+标签相似 + AI 说明）。"""
     from services.ai_p2 import similar_actors
     return await similar_actors(actor_id, limit=min(limit, 10))
@@ -255,6 +265,7 @@ async def similar_actors_endpoint(actor_id: int, _user: CurrentUser, limit: int 
 
 @router.get("/quarterly-report")
 async def quarterly_report_endpoint(_user: CurrentUser, year: int | None = None, quarter: int | None = None):
+    RateLimitedUser(_user)
     """A6: 季度观看报告（对比上季度 + AI 点评）。"""
     from services.ai_p2 import quarterly_report
     return await quarterly_report(year, quarter)
@@ -262,6 +273,7 @@ async def quarterly_report_endpoint(_user: CurrentUser, year: int | None = None,
 
 @router.get("/share-summary/{token}")
 async def share_summary_endpoint(token: str, _user: CurrentUser):
+    RateLimitedUser(_user)
     """A8: 分享页 AI 摘要（收藏夹一句话介绍）。"""
     from services.ai_p2 import share_summary
     return await share_summary(token)
@@ -269,6 +281,7 @@ async def share_summary_endpoint(token: str, _user: CurrentUser):
 
 @router.post("/metadata-audit")
 def metadata_audit_endpoint(_user: CurrentUser):
+    RateLimitedUser(_user)
     """A9: 元数据异常检测（评分越界/番号格式/乱码/缺标题）。"""
     from services.ai_p2 import metadata_audit
     return metadata_audit()
@@ -276,6 +289,7 @@ def metadata_audit_endpoint(_user: CurrentUser):
 
 @router.post("/tag-normalize-preview")
 async def tag_normalize_preview_endpoint(_user: CurrentUser):
+    RateLimitedUser(_user)
     """A10: 同义标签预演（返回合并建议，不执行）。"""
     from services.ai_p2 import tag_normalize_preview
     return await tag_normalize_preview()
@@ -381,6 +395,7 @@ def session_messages_endpoint(session_id: int, db: DbSession, _user: CurrentUser
 
 @router.post("/agent/command")
 async def agent_command(req: CommandRequest, db: DbSession, _user: CurrentUser):
+    RateLimitedUser(_user)
     """斜杠命令：跳过 LLM 直达工具（/stats /inspect /sub /mark /combo 等）。"""
     from services.agent_service import run_command
     return await run_command(req.command, req.arg_text or "", db, _user)
@@ -441,6 +456,7 @@ def ai_usage(db: DbSession, _user: CurrentUser, days: int = 7):
 
 @router.post("/tag-translate-preview")
 async def tag_translate_preview_endpoint(_user: CurrentUser):
+    RateLimitedUser(_user)
     """标签翻译预演：英文标签 → 中文映射（不执行）。"""
     from services.tag_translate import tag_translate_preview
     return await tag_translate_preview()
