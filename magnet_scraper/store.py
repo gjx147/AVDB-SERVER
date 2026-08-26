@@ -152,6 +152,7 @@ class SqliteTaskStore:
 
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or get_db_path()
+        self._magnet_hashes_ready = False  # 去重索引表存量回填标志（惰性初始化）
         self._init_db()
 
     def _conn(self) -> sqlite3.Connection:
