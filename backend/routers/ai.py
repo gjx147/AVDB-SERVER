@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from deps import CurrentUser
+from deps import CurrentUser, DbSession, CurrentAdmin
 from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line, test_connection
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import update, func, or_, select
 from sqlalchemy.orm import Session
 
-from deps import CurrentUser, DbSession, Pagination
+from deps import CurrentUser, DbSession, Pagination, CurrentAdmin
 from models import Task, Actor
 from schemas import TaskListResponse, TaskOut
 

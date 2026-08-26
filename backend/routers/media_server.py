@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from deps import CurrentUser
+from deps import CurrentUser, CurrentAdmin
 from services.media_server import check_in_library, sync_library_status, test_connection
 
 router = APIRouter(prefix="/api/media-server", tags=["media-server"])

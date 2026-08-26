@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from config import get_settings
-from deps import CurrentUserHeaderOrQuery, DbSession
+from deps import CurrentUser, CurrentUserHeaderOrQuery, DbSession
 
 logger = logging.getLogger(__name__)
 

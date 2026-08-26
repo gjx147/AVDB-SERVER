@@ -6,7 +6,7 @@ import json
 import shutil
 from fastapi import APIRouter, Query
 from config import get_settings
-from deps import CurrentAdmin, CurrentUser
+from deps import CurrentUser, CurrentAdmin, DbSession
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
