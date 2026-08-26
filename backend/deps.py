@@ -107,7 +107,10 @@ def get_current_admin(
     current_user: CurrentUser,
     db: DbSession,
 ) -> str:
-    """要求管理员权限。非管理员返回 403。"""
+    """要求管理员权限。非管理员返回 403；AUTH_DISABLED（单用户模式）放行。"""
+    from config import get_settings
+    if get_settings().AUTH_DISABLED:
+        return current_user
     # current_user 已经是 username(anonymous 表示未认证)
     if current_user == "anonymous":
         raise HTTPException(

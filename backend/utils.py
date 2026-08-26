@@ -32,3 +32,12 @@ def set_setting(db: Session, key: str, value: str) -> None:
 
 # 注：get_or_404 / paginate 曾在 Phase 3 提取，但各 router 仍手写实现，
 # 两个函数当前全项目无引用（2026-08 审查确认），已移除；如需推广请先在调用点接入。
+
+
+# 敏感配置键统一判定（settings 路由 / agent_service / 回滚端点共用，防止清单漂移）
+_SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key",
+                       "cookie", "session", "passwd", "credential", "auth", "jwt")
+
+
+def is_sensitive_key(key: str) -> bool:
+    return any(p in key.lower() for p in _SENSITIVE_PATTERNS)

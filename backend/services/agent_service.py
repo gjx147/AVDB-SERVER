@@ -24,14 +24,22 @@ import json as _json
 _TOKEN_TTL = 600
 
 
-def _token_secret() -> bytes:
-    """从持久化 SECRET_KEY 派生（多 worker 共享，重启不失效）。"""
+def _token_secret() -> bytes | None:
+    """从持久化 SECRET_KEY 派生（多 worker 共享，重启不失效）。
+
+    fail-closed：SECRET_KEY 缺失时返回 None，拒绝签发/验签（不落常量兜底）。
+    """
     from config import get_settings
-    sk = get_settings().SECRET_KEY or "avdb-agent-default-secret"
+    sk = get_settings().SECRET_KEY
+    if not sk:
+        logger.error("SECRET_KEY 未配置，确认 token 不可用（fail-closed）")
+        return None
     return hashlib.sha256(("agent-confirm:" + sk).encode("utf-8")).digest()
 
 
 def _issue_token(tool: str, args: dict, user: str = "ai") -> str:
+    if _token_secret() is None:
+        raise RuntimeError("SECRET_KEY 未配置，无法签发确认 token")
     payload = {"tool": tool, "args": args, "user": user, "exp": int(time.time()) + _TOKEN_TTL}
     body = base64.urlsafe_b64encode(_json.dumps(payload, ensure_ascii=False).encode("utf-8")).rstrip(b"=").decode()
     sig = hmac_mod.new(_token_secret(), body.encode(), hashlib.sha256).hexdigest()[:32]
@@ -49,7 +57,10 @@ def _consume_token(token: str, user: str | None = None) -> dict | None:
         body, sig = token.split(".", 1)
     except Exception:
         return None
-    expect = hmac_mod.new(_token_secret(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    sec = _token_secret()
+    if sec is None:
+        return None
+    expect = hmac_mod.new(sec, body.encode(), hashlib.sha256).hexdigest()[:32]
     if not hmac_mod.compare_digest(sig, expect):
         return None
     try:
@@ -69,12 +80,10 @@ def _consume_token(token: str, user: str | None = None) -> dict | None:
 
 
 # ---------- 敏感配置判定（与 settings 路由一致） ----------
-_SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key",
-                       "cookie", "session", "passwd", "credential", "auth", "jwt")
-
-
 def _is_sensitive(key: str) -> bool:
-    return any(p in key.lower() for p in _SENSITIVE_PATTERNS)
+    """统一走 utils.is_sensitive_key（与 settings 路由共用一份清单）。"""
+    from utils import is_sensitive_key
+    return is_sensitive_key(key)
 
 
 # S2: AI 可写配置白名单（默认拒绝；新增低风险 key 在此登记）
@@ -1769,7 +1778,8 @@ def _undo_action(action_id: int, db, user) -> dict:
     except Exception:
         args = {}
     op = getattr(user, "username", None) or (user if isinstance(user, str) else "ai")
-
+    if a.operator not in ("ai", op):
+        return {"ok": False, "message": "无权撤销他人发起的操作"}
     if a.tool == "set_view_status":
         # 还原旧观看状态（记录旧值）
         old_status = args.get("_old_view_status")

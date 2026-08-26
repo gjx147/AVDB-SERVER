@@ -20,11 +20,7 @@ from models import Setting
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 # 敏感字段：GET 时排除，PUT 时跳过哨兵值
-SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key")
-
-
-def _is_sensitive(key: str) -> bool:
-    return any(p in key.lower() for p in SENSITIVE_PATTERNS)
+from utils import is_sensitive_key as _is_sensitive  # noqa: E402
 
 
 @router.get("")

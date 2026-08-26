@@ -304,7 +304,12 @@ def login(
     """
     from auth import authenticate_user, create_access_token
 
-    _check_login_rate(request.client.host if request.client else "unknown")
+    _ip = request.client.host if request.client else "unknown"
+    # 支持反向代理：优先取 X-Forwarded-For 最左可信 IP
+    _xff = request.headers.get("x-forwarded-for", "")
+    if _xff:
+        _ip = _xff.split(",")[0].strip() or _ip
+    _check_login_rate(_ip)
     user = authenticate_user(db, username, password)
     if user is None:
         raise HTTPException(
