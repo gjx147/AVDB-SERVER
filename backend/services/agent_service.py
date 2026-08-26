@@ -646,6 +646,207 @@ def _batch_retry(db, args):
     return {"ok": True, "message": f"已重新排队 {len(failed_ids)} 个失败任务"}
 
 
+async def _magnet_search(db, args):
+    """多源磁力搜索。"""
+    from services.magnet_sources import search_all
+    code = str(args.get("video_code") or "").strip().upper()
+    if not code:
+        return {"ok": False, "message": "需要番号"}
+    results = await search_all(code, None)
+    items = []
+    for src in (results or []):
+        if isinstance(src, dict):
+            items.append({"source": src.get("source") or src.get("name") or "?",
+                          "magnet": src.get("magnet") or "", "size": src.get("size") or "",
+                          "title": src.get("title") or ""})
+        elif isinstance(src, list):
+            for it in src[:5]:
+                items.append({"source": "?", "magnet": it.get("magnet") or "",
+                              "size": it.get("size") or "", "title": it.get("title") or ""})
+    if not items:
+        return {"ok": False, "message": f"未找到 {code} 的磁力资源"}
+    return {"ok": True, "video_code": code, "items": items[:10], "total": len(items)}
+
+
+def _push_download(db, args):
+    """推送单任务下载。"""
+    from models import Task
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    magnet = t.best_magnet
+    if not magnet:
+        return {"ok": False, "message": f"{t.video_code} 没有磁力链接，可先对话「搜索磁力」"}
+    try:
+        import asyncio as _aio
+        import threading
+        from services.download_strategy import push_to_downloader
+        def _run():
+            try:
+                _aio.run(push_to_downloader(t.id, magnet))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": f"已推送 {t.video_code} 下载（后台）"}
+    except Exception as e:
+        return {"ok": False, "message": f"推送失败：{e}"}
+
+
+def _batch_push(db, args):
+    """批量推送下载。"""
+    from models import Task
+    ids = [int(x) for x in (args.get("task_ids") or []) if str(x).isdigit()]
+    if not ids:
+        return {"ok": False, "message": "需要 task_ids"}
+    rows = db.execute(select(Task).where(Task.id.in_(ids[:50]))).scalars().all()
+    ok, skip = 0, 0
+    import asyncio as _aio
+    import threading
+    from services.download_strategy import push_to_downloader
+    for t in rows:
+        if t.best_magnet:
+            def _run(tid=t.id, mag=t.best_magnet):
+                try:
+                    _aio.run(push_to_downloader(tid, mag))
+                except Exception:
+                    pass
+            threading.Thread(target=_run, daemon=True).start()
+            ok += 1
+        else:
+            skip += 1
+    return {"ok": True, "message": f"已推送 {ok} 部下载（{skip} 部无磁力跳过）"}
+
+
+def _new_releases_list(db, args):
+    from models import NewRelease
+    stmt = select(NewRelease).order_by(NewRelease.release_date.desc().nullslast(), NewRelease.id.desc()).limit(20)
+    aid = args.get("actor_id")
+    if aid:
+        stmt = stmt.where(NewRelease.actor_id == int(aid))
+    if args.get("only_unread"):
+        stmt = stmt.where(NewRelease.is_read == False)  # noqa: E712
+    rows = db.execute(stmt).scalars().all()
+    items = [{"id": r.id, "video_code": r.video_code, "title": getattr(r, "title", None),
+              "release_date": str(r.release_date or ""), "actor_id": r.actor_id,
+              "is_read": bool(getattr(r, "is_read", False))} for r in rows]
+    return {"ok": True, "items": items}
+
+
+def _new_release_add(db, args):
+    from routers.new_releases import add_to_library_api
+    nid = int(args.get("new_release_id") or 0)
+    r = add_to_library_api(nid, db, "anonymous")
+    return {"ok": True, "message": f"新作已加入库：{r.get('message', '')}"}
+
+
+def _new_release_read(db, args):
+    from models import NewRelease
+    nid = int(args.get("new_release_id") or 0)
+    r = db.get(NewRelease, nid)
+    if not r:
+        return {"ok": False, "message": "新作记录不存在"}
+    r.is_read = True
+    db.commit()
+    return {"ok": True, "message": f"{r.video_code} 已标记已读"}
+
+
+def _new_release_check_all(db, args):
+    """全量检查所有订阅演员的新作（后台）。"""
+    try:
+        import asyncio as _aio
+        import threading
+        from routers.new_releases import check_all_now
+        def _run():
+            try:
+                _aio.run(check_all_now(db, "anonymous"))
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+        return {"ok": True, "message": "已开始全量检查新作（后台进行）"}
+    except Exception as e:
+        return {"ok": False, "message": f"启动失败：{e}"}
+
+
+def _ranking_list(db, args):
+    from models import Ranking
+    from sqlalchemy import func
+    rank_type = str(args.get("rank_type") or "daily")
+    if rank_type not in ("daily", "weekly", "monthly"):
+        return {"ok": False, "message": "rank_type 需为 daily/weekly/monthly"}
+    date = args.get("date")
+    if not date:
+        date = db.execute(select(func.max(Ranking.rank_date)).where(Ranking.rank_type == rank_type)).scalar_one()
+    if not date:
+        return {"ok": True, "items": [], "message": f"暂无 {rank_type} 榜单数据"}
+    rows = db.execute(
+        select(Ranking).where(Ranking.rank_type == rank_type, Ranking.rank_date == date)
+        .order_by(Ranking.rank_position).limit(30)
+    ).scalars().all()
+    items = [{"id": r.id, "rank": r.rank_position, "video_code": getattr(r, "video_code", None),
+              "title": getattr(r, "title", None), "rating": getattr(r, "rating", None)} for r in rows]
+    return {"ok": True, "items": items, "rank_type": rank_type, "date": str(date)}
+
+
+def _ranking_add_tasks(db, args):
+    from models import Ranking, Task
+    ids = [int(x) for x in (args.get("ranking_ids") or [])]
+    if not ids:
+        return {"ok": False, "message": "需要 ranking_ids（榜单条目 ID）"}
+    rows = db.execute(select(Ranking).where(Ranking.id.in_(ids[:100]))).scalars().all()
+    added = 0
+    from models import ListSource
+    src = db.execute(select(ListSource.id).limit(1)).scalar()
+    for r in rows:
+        code = getattr(r, "video_code", None) or ""
+        if not code:
+            continue
+        exists = db.execute(select(Task.id).where(Task.video_code == code)).scalar()
+        if exists:
+            continue
+        db.add(Task(list_source_id=src or 1, url=f"https://rank/{code}", video_code=code,
+                    title=getattr(r, "title", None), status="pending"))
+        added += 1
+    db.commit()
+    return {"ok": True, "message": f"已入库 {added} 条榜单条目（{len(rows) - added} 条已存在）", "added": added}
+
+
+def _task_delete(db, args):
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    code = t.video_code
+    db.delete(t)
+    db.commit()
+    return {"ok": True, "message": f"已删除 {code or tid}"}
+
+
+def _batch_delete(db, args):
+    ids = [int(x) for x in (args.get("task_ids") or []) if str(x).isdigit()]
+    if not ids:
+        return {"ok": False, "message": "需要 task_ids"}
+    deleted = db.execute(Task.__table__.delete().where(Task.id.in_(ids[:200]))).rowcount
+    db.commit()
+    return {"ok": True, "message": f"已删除 {deleted} 个任务"}
+
+
+def _drive115_offline_add(db, args):
+    from services.drive115_client import add_offline_task
+    import asyncio as _aio
+    magnet = str(args.get("magnet") or "").strip()
+    if not magnet and args.get("task_id"):
+        t = db.get(Task, int(args.get("task_id")))
+        magnet = t.best_magnet if t else ""
+    if not magnet:
+        return {"ok": False, "message": "需要磁力链接或 task_id"}
+    try:
+        result = _aio.run(add_offline_task(magnet))
+        return {"ok": True, "message": f"115 离线任务已添加：{result}"}
+    except Exception as e:
+        return {"ok": False, "message": f"115 添加失败：{e}"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -772,6 +973,15 @@ def _search_rows(db, query: dict) -> list:
 async def _preview_write(tool_name: str, args: dict, db) -> str:
     """写操作确认预览（批量/组合显示影响数与前 5 清单）。"""
     try:
+        if tool_name in ("batch_push", "batch_delete", "ranking_add_tasks"):
+            ids = [int(x) for x in (args.get("task_ids") or args.get("ranking_ids") or []) if str(x).isdigit()]
+            return f"将影响 {len(ids)} 条记录；确认后执行"
+        if tool_name == "task_delete":
+            t = db.get(Task, int(args.get("task_id") or 0))
+            return f"将删除作品 {t.video_code if t else args.get('task_id')}；确认后执行"
+        if tool_name == "push_download":
+            t = db.get(Task, int(args.get("task_id") or 0))
+            return f"将推送 {t.video_code if t else args.get('task_id')} 给下载器；确认后执行"
         if tool_name == "tag_translate_apply":
             mp = args.get("mapping") or {}
             if isinstance(mp, dict) and mp:
@@ -888,6 +1098,40 @@ TOOLS = [
     {"name": "batch_retry", "cn": "批量重试", "is_write": True,
      "desc": "重新排队失败任务（最多 200 个）",
      "args": {"limit": "数量（可选）"}, "handler": _batch_retry},
+    {"name": "magnet_search", "cn": "磁力搜索", "is_write": False,
+     "desc": "多源搜索番号的磁力资源", "args": {"video_code": "番号"}, "handler": _magnet_search},
+    {"name": "push_download", "cn": "推送下载", "is_write": True,
+     "desc": "把作品磁力推送给下载器（后台）",
+     "args": {"task_id": "作品 ID"}, "handler": _push_download},
+    {"name": "batch_push", "cn": "批量推送", "is_write": True,
+     "desc": "批量推送下载（最多 50 部）",
+     "args": {"task_ids": "作品 ID 数组"}, "handler": _batch_push},
+    {"name": "new_releases_list", "cn": "新作列表", "is_write": False,
+     "desc": "查看最近新作（可按演员/只看未读）",
+     "args": {"actor_id": "演员 ID（可选）", "only_unread": "只看未读（可选）"},
+     "handler": _new_releases_list},
+    {"name": "new_release_add", "cn": "新作入库", "is_write": True,
+     "desc": "把新作记录加入库", "args": {"new_release_id": "新作 ID"}, "handler": _new_release_add},
+    {"name": "new_release_read", "cn": "新作已读", "is_write": True,
+     "desc": "标记新作为已读", "args": {"new_release_id": "新作 ID"}, "handler": _new_release_read},
+    {"name": "new_release_check_all", "cn": "全量检查新作", "is_write": True,
+     "desc": "检查所有订阅演员的新作（后台）", "args": {}, "handler": _new_release_check_all},
+    {"name": "ranking_list", "cn": "排行榜", "is_write": False,
+     "desc": "查看排行榜（daily/weekly/monthly）",
+     "args": {"rank_type": "daily|weekly|monthly", "date": "日期（可选，默认最新）"},
+     "handler": _ranking_list},
+    {"name": "ranking_add_tasks", "cn": "榜单入库", "is_write": True,
+     "desc": "把榜单条目加入库为待处理任务",
+     "args": {"ranking_ids": "榜单条目 ID 数组"}, "handler": _ranking_add_tasks},
+    {"name": "task_delete", "cn": "删除作品", "is_write": True,
+     "desc": "删除单个作品任务", "args": {"task_id": "作品 ID"}, "handler": _task_delete},
+    {"name": "batch_delete", "cn": "批量删除", "is_write": True,
+     "desc": "批量删除作品任务（最多 200 个）",
+     "args": {"task_ids": "作品 ID 数组"}, "handler": _batch_delete},
+    {"name": "drive115_offline_add", "cn": "115 离线下载", "is_write": True,
+     "desc": "把磁力添加到 115 离线下载",
+     "args": {"magnet": "磁力链接", "task_id": "作品 ID（可选，二选一）"},
+     "handler": _drive115_offline_add},
 ]
 
 _TOOL_PROMPT = "\n".join(
@@ -1063,6 +1307,21 @@ def _result_to_text(tool_name: str, result: dict) -> str:
     if tool_name == "config_get":
         lines = [f"{k} = {v}" for k, v in list(result.get("settings", {}).items())[:40]]
         return "当前配置（敏感值已脱敏）：\n" + "\n".join(lines) if lines else "无配置"
+    if tool_name == "magnet_search":
+        items = result.get("items", [])
+        lines = [f"- [{it['source']}] {it.get('size') or '?'} {it.get('title', '')[:30]}" for it in items[:8]]
+        return f"找到 {result.get('total', len(items))} 个磁力：\n" + "\n".join(lines)
+    if tool_name == "new_releases_list":
+        items = result.get("items", [])
+        if not items:
+            return "暂无新作"
+        return "\n".join(f"- #{r['id']} {r['video_code']} {r.get('title') or ''}（{r['release_date'] or '?'}{'，未读' if not r['is_read'] else ''}）" for r in items[:15])
+    if tool_name == "ranking_list":
+        items = result.get("items", [])
+        if not items:
+            return result.get("message") or "暂无榜单数据"
+        return f"榜单 {result.get('rank_type')} {result.get('date')}：\n" + "\n".join(
+            f"- {r['rank']}. {r['video_code']}{' ' + str(r['rating']) if r.get('rating') else ''} {r.get('title') or ''}" for r in items[:20])
     if tool_name == "tag_translate":
         mp = result.get("mapping") or {}
         if not mp:
