@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from typing import Annotated
 from pydantic import BaseModel, Field
 
-from deps import CurrentUser, DbSession, CurrentAdmin
+from deps import CurrentUser, DbSession, CurrentAdmin, get_current_admin, get_current_user
 from services.ai_service import enrich_task, generate_tags, summarize, translate, whisper_line, test_connection
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -114,6 +115,44 @@ class AskRequest(BaseModel):
     question: str = Field(max_length=1000)
     # A1: 多轮对话上下文（[{role: user|assistant, content}], 保留最近 6 轮）
     history: list[dict] = Field(default_factory=list)
+
+
+class AgentRequest(BaseModel):
+    """A1+: 机器人助手对话（工具调用模式）。"""
+    messages: list[dict] = Field(default_factory=list, description="对话消息 [{'role','content'}]，最后一条为用户请求")
+
+
+@router.post("/agent")
+async def agent_chat(req: AgentRequest, db: DbSession, _user: CurrentUser):
+    """机器人助手：意图解析 → 工具调用 → 自然语言回复。写操作返回确认 token。"""
+    from services.agent_service import agent_run
+    messages = [m for m in (req.messages or []) if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+    if not messages or messages[-1].get("role") != "user":
+        raise HTTPException(status_code=400, detail="messages 最后一条必须为用户消息")
+    return await agent_run(messages[-12:], db, _user)
+
+
+def _agent_confirm_user(request: Request, db: DbSession) -> str:
+    """AUTH_DISABLED（单用户本地模式）放行；正式模式要求管理员。"""
+    from config import get_settings
+    if get_settings().AUTH_DISABLED:
+        return "anonymous"
+    user = get_current_user(request, request.headers.get("authorization"))
+    return get_current_admin(user, db)
+
+
+@router.post("/agent/confirm")
+def agent_confirm(req: ConfirmRequest, db: DbSession, _user: Annotated[str, Depends(_agent_confirm_user)]):
+    """确认执行写工具（两段式：agent 返回 token 后用户确认）。"""
+    from services.agent_service import agent_confirm as do_confirm
+    result = do_confirm(req.token, db, _user)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("message", "确认失败"))
+    return result
+
+
+class ConfirmRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=64)
 
 
 @router.post("/ask")

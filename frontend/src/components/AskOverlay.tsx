@@ -6,14 +6,20 @@ interface AskItem {
   rating: number | null; poster_url: string | null; tags: string | null; actors: string | null
 }
 
+interface ConfirmCard {
+  token: string; tool: string; tool_cn: string
+  args: Record<string, unknown>; preview: string; reason?: string
+}
+
 interface Msg {
   role: 'user' | 'assistant'
   content: string
   items?: AskItem[]
-  query?: Record<string, unknown>
+  confirm?: ConfirmCard
+  done?: string
 }
 
-const EXAMPLES = ['8 分以上没看过的巨乳作品', 'ABC-123 是什么', '最近的高分新作']
+const EXAMPLES = ['8 分以上没看过的巨乳作品', '库里有几部作品？', '查看订阅列表', '巡检一下系统']
 
 export function AskOverlay() {
   const [open, setOpen] = useState(false)
@@ -30,17 +36,44 @@ export function AskOverlay() {
     const q = (raw ?? input).trim()
     if (!q || busy) return
     setInput('')
-    const history = msgs.slice(-6).map((m) => ({ role: m.role, content: m.content.slice(0, 200) }))
+    const history = msgs.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 200) }))
     setMsgs((p) => [...p, { role: 'user', content: q }])
     setBusy(true)
     try {
-      const r = await api.aiAsk(q, history)
-      setMsgs((p) => [...p, { role: 'assistant', content: `找到 ${r.total} 部`, items: r.items, query: r.query }])
+      const r = await api.agentChat([...history, { role: 'user', content: q }])
+      if (r.type === 'confirm') {
+        setMsgs((p) => [...p, {
+          role: 'assistant', content: `需要确认：${r.tool_cn || r.tool || ''}`,
+          confirm: { token: r.token || '', tool: r.tool || '', tool_cn: r.tool_cn || r.tool || '', args: r.args || {}, preview: r.preview || '', reason: r.reason },
+        }])
+      } else {
+        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[] }])
+      }
     } catch (e) {
       setMsgs((p) => [...p, { role: 'assistant', content: `出错：${String((e as Error).message)}` }])
     }
     setBusy(false)
     scrollBottom()
+  }
+
+  const confirm = async (i: number) => {
+    const c = msgs[i].confirm
+    if (!c || busy) return
+    setBusy(true)
+    try {
+      const r = await api.agentConfirm(c.token)
+      const ok = r.result?.ok
+      setMsgs((p) => p.map((m, idx) => idx === i
+        ? { ...m, confirm: undefined, content: ok ? `✅ ${r.result?.message || '已执行'}` : `❌ ${r.result?.message || '执行失败'}` }
+        : m))
+    } catch (e) {
+      setMsgs((p) => p.map((m, idx) => idx === i ? { ...m, confirm: undefined, content: `❌ ${String((e as Error).message)}` } : m))
+    }
+    setBusy(false)
+  }
+
+  const cancel = (i: number) => {
+    setMsgs((p) => p.map((m, idx) => idx === i ? { ...m, confirm: undefined, content: '已取消' } : m))
   }
 
   if (!open) {
@@ -53,7 +86,7 @@ export function AskOverlay() {
   }
 
   return (
-    <div className="modal-pop" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 999, width: 380, maxWidth: 'calc(100vw - 24px)', height: 'min(560px, 75vh)', display: 'flex', flexDirection: 'column', background: 'var(--bg-page, #fff)', border: '1px solid var(--line, #e5e7eb)', borderRadius: 14, boxShadow: '0 8px 30px rgba(0,0,0,.25)', overflow: 'hidden' }}>
+    <div className="modal-pop" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 999, width: 400, maxWidth: 'calc(100vw - 24px)', height: 'min(600px, 78vh)', display: 'flex', flexDirection: 'column', background: 'var(--bg-page, #fff)', border: '1px solid var(--line, #e5e7eb)', borderRadius: 14, boxShadow: '0 8px 30px rgba(0,0,0,.25)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--line, #e5e7eb)' }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>库内 AI 助手</span>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -65,7 +98,7 @@ export function AskOverlay() {
       <div ref={bodyRef} style={{ flex: 1, overflow: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {msgs.length === 0 && (
           <div style={{ fontSize: 11, color: 'var(--t-mute)', textAlign: 'center', padding: '14px 0' }}>
-            用自然语言和库对话：筛片、查作品、追问细化。
+            和助手对话，完成库内所有操作：检索、订阅、规则、配置、巡检……
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 }}>
               {EXAMPLES.map((ex) => (
                 <button key={ex} className="btn btn--ghost btn--sm" onClick={() => ask(ex)} style={{ fontSize: 10 }}>{ex}</button>
@@ -76,12 +109,22 @@ export function AskOverlay() {
         {msgs.map((m, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
             <div style={{
-              maxWidth: '88%', padding: '7px 11px', borderRadius: 10, fontSize: 12, lineHeight: 1.5,
+              maxWidth: '88%', padding: '7px 11px', borderRadius: 10, fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap',
               background: m.role === 'user' ? 'var(--gold, #d97706)' : 'var(--bg-raised, #f3f4f6)',
               color: m.role === 'user' ? '#fff' : 'var(--t-body)',
             }}>
               {m.content}
             </div>
+            {m.confirm && (
+              <div style={{ width: '88%', marginTop: 6, border: '1px solid var(--line, #e5e7eb)', borderRadius: 10, padding: 10, fontSize: 11, background: 'var(--bg-page, #fff)' }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠️ 确认执行{m.confirm.reason ? `（${m.confirm.reason}）` : ''}</div>
+                <div style={{ color: 'var(--t-mute)', overflowWrap: 'anywhere' }}>{m.confirm.preview}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn btn--gold btn--sm" onClick={() => confirm(i)} disabled={busy}>执行</button>
+                  <button className="btn btn--ghost btn--sm" onClick={() => cancel(i)} disabled={busy}>取消</button>
+                </div>
+              </div>
+            )}
             {m.items && m.items.length > 0 && (
               <div style={{ width: '88%', display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
                 {m.items.map((t) => (
@@ -98,16 +141,13 @@ export function AskOverlay() {
                 ))}
               </div>
             )}
-            {m.items && m.items.length === 0 && m.query && (
-              <div style={{ fontSize: 10, color: 'var(--t-faint)', marginTop: 3 }}>（没有匹配，可换个说法或放松条件）</div>
-            )}
           </div>
         ))}
         {busy && <div style={{ fontSize: 11, color: 'var(--t-mute)', textAlign: 'center' }}>思考中…</div>}
       </div>
 
       <div style={{ padding: 10, display: 'flex', gap: 8, borderTop: '1px solid var(--line, #e5e7eb)' }}>
-        <input className="input" value={input} placeholder="继续对话…（追问会自动叠加条件）"
+        <input className="input" value={input} placeholder="检索、订阅、规则、配置、巡检都能聊…"
           onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') ask() }}
           style={{ flex: 1, fontSize: 12 }} />
         <button className="btn btn--gold btn--sm" onClick={() => ask()} disabled={busy}>发送</button>

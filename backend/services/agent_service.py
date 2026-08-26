@@ -1,0 +1,604 @@
+# -*- coding: utf-8 -*-
+"""Agent 助手服务：对话意图 → 工具调用 → 自然语言回复。
+
+- 读工具（查询/统计/配置读取）直接执行，LLM 汇总成自然语言
+- 写工具（创建/删除/修改）两段式确认：预检生成 token → confirm(token) 执行
+- 未配置 AI 时降级：检索/读取类工具直查，写工具提示需配置
+"""
+import json
+import re
+import secrets
+import time
+
+from sqlalchemy import select
+from models import Task, Subscription, Setting, Rule
+
+# ---------- 确认 token（内存，10 分钟过期） ----------
+_PENDING: dict[str, dict] = {}
+_TOKEN_TTL = 600
+
+
+def _issue_token(tool: str, args: dict) -> str:
+    token = secrets.token_hex(8)
+    _PENDING[token] = {"tool": tool, "args": args, "at": time.time()}
+    return token
+
+
+def _consume_token(token: str) -> dict | None:
+    p = _PENDING.pop(token, None)
+    if not p:
+        return None
+    if time.time() - p["at"] > _TOKEN_TTL:
+        return None
+    return p
+
+
+# ---------- 敏感配置判定（与 settings 路由一致） ----------
+_SENSITIVE_PATTERNS = ("password", "token", "secret", "key", "apikey", "api_key")
+
+
+def _is_sensitive(key: str) -> bool:
+    return any(p in key.lower() for p in _SENSITIVE_PATTERNS)
+
+
+# ---------- 工具执行体 ----------
+async def _parse_question(question: str):
+    """NL → 筛选 JSON（LLM 优先，规则降级）。返回 (query, engine)。"""
+    from services.ai_service import _get_cached, _hash_prompt, chat
+    key = _hash_prompt(f"ask:{question}")
+    cached = _get_cached(key)
+    query = None
+    if cached:
+        try:
+            query = json.loads(cached)
+        except Exception:
+            query = None
+    engine = "cache" if query else "ai"
+    if query is None:
+        schema = (
+            '{"video_code": "番号或 null", "title_keyword": "标题关键词或 null", '
+            '"rating_min": 最低评分数字或 null, "tags": ["标签数组，可为空"], '
+            '"actors": ["演员数组，可为空"], "maker": "厂商或 null", '
+            '"label": "厂牌或 null", "series": "系列或 null", '
+            '"release_after": "YYYY-MM-DD 或 null", "view_status": "viewed|want|null", '
+            '"sort": "rating|release_date|id", "limit": 20}'
+        )
+        prompt = (
+            "你是一个影片库查询助手。把用户的自然语言问题转换成 JSON 筛选条件，只输出 JSON，不要其它文字。\n"
+            f"可用字段（全部可选，未知填 null）：{schema}\n"
+            f"用户问题：{question}\n"
+            "注意：标签/演员数组最多 5 个元素；评分按 0-10 分制；番号需大写（如 ABC-123）。"
+        )
+        try:
+            raw = await chat(
+                [{"role": "system", "content": "你是影片库助手，只输出 JSON。"},
+                 {"role": "user", "content": prompt}],
+                task_type="agent",
+            )
+            m = re.search(r"\{[\s\S]*\}", raw or "")
+            if m:
+                parsed = json.loads(m.group(0))
+                if isinstance(parsed, dict):
+                    query = parsed
+                    engine = "ai"
+        except Exception:
+            query = None
+    if query is None:
+        engine = "rules"
+        query = {}
+        m = re.search(r"[A-Z]{2,5}-\d{2,5}[A-Z0-9]?", question.upper())
+        if m:
+            query["video_code"] = m.group(0)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*分", question)
+        if m:
+            query["rating_min"] = float(m.group(1))
+        for tag in ("无码", "中出", "巨乳", "熟女", "萝莉", "人妻", "OL", "制服", "凌辱", "足交"):
+            if tag in question:
+                query.setdefault("tags", []).append(tag)
+        query.setdefault("limit", 20)
+    return query, engine
+
+
+def _search(db, args, query=None, engine=""):
+    """执行筛选查询（query 缺省时规则降级提取）。"""
+    question = str(args.get("question") or "").strip()
+    if not question:
+        return {"ok": False, "message": "问题不能为空"}
+    if query is None:
+        query, engine = {}, "rules"
+        m = re.search(r"[A-Z]{2,5}-\d{2,5}[A-Z0-9]?", question.upper())
+        if m:
+            query["video_code"] = m.group(0)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*分", question)
+        if m:
+            query["rating_min"] = float(m.group(1))
+        for tag in ("无码", "中出", "巨乳", "熟女", "萝莉", "人妻", "OL", "制服", "凌辱", "足交"):
+            if tag in question:
+                query.setdefault("tags", []).append(tag)
+        query.setdefault("limit", 20)
+
+    stmt = select(Task).where(Task.video_code.isnot(None))
+    vc = query.get("video_code")
+    if vc:
+        stmt = stmt.where(Task.video_code == str(vc).upper())
+    tk = query.get("title_keyword")
+    if tk:
+        stmt = stmt.where(Task.title.like(f"%{tk}%"))
+    rm = query.get("rating_min")
+    if rm is not None:
+        try:
+            stmt = stmt.where(Task.rating >= float(rm))
+        except Exception:
+            pass
+    for t in (query.get("tags") or [])[:5]:
+        if t:
+            stmt = stmt.where(Task.tags.like(f"%{t}%"))
+    for a in (query.get("actors") or [])[:5]:
+        if a:
+            stmt = stmt.where(Task.actors.like(f"%{a}%"))
+    mk = query.get("maker")
+    if mk:
+        stmt = stmt.where(Task.maker.like(f"%{mk}%"))
+    lb = query.get("label")
+    if lb:
+        stmt = stmt.where(Task.label.like(f"%{lb}%"))
+    sr = query.get("series")
+    if sr:
+        stmt = stmt.where(Task.series.like(f"%{sr}%"))
+    ra = query.get("release_after")
+    if ra:
+        stmt = stmt.where(Task.release_date >= str(ra))
+    vs = query.get("view_status")
+    if vs in ("viewed", "want"):
+        stmt = stmt.where(Task.view_status == vs)
+    sort = query.get("sort")
+    if sort == "rating":
+        stmt = stmt.order_by(Task.rating.desc())
+    elif sort == "release_date":
+        stmt = stmt.order_by(Task.release_date.desc())
+    else:
+        stmt = stmt.order_by(Task.id.desc())
+    try:
+        limit = min(int(query.get("limit") or 20), 50)
+    except Exception:
+        limit = 20
+    rows = db.execute(stmt.limit(limit)).scalars().all()
+    items = [
+        {"task_id": t.id, "video_code": t.video_code, "title": t.title,
+         "rating": t.rating, "poster_url": t.poster_url, "tags": t.tags,
+         "actors": t.actors, "view_status": t.view_status}
+        for t in rows
+    ]
+    return {"ok": True, "engine": engine, "query": query, "total": len(items), "items": items}
+
+
+def _video_detail(db, args):
+    tid = args.get("task_id")
+    vc = args.get("video_code")
+    t = None
+    if tid:
+        t = db.get(Task, int(tid))
+    elif vc:
+        t = db.execute(select(Task).where(Task.video_code == str(vc).upper())).scalars().first()
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    return {"ok": True, "item": {
+        "task_id": t.id, "video_code": t.video_code, "title": t.title,
+        "rating": t.rating, "tags": t.tags, "actors": t.actors, "maker": t.maker,
+        "label": t.label, "series": t.series, "release_date": str(t.release_date or ""),
+        "view_status": t.view_status, "note": t.note,
+    }}
+
+
+def _stats(db, args):
+    total = db.execute(select(Task.id)).scalars().all()
+    viewed = db.execute(select(Task.id).where(Task.view_status == "viewed")).scalars().all()
+    want = db.execute(select(Task.id).where(Task.view_status == "want")).scalars().all()
+    fav = db.execute(select(Task.id).where(Task.is_favorite == True)).scalars().all()  # noqa: E712
+    rated = db.execute(select(Task.id).where(Task.rating.isnot(None))).scalars().all()
+    subs = db.execute(select(Subscription.id)).scalars().all()
+    rules = db.execute(select(Rule.id)).scalars().all()
+    return {"ok": True, "stats": {
+        "total": len(total), "viewed": len(viewed), "want": len(want),
+        "favorites": len(fav), "rated": len(rated),
+        "subscriptions": len(subs), "rules": len(rules),
+    }}
+
+
+def _actor_search(db, args):
+    from models import Actor
+    name = str(args.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "message": "需要演员名"}
+    rows = db.execute(select(Actor).where(Actor.name.like(f"%{name}%")).limit(10)).scalars().all()
+    items = [{"actor_id": a.id, "name": a.name, "works_count": getattr(a, "works_count", None),
+              "is_followed": getattr(a, "is_followed", None)} for a in rows]
+    return {"ok": True, "items": items}
+
+
+def _subscription_list(db, args):
+    rows = db.execute(select(Subscription).order_by(Subscription.id)).scalars().all()
+    return {"ok": True, "items": [
+        {"id": s.id, "sub_type": s.sub_type, "name": s.name, "enabled": s.enabled,
+         "rank_type": getattr(s, "rank_type", None), "actor_id": getattr(s, "actor_id", None)}
+        for s in rows]}
+
+
+def _rule_list(db, args):
+    rows = db.execute(select(Rule).order_by(Rule.id)).scalars().all()
+    return {"ok": True, "items": [
+        {"id": r.id, "name": getattr(r, "name", None), "task_type": getattr(r, "task_type", None),
+         "enabled": getattr(r, "enabled", True)}
+        for r in rows]}
+
+
+def _config_get(db, args):
+    rows = db.execute(select(Setting)).scalars().all()
+    data = {r.key: ("***" if _is_sensitive(r.key) else r.value) for r in rows}
+    return {"ok": True, "settings": data}
+
+
+# ---------- 写工具（确认制执行体） ----------
+def _subscription_create(db, args):
+    from routers.subscriptions import SubscriptionCreate, VALID_TYPES
+    payload = SubscriptionCreate(**{k: v for k, v in args.items() if k in SubscriptionCreate.model_fields})
+    if payload.sub_type not in VALID_TYPES:
+        return {"ok": False, "message": f"无效类型，可选 {VALID_TYPES}"}
+    if payload.sub_type == "ranking" and not payload.rank_type:
+        return {"ok": False, "message": "ranking 类型需指定 rank_type"}
+    if payload.sub_type == "actor" and not payload.actor_id:
+        return {"ok": False, "message": "actor 类型需指定 actor_id"}
+    sub = Subscription(**payload.model_dump())
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return {"ok": True, "message": f"订阅已创建 #{sub.id}：{sub.name}", "id": sub.id}
+
+
+def _subscription_delete(db, args):
+    sid = int(args.get("subscription_id") or 0)
+    sub = db.get(Subscription, sid)
+    if not sub:
+        return {"ok": False, "message": "订阅不存在"}
+    name = sub.name
+    db.delete(sub)
+    db.commit()
+    return {"ok": True, "message": f"订阅已删除：{name}"}
+
+
+def _subscription_toggle(db, args):
+    sid = int(args.get("subscription_id") or 0)
+    sub = db.get(Subscription, sid)
+    if not sub:
+        return {"ok": False, "message": "订阅不存在"}
+    sub.enabled = not sub.enabled
+    db.commit()
+    return {"ok": True, "message": f"订阅「{sub.name}」已{'启用' if sub.enabled else '停用'}"}
+
+
+def _rule_create(db, args):
+    from routers.rules import RuleCreate
+    payload = RuleCreate(**{k: v for k, v in args.items() if k in RuleCreate.model_fields})
+    r = Rule(**payload.model_dump())
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return {"ok": True, "message": f"规则已创建 #{r.id}", "id": r.id}
+
+
+def _rule_delete(db, args):
+    rid = int(args.get("rule_id") or 0)
+    r = db.get(Rule, rid)
+    if not r:
+        return {"ok": False, "message": "规则不存在"}
+    db.delete(r)
+    db.commit()
+    return {"ok": True, "message": "规则已删除"}
+
+
+def _set_view_status(db, args):
+    tid = int(args.get("task_id") or 0)
+    t = db.get(Task, tid)
+    if not t:
+        return {"ok": False, "message": "作品不存在"}
+    status = args.get("view_status")
+    if status not in ("viewed", "want", "none"):
+        return {"ok": False, "message": "view_status 需为 viewed/want/none"}
+    t.view_status = None if status == "none" else status
+    db.commit()
+    return {"ok": True, "message": f"{t.video_code} 已标记为{'看过' if status == 'viewed' else '想看' if status == 'want' else '未看'}"}
+
+
+def _config_set(db, args):
+    key = str(args.get("key") or "").strip()
+    value = args.get("value")
+    if not key:
+        return {"ok": False, "message": "需要配置 key"}
+    if _is_sensitive(key):
+        return {"ok": False, "message": "敏感配置（密码/令牌）请在设置页手动修改，AI 仅可读"}
+    row = db.get(Setting, key)
+    old_value = row.value if row else None
+    if row:
+        row.value = str(value) if value is not None else ""
+    else:
+        db.add(Setting(key=key, value=str(value) if value is not None else ""))
+    db.commit()
+    return {"ok": True, "message": f"配置 {key} 已更新", "key": key, "old": old_value, "new": str(value)}
+
+
+def _inspect(db, args):
+    """配置巡检：缺失 / 异常 / 建议（静态检查器，不依赖 AI）"""
+    from config import get_settings as get_env
+    rows = db.execute(select(Setting)).scalars().all()
+    data = {r.key: r.value for r in rows}
+    env = get_env()
+    problems = []
+    tips = []
+    if not data.get("AI_API_KEY") and not getattr(env, "AI_API_KEY", None):
+        problems.append({"level": "error", "item": "AI_API_KEY", "detail": "未配置 AI Key，助手与智能功能不可用"})
+    if data.get("AUTH_DISABLED", "").lower() == "true":
+        problems.append({"level": "warning", "item": "AUTH_DISABLED", "detail": "认证已禁用，任何人均可访问，建议开启"})
+    if not data.get("http_proxy") and not getattr(env, "HTTP_PROXY", None):
+        tips.append("未配置代理，爬虫/下载可能受限")
+    if not data.get("s3_bucket") and not getattr(env, "S3_BUCKET", None):
+        tips.append("未配置 S3 备份，建议开启以防数据丢失")
+    return {"ok": True, "problems": problems, "tips": tips}
+
+
+# ---------- 工具注册表 ----------
+TOOLS = [
+    {"name": "search", "cn": "检索作品", "is_write": False,
+     "desc": "按自然语言条件检索影片库（评分/标签/演员/番号/观看状态等），返回结果列表",
+     "args": {"question": "自然语言检索条件，如：8分以上没看过的巨乳作品"},
+     "handler": _search},
+    {"name": "video_detail", "cn": "作品详情", "is_write": False,
+     "desc": "查看单个作品详情（番号或 task_id）", "args": {"video_code": "番号", "task_id": "任务ID（可选）"},
+     "handler": _video_detail},
+    {"name": "stats", "cn": "库统计", "is_write": False,
+     "desc": "影片库统计概览：总数/已看/想看/收藏/订阅/规则数量", "args": {},
+     "handler": _stats},
+    {"name": "actor_search", "cn": "演员查询", "is_write": False,
+     "desc": "按名字查找演员", "args": {"name": "演员名"}, "handler": _actor_search},
+    {"name": "subscription_list", "cn": "订阅列表", "is_write": False,
+     "desc": "列出所有订阅", "args": {}, "handler": _subscription_list},
+    {"name": "rule_list", "cn": "规则列表", "is_write": False,
+     "desc": "列出所有自动规则", "args": {}, "handler": _rule_list},
+    {"name": "config_get", "cn": "查看配置", "is_write": False,
+     "desc": "读取系统配置（敏感值脱敏）", "args": {}, "handler": _config_get},
+    {"name": "inspect", "cn": "系统巡检", "is_write": False,
+     "desc": "巡检系统配置：缺失/异常/建议", "args": {}, "handler": _inspect},
+    # ---- 写工具 ----
+    {"name": "subscription_create", "cn": "创建订阅", "is_write": True,
+     "desc": "创建订阅（类型：actor=演员新作 / ranking=排行榜 / tag=标签筛选 / keyword=关键词）",
+     "args": {"sub_type": "actor|ranking|tag|keyword", "name": "订阅名称",
+              "actor_id": "actor 类型必填", "rank_type": "ranking 类型必填",
+              "tags": "tag 类型标签数组", "keyword": "keyword 类型关键词"},
+     "handler": _subscription_create},
+    {"name": "subscription_delete", "cn": "删除订阅", "is_write": True,
+     "desc": "删除指定订阅", "args": {"subscription_id": "订阅 ID"}, "handler": _subscription_delete},
+    {"name": "subscription_toggle", "cn": "启用/停用订阅", "is_write": True,
+     "desc": "切换订阅启用状态", "args": {"subscription_id": "订阅 ID"}, "handler": _subscription_toggle},
+    {"name": "rule_create", "cn": "创建规则", "is_write": True,
+     "desc": "创建自动处理规则（新作/下载等场景触发）",
+     "args": {"name": "规则名", "task_type": "触发类型", "condition": "条件（可选）", "action": "动作（可选）"},
+     "handler": _rule_create},
+    {"name": "rule_delete", "cn": "删除规则", "is_write": True,
+     "desc": "删除指定规则", "args": {"rule_id": "规则 ID"}, "handler": _rule_delete},
+    {"name": "set_view_status", "cn": "标记观看状态", "is_write": True,
+     "desc": "把作品标记为已看/想看/未看", "args": {"task_id": "作品任务 ID", "view_status": "viewed|want|none"},
+     "handler": _set_view_status},
+    {"name": "config_set", "cn": "修改配置", "is_write": True,
+     "desc": "修改系统配置（敏感配置不可改）", "args": {"key": "配置键", "value": "新值"},
+     "handler": _config_set},
+]
+
+_TOOL_PROMPT = "\n".join(
+    f"- {t['name']}（{t['cn']}，{'写操作需确认' if t['is_write'] else '只读'}）：{t['desc']}；参数：{json.dumps(t['args'], ensure_ascii=False)}"
+    for t in TOOLS
+)
+
+
+def _pick_tool(name: str):
+    for t in TOOLS:
+        if t["name"] == name:
+            return t
+    return None
+
+
+def _run_read_tool(t, db, args):
+    try:
+        return t["handler"](db, args)
+    except Exception as e:
+        return {"ok": False, "message": f"工具执行失败：{e}"}
+
+
+# ---------- Agent 主流程 ----------
+async def agent_run(messages: list[dict], db, user) -> dict:
+    """messages: [{'role','content'}...]，最后一条为用户请求。"""
+    question = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            question = str(m.get("content") or "").strip()
+            break
+    if not question:
+        return {"ok": False, "type": "error", "content": "请说点什么"}
+
+    from services.ai_service import _get_cached, _hash_prompt, _save_cache, chat
+
+    llm_available = True
+    key = _hash_prompt(f"agent:{question}")
+    cached = _get_cached(key)
+    decision = None
+    if cached:
+        try:
+            decision = json.loads(cached)
+        except Exception:
+            decision = None
+
+    if decision is None:
+        history_block = ""
+        recent = [m for m in messages if m.get("role") in ("user", "assistant")][-8:]
+        if len(recent) > 1:
+            lines = []
+            for h in recent[:-1]:
+                role = "用户" if h.get("role") == "user" else "助手"
+                lines.append(f"{role}: {str(h.get('content', ''))[:100]}")
+            history_block = "之前的对话：\n" + "\n".join(lines) + "\n"
+        prompt = (
+            "你是 AVDB 影片库的智能助手。根据用户请求选择并调用一个工具。\n"
+            f"可用工具：\n{_TOOL_PROMPT}\n\n"
+            f"{history_block}"
+            f"用户请求：{question}\n\n"
+            "输出 JSON：{\"tool\": \"工具名\", \"args\": {参数}, \"reason\": \"一句话说明\"}\n"
+            "要求：\n"
+            "1. 检索/查询/列表演变体 → search / video_detail / stats 等只读工具\n"
+            "2. 创建/删除/修改/标记 → 对应写工具\n"
+            "3. 用户请求与工具都无关（打招呼/闲聊）→ {\"tool\": \"none\", \"args\": {}, \"reason\": \"闲聊\"}\n"
+            "4. 只输出 JSON，不要其它文字"
+        )
+        try:
+            raw = await chat(
+                [{"role": "system", "content": "你是 AVDB 影片库助手，只输出 JSON。"},
+                 {"role": "user", "content": prompt}],
+                task_type="agent",
+            )
+            m = re.search(r"\{[\s\S]*\}", raw or "")
+            if m:
+                decision = json.loads(m.group(0))
+                _save_cache(key, "agent", "", f"agent:{question}", m.group(0))
+        except Exception:
+            decision = None
+            llm_available = False
+    else:
+        llm_available = True
+
+    if not decision or not isinstance(decision, dict):
+        llm_available = False
+        # 无 LLM 降级：关键词路由（读工具可直查；写工具需 AI 解析参数）
+        q = question
+        if any(k in q for k in ("统计", "多少部", "几部", "概览", "总览")):
+            decision = {"tool": "stats", "args": {}, "reason": "关键词：统计"}
+        elif "巡检" in q or "体检" in q:
+            decision = {"tool": "inspect", "args": {}, "reason": "关键词：巡检"}
+        elif any(k in q for k in ("配置", "设置项", "当前设置")):
+            decision = {"tool": "config_get", "args": {}, "reason": "关键词：配置"}
+        elif "订阅" in q and any(k in q for k in ("列表", "哪些", "都有", "列出", "查看")):
+            decision = {"tool": "subscription_list", "args": {}, "reason": "关键词：订阅列表"}
+        elif "规则" in q and any(k in q for k in ("列表", "哪些", "都有", "列出", "查看")):
+            decision = {"tool": "rule_list", "args": {}, "reason": "关键词：规则列表"}
+        elif any(k in q for k in ("创建订阅", "新建订阅", "删除订阅", "创建规则", "删除规则", "改成", "修改配置", "标记为", "标为")):
+            return {"ok": False, "type": "error",
+                    "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
+        elif re.search(r"[A-Z]{2,5}-\d{2,5}", q.upper()) and ("详情" in q or "是什么" in q or "信息" in q):
+            decision = {"tool": "video_detail", "args": {"video_code": re.search(r"[A-Z]{2,5}-\d{2,5}[A-Z0-9]?", q.upper()).group(0)}, "reason": "关键词：详情"}
+        else:
+            decision = {"tool": "search", "args": {"question": question}, "reason": "降级检索"}
+
+    tool_name = str(decision.get("tool") or "none")
+    if tool_name == "none":
+        return {"ok": True, "type": "answer", "content": "我是你的库内助手：可以问我「8分以上的作品」「创建订阅」「查看统计」「把配置 XX 改成 YY」等。"}
+    t = _pick_tool(tool_name)
+    if not t:
+        return {"ok": True, "type": "answer",
+                "content": f"我没听懂（工具 {tool_name} 不存在），试试：「检索 8 分以上作品」「创建订阅」「查看统计」「巡检系统」。"}
+
+    args = decision.get("args") or {}
+    if not isinstance(args, dict):
+        args = {}
+    reason = str(decision.get("reason") or "")
+
+    if t["is_write"]:
+        # 两段式：预检 → token → 前端确认
+        if not llm_available:
+            return {"ok": False, "type": "error", "content": "写操作需要 AI 配置（设置页填写 AI_API_KEY）后使用"}
+        token = _issue_token(tool_name, args)
+        # 预检影响
+        preview = f"工具：{t['cn']}；参数：{json.dumps(args, ensure_ascii=False)}"
+        return {"ok": True, "type": "confirm", "tool": tool_name, "tool_cn": t["cn"],
+                "args": args, "reason": reason, "preview": preview, "token": token}
+
+    # 读工具直接执行（search 先异步解析再查）
+    if tool_name == "search":
+        try:
+            query, engine = await _parse_question(str(args.get("question") or ""))
+            result = _search(db, args, query=query, engine=engine)
+        except Exception:
+            result = _search(db, args)
+    else:
+        result = _run_read_tool(t, db, args)
+    if not result.get("ok"):
+        return {"ok": True, "type": "answer", "content": f"执行失败：{result.get('message', '未知错误')}"}
+
+    if tool_name == "search":
+        items = result.get("items", [])
+        if not items:
+            return {"ok": True, "type": "answer", "content": f"没有找到匹配的作品（引擎：{result.get('engine', '?')}）。可换个说法或放宽条件。"}
+        lines = [f"找到 {len(items)} 部："]
+        for it in items[:10]:
+            rating = f" {it['rating']}" if it.get("rating") else ""
+            title = (it.get("title") or "")[:30]
+            lines.append(f"- {it['video_code']}{rating} {title}")
+        return {"ok": True, "type": "answer", "content": "\n".join(lines), "items": items, "query": result.get("query")}
+    if tool_name == "video_detail":
+        it = result["item"]
+        return {"ok": True, "type": "answer",
+                "content": (f"{it['video_code']} {it['title'] or ''}\n"
+                            f"评分：{it['rating'] or '-'} | 状态：{it['view_status'] or '未看'}\n"
+                            f"标签：{it['tags'] or '-'}\n演员：{it['actors'] or '-'}\n"
+                            f"厂商：{it['maker'] or '-'} | 厂牌：{it['label'] or '-'} | 系列：{it['series'] or '-'}\n"
+                            f"日期：{it['release_date'] or '-'}\n备注：{it['note'] or '-'}"),
+                "item": it}
+    if tool_name == "stats":
+        s = result["stats"]
+        return {"ok": True, "type": "answer",
+                "content": (f"📊 库统计：共 {s['total']} 部 | 已看 {s['viewed']} | 想看 {s['want']} | "
+                            f"收藏 {s['favorites']} | 已评分 {s['rated']}\n订阅 {s['subscriptions']} 个 | 规则 {s['rules']} 条")}
+    if tool_name == "actor_search":
+        items = result.get("items", [])
+        if not items:
+            return {"ok": True, "type": "answer", "content": "没找到该演员"}
+        return {"ok": True, "type": "answer",
+                "content": "\n".join(f"- {a['name']}（ID {a['actor_id']}）" for a in items)}
+    if tool_name == "subscription_list":
+        items = result.get("items", [])
+        if not items:
+            return {"ok": True, "type": "answer", "content": "还没有订阅，可以说「创建订阅」"}
+        return {"ok": True, "type": "answer",
+                "content": "\n".join(f"- #{s['id']} {s['name']}（{s['sub_type']}，{'启用' if s['enabled'] else '停用'}）" for s in items)}
+    if tool_name == "rule_list":
+        items = result.get("items", [])
+        if not items:
+            return {"ok": True, "type": "answer", "content": "还没有规则，可以说「创建规则」"}
+        return {"ok": True, "type": "answer",
+                "content": "\n".join(f"- #{r['id']} {r['name'] or r['task_type']}（{'启用' if r['enabled'] else '停用'}）" for r in items)}
+    if tool_name == "config_get":
+        s = result.get("settings", {})
+        lines = [f"{k} = {v}" for k, v in list(s.items())[:40]]
+        return {"ok": True, "type": "answer", "content": "当前配置（敏感值已脱敏）：\n" + "\n".join(lines) if lines else "无配置"}
+    if tool_name == "inspect":
+        probs = result.get("problems", [])
+        tips = result.get("tips", [])
+        if not probs and not tips:
+            return {"ok": True, "type": "answer", "content": "✅ 巡检通过：未发现问题"}
+        lines = []
+        for p in probs:
+            lines.append(f"{'🔴' if p['level'] == 'error' else '🟡'} {p['item']}：{p['detail']}")
+        for tp in tips:
+            lines.append(f"💡 {tp}")
+        return {"ok": True, "type": "answer", "content": "巡检结果：\n" + "\n".join(lines)}
+    return {"ok": True, "type": "answer", "content": str(result)}
+
+
+def agent_confirm(token: str, db, user) -> dict:
+    """确认执行写工具。"""
+    p = _consume_token(token)
+    if not p:
+        return {"ok": False, "message": "确认已过期或无效，请重新发起"}
+    t = _pick_tool(p["tool"])
+    if not t or not t["is_write"]:
+        return {"ok": False, "message": "无效工具"}
+    try:
+        result = t["handler"](db, p["args"])
+    except Exception as e:
+        return {"ok": False, "message": f"执行失败：{e}"}
+    return {"ok": True, "result": result}

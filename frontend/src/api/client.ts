@@ -467,6 +467,12 @@ export const api = {
       '/api/insights/recommendations').then((r) => r.data),
   recommendReason: (taskId: number) =>
     http.post<{ reason: string; cached: boolean }>('/api/ai/recommend-reason', { task_id: taskId }).then((r) => r.data),
+  agentChat: (messages: { role: string; content: string }[]) =>
+    http.post<{ ok: boolean; type: string; content?: string; items?: unknown[]; query?: Record<string, unknown>; tool?: string; tool_cn?: string; args?: Record<string, unknown>; reason?: string; preview?: string; token?: string }>(
+      '/api/ai/agent', { messages }).then((r) => r.data),
+  agentConfirm: (token: string) =>
+    http.post<{ ok: boolean; result?: { ok: boolean; message?: string } }>(
+      '/api/ai/agent/confirm', { token }).then((r) => r.data),
   aiAsk: (question: string, history: { role: string; content: string }[] = []) =>
     http.post<{ ok: boolean; question: string; query: Record<string, unknown>; total: number; engine: string; items: { task_id: number; video_code: string | null; title: string | null; rating: number | null; poster_url: string | null; tags: string | null; actors: string | null }[] }>(
       '/api/ai/ask', { question, history }).then((r) => r.data),
