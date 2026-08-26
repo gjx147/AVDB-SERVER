@@ -267,6 +267,10 @@ function AuditPanel() {
 }
 
 export function Analytics() {
+  const [usage, setUsage] = useState<Awaited<ReturnType<typeof api.aiUsage>> | null>(null)
+  useEffect(() => {
+    api.aiUsage(7).then(setUsage).catch(() => {})
+  }, [])
   return (
     <div className="page">
       <PageHead eyebrow="Analytics" title={<>分析<em>中心</em></>}
@@ -283,10 +287,39 @@ export function Analytics() {
         <AuditPanel />
         <SeriesPanel />
       </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>AI 用量（近 7 天）</div>
+        {!usage ? <div style={{ fontSize: 12, color: 'var(--t-mute)' }}>加载中…</div> : (
+          <>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, marginBottom: 10 }}>
+              <span>调用 <b>{usage.total.calls}</b> 次</span>
+              <span>输入 <b>{usage.total.prompt_tokens}</b> tokens</span>
+              <span>输出 <b>{usage.total.completion_tokens}</b> tokens</span>
+              <span>缓存命中 <b>{(usage.total.cache_rate * 100).toFixed(0)}%</b></span>
+              {usage.total.est_cost > 0 && <span>估算成本 <b>¥{usage.total.est_cost}</b></span>}
+            </div>
+            {usage.daily.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 48, marginBottom: 8 }}>
+                {usage.daily.map((d) => (
+                  <div key={d.date} title={`${d.date}：${d.calls} 次`}
+                    style={{ flex: 1, background: 'var(--gold, #d97706)', minWidth: 6, borderRadius: '3px 3px 0 0',
+                      height: `${Math.max(6, Math.min(100, (d.calls / Math.max(1, Math.max(...usage.daily.map((x) => x.calls)))) * 100))}%` }} />
+                ))}
+              </div>
+            )}
+            {usage.by_type.length > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--t-mute)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {usage.by_type.slice(0, 6).map((t) => (
+                  <div key={t.task_type}>{t.task_type}：{t.calls} 次 / {t.prompt_tokens + t.completion_tokens} tokens</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
-
 function SeriesPanel() {
   const [d, setD] = useState<Awaited<ReturnType<typeof api.seriesProgress>> | null>(null)
   useEffect(() => {

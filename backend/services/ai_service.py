@@ -203,6 +203,24 @@ async def _acquire_chat_lock(prompt_hash: str) -> asyncio.Lock:
         return lock
 
 
+def _save_usage(task_type: str, model: str, prompt_tokens: int, completion_tokens: int,
+                 duration_ms: int, cache_hit: bool = False, ok: bool = True) -> None:
+    """Record AI usage (independent short session)."""
+    try:
+        from database import SessionLocal
+        from models import AiUsage
+        db = SessionLocal()
+        try:
+            db.add(AiUsage(task_type=task_type[:50], model=(model or "")[:100],
+                           prompt_tokens=int(prompt_tokens or 0), completion_tokens=int(completion_tokens or 0),
+                           duration_ms=int(duration_ms or 0), cache_hit=bool(cache_hit), ok=bool(ok)))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
 async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
                          use_cache, prompt_hash, task_type, prompt_text) -> str:
     """Uncached path: pooled client + classified retry (E1/E2)."""
@@ -212,7 +230,12 @@ async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
     if use_model.startswith("MiniMax-M3"):
         extra_body["thinking"] = {"type": "disabled"}
 
+    _t0 = time.monotonic()
+    _last_prompt = 0
+    _last_completion = 0
+
     async def _call_with_retry() -> str:
+        nonlocal _last_prompt, _last_completion
         for attempt in range(2):
             try:
                 resp = await client.chat.completions.create(
@@ -220,6 +243,10 @@ async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
                     extra_body=extra_body or None,
                 )
                 content = _strip_thinking(resp.choices[0].message.content or "")
+                usage = getattr(resp, "usage", None)
+                if usage is not None:
+                    _last_prompt = getattr(usage, "prompt_tokens", 0) or 0
+                    _last_completion = getattr(usage, "completion_tokens", 0) or 0
                 if content.strip():
                     if use_cache:
                         _save_cache(prompt_hash, task_type, use_model, prompt_text, content)
@@ -236,6 +263,7 @@ async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
             if attempt < 1:
                 await asyncio.sleep(1)
         _breaker_record(False)
+        _save_usage(task_type, use_model, 0, 0, int((time.monotonic() - _t0) * 1000), ok=False)
         return ""
 
     try:
@@ -243,10 +271,13 @@ async def _chat_uncached(base_url, api_key, use_model, messages, temperature,
             text = await asyncio.wait_for(_call_with_retry(), timeout=90)
         if text:
             _breaker_record(True)
+        _save_usage(task_type, use_model, _last_prompt, _last_completion,
+                    int((time.monotonic() - _t0) * 1000), ok=bool(text))
         return text
     except asyncio.TimeoutError:
         logger.error("AI overall timeout (>90s): task=%s model=%s", task_type, use_model)
         _breaker_record(False)
+        _save_usage(task_type, use_model, 0, 0, int((time.monotonic() - _t0) * 1000), ok=False)
         return ""
 
 async def test_connection() -> dict:

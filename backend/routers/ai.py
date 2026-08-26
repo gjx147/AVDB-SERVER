@@ -386,6 +386,59 @@ async def agent_command(req: CommandRequest, db: DbSession, _user: CurrentUser):
     return await run_command(req.command, req.arg_text or "", db, _user)
 
 
+@router.get("/usage")
+def ai_usage(db: DbSession, _user: CurrentUser, days: int = 7):
+    """成本面板：每日汇总 + 功能排行 + 总量（含估算成本）。"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, select
+    from models import AiUsage
+
+    days = min(max(days, 1), 90)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # 每日汇总
+    daily = db.execute(
+        select(func.date(AiUsage.created_at).label("d"),
+               func.count(AiUsage.id), func.sum(AiUsage.prompt_tokens),
+               func.sum(AiUsage.completion_tokens),
+               func.avg(AiUsage.duration_ms),
+               func.sum(AiUsage.cache_hit.cast(Integer)) if False else func.sum(AiUsage.cache_hit))
+        .where(AiUsage.created_at >= since)
+        .group_by("d").order_by("d")
+    ).all()
+    # 功能排行
+    by_type = db.execute(
+        select(AiUsage.task_type, func.count(AiUsage.id),
+               func.sum(AiUsage.prompt_tokens), func.sum(AiUsage.completion_tokens))
+        .where(AiUsage.created_at >= since)
+        .group_by(AiUsage.task_type).order_by(func.sum(AiUsage.prompt_tokens).desc())
+    ).all()
+    # 总计
+    total = db.execute(
+        select(func.count(AiUsage.id), func.sum(AiUsage.prompt_tokens),
+               func.sum(AiUsage.completion_tokens), func.sum(AiUsage.cache_hit))
+        .where(AiUsage.created_at >= since)
+    ).one()
+
+    prompt_t = total[1] or 0
+    completion_t = total[2] or 0
+    # 估算成本（元）：常见模型单价（每百万 token，输入/输出），可配置
+    from config import get_settings as _gs
+    cost_input = getattr(_gs(), "AI_COST_PER_M_INPUT", None) or 0.0
+    cost_output = getattr(_gs(), "AI_COST_PER_M_OUTPUT", None) or 0.0
+    est_cost = round(prompt_t / 1e6 * float(cost_input) + completion_t / 1e6 * float(cost_output), 4)
+
+    return {"ok": True,
+            "days": days,
+            "total": {"calls": total[0], "prompt_tokens": prompt_t, "completion_tokens": completion_t,
+                      "cache_hits": total[3] or 0, "cache_rate": round((total[3] or 0) / total[0], 3) if total[0] else 0,
+                      "est_cost": est_cost},
+            "daily": [{"date": r[0], "calls": r[1], "prompt_tokens": r[2] or 0,
+                       "completion_tokens": r[3] or 0, "avg_ms": int(r[4] or 0), "cache_hits": r[5] or 0} for r in daily],
+            "by_type": [{"task_type": r[0], "calls": r[1], "prompt_tokens": r[2] or 0,
+                         "completion_tokens": r[3] or 0} for r in by_type]}
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     RateLimitedUser(_user)
