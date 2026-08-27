@@ -166,6 +166,29 @@ class SqliteTaskStore:
     def _init_db(self) -> None:
         with self._conn() as conn:
             conn.executescript(INIT_SQL)
+            # 自愈式补列：旧库可能缺 scraper 会写的列（如 source_url），缺则补
+            self._ensure_columns(conn)
+
+    @staticmethod
+    def _ensure_columns(conn: sqlite3.Connection) -> None:
+        """检查并补齐本模块会写入的列（幂等；ALTER TABLE ADD COLUMN 带默认值）。"""
+        needed = {
+            "actors": {
+                "source_url": "TEXT",
+                "works_fetched": "INTEGER",
+            },
+        }
+        for table, cols in needed.items():
+            try:
+                existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            except Exception:
+                continue
+            for col, decl in cols.items():
+                if col not in existing:
+                    try:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+                    except Exception:
+                        pass  # 并发初始化时另一进程已补
 
     # ---------- 列表源 ----------
     def ensure_list_source(self, list_code: str, list_path: str = None,
