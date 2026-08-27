@@ -760,12 +760,13 @@ def _push_download(db, args):
     if not magnet:
         return {"ok": False, "message": f"{t.video_code} 没有磁力链接，可先对话「搜索磁力」"}
     try:
+        # 与 TaskDetail「推送下载」按钮同一路径：downloaders.download
+        from routers.downloaders import push_magnet as dl_push
         import asyncio as _aio
-        from services.download_strategy import push_with_strategy
         def _run():
             _bg_job_record(f"push:{t.id}", "running", "推送执行中")
             try:
-                r = _aio.run(push_with_strategy(t.id))
+                r = _aio.run(dl_push({"magnet": magnet, "task_id": t.id}, "anonymous"))
                 if isinstance(r, dict):
                     if r.get("ok") is False or r.get("error"):
                         _bg_job_record(f"push:{t.id}", "failed", r.get("message") or r.get("error") or "推送失败")
@@ -789,23 +790,18 @@ def _batch_push(db, args):
     if not ids:
         return {"ok": False, "message": "需要 task_ids"}
     rows = db.execute(select(Task).where(Task.id.in_(ids[:50]))).scalars().all()
-    ok, skip = 0, 0
-    import asyncio as _aio
-    from services.download_strategy import push_with_strategy
-    for t in rows:
-        if t.best_magnet:
-            def _run(tid=t.id):
-                try:
-                    r = _aio.run(push_with_strategy(tid))
-                    msg = r.get("message") if isinstance(r, dict) else str(r)
-                    _bg_job_record(f"push:{tid}", "done" if r.get("ok") else "failed", msg or "推送完成")
-                except Exception as e:
-                    _bg_job_record(f"push:{tid}", "failed", f"{type(e).__name__}: {e}")
-            _bg_submit(f"push:{t.id}", _run)
-            ok += 1
-        else:
-            skip += 1
-    return {"ok": True, "message": f"已推送 {ok} 部下载（{skip} 部无磁力跳过）"}
+    # 与 Library「批量推送下载」按钮同一路径：tasks/batch-push（同步执行，返回 pushed/skipped）
+    try:
+        from routers.tasks import batch_push as _tasks_batch_push
+        import asyncio as _aio
+        r = _aio.run(_tasks_batch_push({"task_ids": [t.id for t in rows[:50]]}, db, "anonymous"))
+        pushed = r.get("pushed", 0)
+        skipped = r.get("skipped", 0)
+        _bg_job_record("batch_push", "done", f"已推送 {pushed} 部，跳过 {skipped} 部")
+        return {"ok": True, "message": f"已推送 {pushed} 部下载（{skipped} 部无磁力或失败跳过）"}
+    except Exception as e:
+        _bg_job_record("batch_push", "failed", f"{type(e).__name__}: {e}")
+        return {"ok": False, "message": f"批量推送失败：{e}"}
 
 
 def _new_releases_list(db, args):
