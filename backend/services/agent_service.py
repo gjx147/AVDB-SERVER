@@ -39,6 +39,18 @@ def _bg_submit(key: str, fn) -> bool:
 
     _bg_executor.submit(_wrapper)
     return True
+
+
+# 单演员爬取任务状态（actor_id → 状态，供 fill_works_status 查询；上限 50 清理）
+_actor_jobs: dict[int, dict] = {}
+_ACTOR_JOBS_MAX = 50
+
+
+def _actor_job_record(actor_id: int, status: str, message: str) -> None:
+    from datetime import datetime as _dt
+    _actor_jobs[actor_id] = {"status": status, "message": message[:200], "at": _dt.now().strftime("%H:%M")}
+    if len(_actor_jobs) > _ACTOR_JOBS_MAX:
+        _actor_jobs.clear()
 from models import Task, Subscription, Setting, Rule
 
 # ---------- 确认 token（无状态 HMAC 签名，10 分钟过期，多 worker 兼容） ----------
@@ -608,9 +620,17 @@ def _actor_crawl_works(db, args):
         from services.new_works_monitor import check_actor_new_works
         import asyncio as _aio
         def _run():
-            _aio.run(check_actor_new_works(actor_id, auto_add=False))
-        _bg_submit(f"crawl_works:{actor_id}", _run)
-        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（后台进行）"}
+            try:
+                result = _aio.run(check_actor_new_works(actor_id, auto_add=False))
+                msg = str(result.get("message", "")) if isinstance(result, dict) else str(result)
+                _actor_job_record(actor_id, "done", msg or "完成")
+            except Exception as e:
+                _actor_job_record(actor_id, "failed", f"{type(e).__name__}: {e}")
+        submitted = _bg_submit(f"crawl_works:{actor_id}", _run)
+        if not submitted:
+            return {"ok": True, "message": f"{actor.name} 的爬取任务已在运行中，可对话「进度」查看"}
+        _actor_job_record(actor_id, "running", "已提交，等待执行")
+        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（后台进行，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -995,13 +1015,20 @@ def _crawl_control(db, args):
 
 
 def _fill_works_status(db, args):
-    """补齐作品进度。"""
+    """补齐作品进度：全部补齐队列 + 最近单演员爬取任务状态。"""
     from services import actor_works_batch
     try:
         st = actor_works_batch.status()
-        return {"ok": True, "status": st}
     except Exception as e:
-        return {"ok": False, "message": f"查询失败：{e}"}
+        st = {"error": str(e)}
+    # 合并单演员任务（倒序最近 5 条）
+    actor_jobs = []
+    for aid, j in sorted(_actor_jobs.items(), key=lambda x: x[1].get("at", ""), reverse=True)[:5]:
+        from models import Actor
+        a = db.get(Actor, aid)
+        actor_jobs.append({"actor_id": aid, "name": a.name if a else str(aid),
+                           "status": j.get("status"), "message": j.get("message"), "at": j.get("at")})
+    return {"ok": True, "status": st, "actor_jobs": actor_jobs}
 
 
 def _recommendations(db, args):
@@ -1943,7 +1970,14 @@ def _result_to_text(tool_name: str, result: dict) -> str:
             f"- {it['video_code']}{' ' + str(it['rating']) if it.get('rating') else ''} {it.get('title') or ''}" for it in items[:8])
     if tool_name == "fill_works_status":
         st = result.get("status", {})
-        return f"补齐进度：{st}"
+        lines = [f"全部补齐：{st}"]
+        jobs = result.get("actor_jobs", [])
+        if jobs:
+            lines.append("\n单演员任务：")
+            for j in jobs:
+                icon = {"running": "⏳", "done": "✅", "failed": "❌"}.get(j.get("status"), "•")
+                lines.append(f"- {icon} {j.get('name')}（{j.get('status')} {j.get('at', '')}）：{j.get('message', '')[:60]}")
+        return "\n".join(lines)
     if tool_name == "crawl_status":
         return f"爬虫{'运行中' if result.get('running') else '空闲'}" + (f"（{result.get('owner')}）" if result.get('owner') else "")
     if tool_name in ("favorites_list", "collection_tasks", "wishlist_gaps"):
