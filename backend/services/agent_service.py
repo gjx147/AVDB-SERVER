@@ -651,14 +651,19 @@ def _tag_translate_apply(db, args):
 
 
 def _fill_works(db, args):
-    """全部补齐作品（后台任务）。"""
+    """全部补齐作品（后台任务）。force=true 重补全部订阅演员（含已补齐的）。"""
     try:
         from services import actor_works_batch
         wait = min(int(args.get("wait_limit_min") or 60), 600)
-        ok, msg = actor_works_batch.start(wait_limit_min=wait, max_co_star=int(args.get("max_co_star") or 0))
+        force = bool(args.get("force"))
+        ok, msg = actor_works_batch.start(wait_limit_min=wait,
+                                          max_co_star=int(args.get("max_co_star") or 0),
+                                          force=force)
         if not ok:
             return {"ok": False, "message": msg}
-        return {"ok": True, "message": f"已启动全部补齐作品：{msg}"}
+        scope = "重补全部订阅演员" if force else "未补齐的订阅演员"
+        log_hint = "，日志见 data/actor_works_batch.log"
+        return {"ok": True, "message": f"已启动全部补齐作品（范围：{scope}）：{msg}{log_hint}"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -1752,8 +1757,10 @@ TOOLS = [
      "desc": "应用标签中英映射（把英文标签替换为中文）",
      "args": {"mapping": "英文→中文映射对象"}, "handler": _tag_translate_apply},
     {"name": "fill_works", "cn": "全部补齐作品", "is_write": True,
-     "desc": "启动全部补齐作品后台任务（爬取所有订阅演员的作品）",
-     "args": {"wait_limit_min": "等待上限分钟（可选）"}, "handler": _fill_works},
+     "desc": "启动全部补齐作品后台任务（默认只爬未补齐的演员；force=true 重补全部订阅演员）；独立日志 data/actor_works_batch.log",
+     "args": {"wait_limit_min": "等待上限分钟（可选）", "max_co_star": "最大共演数（可选）",
+              "force": "true=重补全部（含已补齐的）"},
+     "handler": _fill_works},
     {"name": "actor_crawl_works", "cn": "爬取演员作品", "is_write": True,
      "desc": "爬取指定演员的全部作品（后台进行）",
      "args": {"actor_id": "演员 ID"}, "handler": _actor_crawl_works},
@@ -2174,6 +2181,9 @@ def _result_to_text(tool_name: str, result: dict) -> str:
         lines = [f"- {k} → {v}" for k, v in list(mp.items())[:15]]
         more = f"…共 {len(mp)} 个映射" if len(mp) > 15 else ""
         return "标签翻译映射（说「应用标签翻译」确认执行）：\n" + "\n".join(lines) + (f"\n{more}" if more else "")
+    if tool_name == "fill_works":
+        text = f"{result}"
+        return text.replace("已启动", "已启动（日志见 data/actor_works_batch.log）")
     if tool_name in ("collection_list", "download_list", "notify_list"):
         items = result.get("items", [])
         if not items:

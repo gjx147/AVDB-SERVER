@@ -15,6 +15,12 @@ from typing import Optional
 
 logger = logging.getLogger("avdb.actor_works_batch")
 
+# 独立日志文件：data/actor_works_batch.log（与 app.log 分开，便于查看补齐过程）
+_log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "actor_works_batch.log")
+_file_handler = logging.FileHandler(_log_path, encoding="utf-8")
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+logger.addHandler(_file_handler)
+
 _state = {
     "running": False,
     "total": 0,
@@ -39,8 +45,12 @@ def status() -> dict:
         return dict(_state)
 
 
-def start(wait_limit_min: int = 60, max_co_star: int = 0) -> tuple[bool, str]:
-    """启动后台任务。已在运行返回 (False, 原因)。"""
+def start(wait_limit_min: int = 60, max_co_star: int = 0, force: bool = False) -> tuple[bool, str]:
+    """启动后台任务。已在运行返回 (False, 原因)。
+
+    force=False：增量——跳过已标记 works_fetched 的演员（默认）
+    force=True：重补全部订阅演员（不排除已补齐的）
+    """
     global _thread
     with _lock:
         if _state["running"]:
@@ -52,8 +62,10 @@ def start(wait_limit_min: int = 60, max_co_star: int = 0) -> tuple[bool, str]:
             "done": 0, "skipped": 0, "failed": 0, "marked_skipped": 0,
             "wait_limit_min": max(1, min(2880, int(wait_limit_min or 60))),
             "max_co_star": max(0, int(max_co_star or 0)),
+            "force": bool(force),
             "last_summary": None,
         })
+    logger.info("全部补齐作品启动: force=%s wait=%dmin", force, wait_limit_min)
     _thread = threading.Thread(target=_run, daemon=True)
     _thread.start()
     return True, "已启动"
@@ -86,16 +98,16 @@ def _run() -> None:
     from models import Actor, Subscription
     from routers.crawl import start_actor_crawl
 
+    run_force = bool(_state.get("force"))
     db = SessionLocal()
     try:
+        conds = [Subscription.sub_type == "actor", Subscription.actor_id.isnot(None)]
+        if not run_force:
+            conds.append(or_(Actor.works_fetched.is_(None), Actor.works_fetched == False))
         rows = db.execute(
             select(Subscription.actor_id, Subscription.name)
             .join(Actor, Actor.id == Subscription.actor_id)
-            .where(
-                Subscription.sub_type == "actor",
-                Subscription.actor_id.isnot(None),
-                or_(Actor.works_fetched.is_(None), Actor.works_fetched == False),  # noqa: E712
-            )
+            .where(*conds)
         ).all()
         # 已补齐标记的演员计数（跳过并计入总结）
         marked = db.execute(
