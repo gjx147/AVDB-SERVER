@@ -638,6 +638,7 @@ def _actor_crawl_works(db, args):
         from services.new_works_monitor import check_actor_new_works
         import asyncio as _aio
         def _run():
+            _actor_job_record(actor_id, "running", "爬虫执行中（爬取+检测需数分钟，完成后自动更新）")
             try:
                 result = _aio.run(check_actor_new_works(actor_id, auto_add=False))
                 if isinstance(result, dict):
@@ -651,10 +652,11 @@ def _actor_crawl_works(db, args):
                 _actor_job_record(actor_id, "done", msg[:200])
             except Exception as e:
                 _actor_job_record(actor_id, "failed", f"{type(e).__name__}: {e}")
+        # 提交前先记录排队态（避免主线程后写覆盖工作线程的"执行中"）
+        _actor_job_record(actor_id, "running", "排队中，等待调度")
         submitted = _bg_submit(f"crawl_works:{actor_id}", _run)
         if not submitted:
             return {"ok": True, "message": f"{actor.name} 的爬取任务已在运行中，可对话「进度」查看"}
-        _actor_job_record(actor_id, "running", "已提交，等待执行")
         mode = "（按名搜索源站）" if not has_url else ""
         return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品{mode}（后台进行，可对话「进度」查看）"}
     except Exception as e:
@@ -772,6 +774,7 @@ def _push_download(db, args):
         import asyncio as _aio
         from services.download_strategy import push_with_strategy
         def _run():
+            _bg_job_record(f"push:{t.id}", "running", "推送执行中")
             try:
                 r = _aio.run(push_with_strategy(t.id))
                 if isinstance(r, dict):
@@ -783,8 +786,8 @@ def _push_download(db, args):
                     _bg_job_record(f"push:{t.id}", "done", str(r))
             except Exception as e:
                 _bg_job_record(f"push:{t.id}", "failed", f"{type(e).__name__}: {e}")
+        _bg_job_record(f"push:{t.id}", "running", "排队中，等待调度")
         _bg_submit(f"push:{t.id}", _run)
-        _bg_job_record(f"push:{t.id}", "running", "已提交，等待执行")
         return {"ok": True, "message": f"已推送 {t.video_code} 下载（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"推送失败：{e}"}
@@ -855,13 +858,14 @@ def _new_release_check_all(db, args):
         import asyncio as _aio
         from routers.new_releases import check_all_now
         def _run():
+            _bg_job_record("check_all", "running", "全量检查执行中")
             try:
                 r = _aio.run(check_all_now(db, "anonymous"))
                 _bg_job_record("check_all", "done", str(r)[:200])
             except Exception as e:
                 _bg_job_record("check_all", "failed", f"{type(e).__name__}: {e}")
+        _bg_job_record("check_all", "running", "排队中，等待调度")
         _bg_submit("check_all", _run)
-        _bg_job_record("check_all", "running", "已提交，等待执行")
         return {"ok": True, "message": "已开始全量检查新作（后台进行，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1202,6 +1206,7 @@ def _actor_refresh_profile(db, args):
     try:
         from routers.actors import refresh_actor_profile
         def _run():
+            _bg_job_record(f"refresh_profile:{aid}", "running", "资料刷新执行中")
             from database import SessionLocal
             ndb = SessionLocal()
             try:
@@ -1212,8 +1217,8 @@ def _actor_refresh_profile(db, args):
                 _bg_job_record(f"refresh_profile:{aid}", "failed", f"{type(e).__name__}: {e}")
             finally:
                 ndb.close()
+        _bg_job_record(f"refresh_profile:{aid}", "running", "排队中，等待调度")
         _bg_submit(f"refresh_profile:{aid}", _run)
-        _bg_job_record(f"refresh_profile:{aid}", "running", "已提交，等待执行")
         return {"ok": True, "message": f"已开始刷新 {a.name} 的资料（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1281,13 +1286,14 @@ def _media_sync(db, args):
         import asyncio as _aio
         force = bool(args.get("force"))
         def _run():
+            _bg_job_record("media_sync", "running", "媒体同步执行中")
             try:
                 r = _aio.run(sync("anonymous", limit=200, force=force))
                 _bg_job_record("media_sync", "done", str(r)[:200])
             except Exception as e:
                 _bg_job_record("media_sync", "failed", f"{type(e).__name__}: {e}")
+        _bg_job_record("media_sync", "running", "排队中，等待调度")
         _bg_submit("media_sync", _run)
-        _bg_job_record("media_sync", "running", "已提交，等待执行")
         return {"ok": True, "message": "媒体服务器同步已开始（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
@@ -1307,13 +1313,14 @@ def _organize_run(db, args):
         from routers.organize import run_all
         import asyncio as _aio
         def _run():
+            _bg_job_record("organize_run", "running", "整理执行中")
             try:
                 r = _aio.run(run_all("anonymous"))
                 _bg_job_record("organize_run", "done", str(r)[:200])
             except Exception as e:
                 _bg_job_record("organize_run", "failed", f"{type(e).__name__}: {e}")
+        _bg_job_record("organize_run", "running", "排队中，等待调度")
         _bg_submit("organize_run", _run)
-        _bg_job_record("organize_run", "running", "已提交，等待执行")
         return {"ok": True, "message": "整理任务已开始（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
