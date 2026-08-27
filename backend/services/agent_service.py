@@ -53,6 +53,53 @@ def _actor_job_record(actor_id: int, status: str, message: str) -> None:
         _actor_jobs.clear()
 
 
+def _scraper_log_tail(max_lines: int = 15) -> list[str]:
+    """读 scraper_stderr.log 尾部关键行（INFO/ERROR + 关键 DEBUG），供进度查询展示。"""
+    try:
+        from pathlib import Path
+        from config import get_settings
+        log_path = Path(get_settings().DATA_DIR) / "scraper_stderr.log"
+        if not log_path.exists():
+            return []
+        raw = log_path.read_bytes()
+        text = None
+        for enc in ("utf-8", "gbk"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            text = raw.decode("utf-8", errors="replace")
+        lines = text.strip().split("\n")
+        # 筛选：保留 INFO/ERROR 全部；DEBUG 仅保留含关键词的行
+        keep_debug_kw = ("保存到数据库", "页面标题", "任务进度", "从数据库获取")
+        picked = []
+        for ln in lines:
+            ln = ln.strip()
+            if not ln:
+                continue
+            if "[INFO]" in ln or "[ERROR]" in ln or "[WARNING]" in ln:
+                picked.append(ln)
+            elif "[DEBUG]" in ln and any(k in ln for k in keep_debug_kw):
+                picked.append(ln)
+        # 页面标题行截断（标题太长）
+        out = []
+        for ln in picked[-max_lines * 3:]:  # 多取一些再截断标题
+            if "页面标题:" in ln:
+                head, _, title = ln.partition("页面标题:")
+                title = title.strip()
+                if len(title) > 50:
+                    title = title[:50] + "…"
+                ln = head + "页面标题: " + title
+            if len(ln) > 160:
+                ln = ln[:160] + "…"
+            out.append(ln)
+        return out[-max_lines:]
+    except Exception:
+        return []
+
+
 # 通用后台任务状态（推送/新作检查/资料刷新/媒体同步/整理等）
 _bg_jobs: dict[str, dict] = {}
 _BG_JOBS_MAX = 50
@@ -1066,7 +1113,8 @@ def _fill_works_status(db, args):
         a = db.get(Actor, aid)
         actor_jobs.append({"actor_id": aid, "name": a.name if a else str(aid),
                            "status": j.get("status"), "message": j.get("message"), "at": j.get("at")})
-    return {"ok": True, "status": st, "actor_jobs": actor_jobs, "bg_jobs": bg_jobs}
+    return {"ok": True, "status": st, "actor_jobs": actor_jobs, "bg_jobs": bg_jobs,
+            "scraper_log": _scraper_log_tail()}
 
 
 def _recommendations(db, args):
@@ -2028,13 +2076,20 @@ def _result_to_text(tool_name: str, result: dict) -> str:
             f"- {it['video_code']}{' ' + str(it['rating']) if it.get('rating') else ''} {it.get('title') or ''}" for it in items[:8])
     if tool_name == "fill_works_status":
         st = result.get("status", {})
-        lines = [f"全部补齐：{st}"]
+        # 精简全部补齐状态（去掉 None 字段噪音）
+        keys = ("running", "total", "idx", "current_name", "done", "skipped", "failed", "last_summary")
+        brief = {k: v for k, v in st.items() if k in keys and v not in (None, "")}
+        lines = [f"全部补齐：{brief}"]
         bj = result.get("bg_jobs", [])
         if bj:
             lines.append("\n后台任务：")
             for j in bj:
                 icon = {"running": "⏳", "done": "✅", "failed": "❌"}.get(j.get("status"), "•")
                 lines.append(f"- {icon} {j.get('key')}（{j.get('status')} {j.get('at', '')}）：{j.get('message', '')[:60]}")
+        sl = result.get("scraper_log") or []
+        if sl:
+            lines.append("\n爬虫日志（最近关键行）：")
+            lines.extend(sl)
         jobs = result.get("actor_jobs", [])
         if jobs:
             lines.append("\n单演员任务：")
