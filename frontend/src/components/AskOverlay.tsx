@@ -52,6 +52,27 @@ export function AskOverlay() {
   const [sessions, setSessions] = useState<{ id: number; title: string }[]>([])
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [showSessions, setShowSessions] = useState(false)
+  const [liveMsgIdx, setLiveMsgIdx] = useState<number | null>(null)  // 实时刷新的消息下标
+  const [liveData, setLiveData] = useState<{ running: boolean; log: string[]; pid?: number } | null>(null)
+  const liveTimer = useRef<number | null>(null)
+
+  // 实时进度轮询：liveMsgIdx 非空时每 6s 刷新；爬虫空闲或组件卸载时停止
+  useEffect(() => {
+    if (liveMsgIdx === null) { setLiveData(null); return }
+    let alive = true
+    const tick = async () => {
+      try {
+        const r = await api.progressLite()
+        if (!alive) return
+        setLiveData({ running: r.running, log: r.log || [], pid: r.pid })
+        if (!r.running) { setLiveMsgIdx(null) }  // 爬虫结束，停止轮询
+      } catch { /* 忽略单次失败 */ }
+    }
+    tick()
+    liveTimer.current = window.setInterval(tick, 6000)
+    return () => { alive = false; if (liveTimer.current) window.clearInterval(liveTimer.current) }
+  }, [liveMsgIdx])
+  useEffect(() => () => { if (liveTimer.current) window.clearInterval(liveTimer.current) }, [])
   const recRef = useRef<{ stop: () => void } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
@@ -135,8 +156,13 @@ export function AskOverlay() {
           confirm: { token: r.token || '', tool: r.tool || '', tool_cn: r.tool_cn || r.tool || '', args: r.args || {}, preview: r.preview || '', reason: r.reason },
         }])
       } else {
-        setMsgs((p) => [...p, { role: 'assistant', content: r.content || '', items: (r.items || []) as AskItem[], steps: (r.steps as StepInfo[] | undefined) }])
+        const contentText = r.content || ''
+        setMsgs((p) => [...p, { role: 'assistant', content: contentText, items: (r.items || []) as AskItem[], steps: (r.steps as StepInfo[] | undefined) }])
         setTyping(true)
+        // 检测爬虫相关回复 → 开启实时进度
+        if (/爬虫运行中|PID \d+|后台进行|执行中/.test(contentText)) {
+          setTimeout(() => setLiveMsgIdx(msgs.length + 1), 100)  // 新消息下标
+        }
       }
     } catch (e) {
       setMsgs((p) => [...p, { role: 'assistant', content: `出错：${String((e as Error).message)}` }])
@@ -191,7 +217,7 @@ export function AskOverlay() {
         <span style={{ fontWeight: 700, fontSize: 13 }}>库内 AI 助手</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn--ghost btn--sm" onClick={() => { loadSessions(); setShowSessions(!showSessions) }} title="会话列表">☰</button>
-          {msgs.length > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setMsgs([])}>清空</button>}
+          {msgs.length > 0 && <button className="btn btn--ghost btn--sm" onClick={() => { setMsgs([]); setLiveMsgIdx(null) }}>清空</button>}
           <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="关闭">✕</button>
         </div>
       </div>
@@ -226,6 +252,30 @@ export function AskOverlay() {
         )}
         {msgs.map((m, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            {i === liveMsgIdx && liveData && (
+              <div style={{ maxWidth: '88%', marginBottom: 6, borderRadius: 10, padding: '8px 11px', fontSize: 11,
+                background: 'var(--bg-raised, #f3f4f6)', fontFamily: 'var(--ff-mono, monospace)', lineHeight: 1.7 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, color: liveData.running ? 'var(--gold, #d97706)' : 'var(--green, #16a34a)' }}>
+                    {liveData.running ? `⏳ 爬虫运行中${liveData.pid ? `（PID ${liveData.pid}）` : ''}` : '✅ 爬虫已结束'}
+                  </span>
+                  <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }}
+                    onClick={() => setLiveMsgIdx(null)}>停止刷新</button>
+                </div>
+                {liveData.log.length === 0 && <div style={{ color: 'var(--t-mute)' }}>暂无日志（每 6 秒自动刷新）</div>}
+                {liveData.log.map((ln, li) => (
+                  <div key={li} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    color: ln.includes('[ERROR]') ? 'var(--red, #dc2626)' : 'var(--t-body)' }}>{ln}</div>
+                ))}
+                <div style={{ color: 'var(--t-faint, #999)', marginTop: 4, fontSize: 10 }}>每 6 秒自动刷新{liveData.running ? '' : '，已停止'}</div>
+              </div>
+            )}
+            {i === liveMsgIdx && liveData && liveData.running && (
+              <div style={{ fontSize: 10, color: 'var(--t-faint, #999)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: 'var(--gold, #d97706)', display: 'inline-block', animation: 'pulse 1.2s infinite' }} />
+                实时日志
+              </div>
+            )}
             {m.steps && m.steps.length > 1 && (
               <div style={{ maxWidth: '88%', marginBottom: 4, fontSize: 10, color: 'var(--t-faint, #999)', display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                 {m.steps.map((st, si) => (

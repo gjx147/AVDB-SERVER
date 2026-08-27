@@ -484,6 +484,9 @@ export const api = {
   aiUsage: (days = 7) =>
     http.get<{ ok: boolean; days: number; total: { calls: number; prompt_tokens: number; completion_tokens: number; cache_hits: number; cache_rate: number; est_cost: number }; daily: { date: string; calls: number; prompt_tokens: number; completion_tokens: number; avg_ms: number; cache_hits: number }[]; by_type: { task_type: string; calls: number; prompt_tokens: number; completion_tokens: number }[] }>(
       `/api/ai/usage?days=${days}`).then((r) => r.data),
+  progressLite: () =>
+    http.get<{ ok: boolean; running: boolean; pid?: number; mode?: string; log: string[] }>(
+      '/api/ai/progress-lite').then((r) => r.data),
   agentConfirm: (token: string) =>
     http.post<{ ok: boolean; result?: { ok: boolean; message?: string } }>(
       '/api/ai/agent/confirm', { token }).then((r) => r.data),

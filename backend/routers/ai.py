@@ -478,6 +478,20 @@ def tag_translate_apply_endpoint(req: TagTranslateApplyRequest, _user: Annotated
     return result
 
 
+@router.get("/progress-lite")
+def progress_lite(_user: CurrentUser):
+    """轻量进度查询（不走 LLM）：爬虫状态 + 日志尾部，供前端实时刷新。"""
+    from services.agent_service import _scraper_log_tail
+    try:
+        from services.scraper_lock import is_running, get_info
+        info = get_info() or {}
+        return {"ok": True, "running": is_running(),
+                "pid": info.get("pid"), "mode": info.get("mode"),
+                "log": _scraper_log_tail() if is_running() else []}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 @router.post("/ask")
 async def ai_ask(req: AskRequest, db: DbSession, _user: CurrentUser):
     RateLimitedUser(_user)
