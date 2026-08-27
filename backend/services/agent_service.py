@@ -690,6 +690,44 @@ def _actor_crawl_works(db, args):
         r = start_actor_crawl(url, actor_id=actor.id)
         pid = r.get("pid") if isinstance(r, dict) else None
         _actor_job_record(actor_id, "running", f"爬虫子进程已启动（PID {pid}），日志见 scraper_stderr.log")
+
+        # 后台监视：子进程结束后自动跑新作入库
+        def _watch_and_ingest():
+            import time as _t2
+            from services import scraper_lock as _sl2
+            _deadline2 = _t2.time() + 1800
+            while _t2.time() < _deadline2:
+                try:
+                    info2 = _sl2.get_info() or {}
+                    if info2.get("pid") != pid:
+                        break  # 子进程已结束或被替换
+                except Exception:
+                    break
+                _t2.sleep(10)
+            try:
+                import asyncio as _aio3
+                from database import SessionLocal as _SL3
+                from services.new_works_monitor import check_actor_new_works as _ck3
+                ndb = _SL3()
+                try:
+                    _actor_job_record(actor_id, "running", "爬取完成，正在对比入库新作…")
+                    res = _aio3.run(_ck3(actor_id, auto_add=False, skip_crawl=True))
+                    if isinstance(res, dict):
+                        if res.get("error"):
+                            _actor_job_record(actor_id, "failed", str(res["error"])[:200])
+                        else:
+                            added = res.get("added", res.get("new_count", 0))
+                            _actor_job_record(actor_id, "done", f"补齐完成，新增 {added} 部新作记录")
+                    else:
+                        _actor_job_record(actor_id, "done", "补齐完成")
+                finally:
+                    ndb.close()
+            except Exception as e:
+                _actor_job_record(actor_id, "failed", f"新作入库失败: {type(e).__name__}: {e}")
+
+        from threading import Thread as _T2
+        _T2(target=_watch_and_ingest, daemon=True).start()
+
         return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（爬虫 PID {pid}，可在爬虫日志 scraper_stderr.log 或对话「进度」查看）"}
     except Exception as e:
         msg = str(e)

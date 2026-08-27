@@ -216,7 +216,7 @@ async def _get_actor_works_from_db(db, actor_id: int) -> list[dict]:
 
 
 async def check_actor_new_works(actor_id: int, subscription_id: int | None = None,
-                                 auto_add: bool = False) -> dict:
+                                 auto_add: bool = False, skip_crawl: bool = False) -> dict:
     """检测某演员的新作品。返回摘要。
 
     流程：抓 javdb → 去重 → 写 new_releases → Emby 比对 → 通知 → 可选自动下载。
@@ -242,10 +242,13 @@ async def check_actor_new_works(actor_id: int, subscription_id: int | None = Non
             if note.startswith("source_url: "):
                 actor_url = note.split(":", 1)[1].strip()
 
-        logger.info(f"[新作监控] {actor.name} 触发 scraper crawl-actor ({actor_url or '按名字搜索'})")
-        ok = await _trigger_crawl_actor(actor.name, actor_url, actor_id=actor_id)
-        if not ok:
-            return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
+        if skip_crawl:
+            logger.info(f"[新作监控] {actor.name} 跳过爬取（刚补齐过），直接对比入库")
+        else:
+            logger.info(f"[新作监控] {actor.name} 触发 scraper crawl-actor ({actor_url or '按名字搜索'})")
+            ok = await _trigger_crawl_actor(actor.name, actor_url, actor_id=actor_id)
+            if not ok:
+                return {"type": "actor", "actor_id": actor_id, "error": "scraper crawl-actor 失败或被占用"}
 
         # crawl-actor 完成后，提交当前事务以获取新快照：scraper 子进程在 WAL 下提交的
         # 新 actor_movies 对本会话不可见（快照隔离），仅 expire_all 不够，必须结束事务重开。
