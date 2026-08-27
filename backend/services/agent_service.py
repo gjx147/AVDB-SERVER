@@ -626,41 +626,30 @@ def _actor_crawl_works(db, args):
     url = actor.source_url or ""
     if not url and actor.note and actor.note.startswith("source_url: "):
         url = actor.note[len("source_url: "):]
-    has_url = bool(url)
-    # 锁忙时明确告知（底层会静默跳过，这里提前拦截让用户知道没启动）
+    if not url:
+        return {"ok": False, "message": f"演员 {actor.name} 无来源 URL，请先在演员详情页通过 JavDB 链接添加（与手动补齐按钮要求一致）"}
+    has_url = True
+    # 锁忙时明确告知（与手动按钮一致的 409 语义）
     try:
         from services import scraper_lock
         if scraper_lock.is_running():
             return {"ok": False, "message": f"{actor.name} 的补齐未启动：爬虫正忙（有其他爬取任务在运行），请稍后重试或查看爬虫状态"}
     except Exception:
         pass
+    # 与演员详情页「补齐作品」按钮完全同一路径：start_actor_crawl
+    # （立即启动爬虫子进程，日志进 scraper_stderr.log，全程爬取演员作品）
     try:
-        from services.new_works_monitor import check_actor_new_works
-        import asyncio as _aio
-        def _run():
-            _actor_job_record(actor_id, "running", "爬虫执行中（爬取+检测需数分钟，完成后自动更新）")
-            try:
-                result = _aio.run(check_actor_new_works(actor_id, auto_add=False))
-                if isinstance(result, dict):
-                    # 底层返回 error（如 scraper 忙/失败）必须如实记录，不能当成功
-                    if result.get("error"):
-                        _actor_job_record(actor_id, "failed", str(result["error"])[:200])
-                        return
-                    msg = result.get("message", "") or result.get("summary", "") or "完成"
-                else:
-                    msg = str(result)
-                _actor_job_record(actor_id, "done", msg[:200])
-            except Exception as e:
-                _actor_job_record(actor_id, "failed", f"{type(e).__name__}: {e}")
-        # 提交前先记录排队态（避免主线程后写覆盖工作线程的"执行中"）
-        _actor_job_record(actor_id, "running", "排队中，等待调度")
-        submitted = _bg_submit(f"crawl_works:{actor_id}", _run)
-        if not submitted:
-            return {"ok": True, "message": f"{actor.name} 的爬取任务已在运行中，可对话「进度」查看"}
-        mode = "（按名搜索源站）" if not has_url else ""
-        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品{mode}（后台进行，可对话「进度」查看）"}
+        from routers.crawl import start_actor_crawl
+        r = start_actor_crawl(url, actor_id=actor.id)
+        pid = r.get("pid") if isinstance(r, dict) else None
+        _actor_job_record(actor_id, "running", f"爬虫子进程已启动（PID {pid}），日志见 scraper_stderr.log")
+        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（爬虫 PID {pid}，可在爬虫日志 scraper_stderr.log 或对话「进度」查看）"}
     except Exception as e:
-        return {"ok": False, "message": f"启动失败：{e}"}
+        msg = str(e)
+        if "409" in msg or "已有爬取任务" in msg:
+            return {"ok": False, "message": f"{actor.name} 的补齐未启动：爬虫正忙，请稍后重试"}
+        _actor_job_record(actor_id, "failed", f"{type(e).__name__}: {msg[:150]}")
+        return {"ok": False, "message": f"启动失败：{msg[:150]}"}
 
 
 def _collection_list(db, args):
