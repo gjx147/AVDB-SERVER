@@ -265,6 +265,7 @@ export interface Settings {
   emby_token: string
   emby_library_id: string
   emby_auto_sync: string
+  emby_auto_full_sync: string
   javdb_url: string
   // 通知配置（F3）
   notify_bark_key?: string

@@ -378,6 +378,10 @@ export const api = {
 
   // ════════ Media Server（Emby）════════
   mediaServer: {
+    fullSync: () => http.post<{ ok: boolean; message: string }>('/api/media-server/full-sync').then((r) => r.data),
+    fullSyncStatus: () => http.get<{ ok: boolean; running: boolean; total: number; done: number; checked: number; in_library: number; failed: number }>(
+      '/api/media-server/full-sync-status').then((r) => r.data),
+
     check: (videoCode: string) =>
       http.get<{ video_code: string; in_library: boolean }>(`/api/media-server/check/${videoCode}`).then((r) => r.data),
     test: () =>

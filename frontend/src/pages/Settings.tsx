@@ -608,10 +608,14 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
   const [autoSync, setAutoSync] = useState(false)
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [fullSyncing, setFullSyncing] = useState(false)
+  const [fullProg, setFullProg] = useState<{ total: number; done: number; checked: number; in_library: number } | null>(null)
+  const [autoFullSync, setAutoFullSync] = useState(true)
 
   useEffect(() => {
     api.settings.get().then((s) => {
       setEmbyUrl(s.emby_url || '')
+      setAutoFullSync(s.emby_auto_full_sync !== 'false')
       setEmbyToken(s.emby_token && s.emby_token !== '***' ? s.emby_token : '')
       setEmbyLibraryId(s.emby_library_id || '')
       setAutoSync(s.emby_auto_sync === 'true')
@@ -625,6 +629,7 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
         emby_token: embyToken || '***',
         emby_library_id: embyLibraryId,
         emby_auto_sync: autoSync ? 'true' : 'false',
+        emby_auto_full_sync: autoFullSync ? 'true' : 'false',
       })
       toastOk('媒体库配置已保存')
     } catch (e) { toastErr(String((e as Error).message)) }
@@ -646,6 +651,27 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
       toastOk(`同步完成：${r.checked} 部已核对，${r.in_library} 部在库${r.failed ? `，${r.failed} 部查询失败（保持原状态）` : ''}`)
     } catch (e) { toastErr(String((e as Error).message)) }
     finally { setSyncing(false) }
+  }
+  const fullSyncNow = async () => {
+    setFullSyncing(true)
+    setFullProg(null)
+    try {
+      await save()
+      const r = await api.mediaServer.fullSync()
+      if (!r.ok) { toastErr(r.message); setFullSyncing(false); return }
+      toastOk(r.message)
+      const timer = window.setInterval(async () => {
+        try {
+          const st = await api.mediaServer.fullSyncStatus()
+          setFullProg({ total: st.total, done: st.done, checked: st.checked, in_library: st.in_library })
+          if (!st.running) {
+            window.clearInterval(timer)
+            setFullSyncing(false)
+            toastOk(`全量对比完成：${st.checked} 部已核对，${st.in_library} 部在库${st.failed ? `，${st.failed} 部失败` : ''}`)
+          }
+        } catch { window.clearInterval(timer); setFullSyncing(false) }
+      }, 3000)
+    } catch (e) { toastErr(String((e as Error).message)); setFullSyncing(false) }
   }
 
   return (
@@ -670,12 +696,20 @@ function MediaTab({ toastOk, toastErr }: { toastOk: (m: string) => void; toastEr
           <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />
           每日自动同步在库状态
         </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
+          <input type="checkbox" checked={autoFullSync} onChange={(e) => setAutoFullSync(e.target.checked)} /> 每周日 3:00 自动全量对比
+        </label>
         <div className="hint">开启后每天增量核对一次番号是否在库（失败不覆盖已有状态）</div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="btn btn--gold" onClick={save}>保存</button>
         <button className="btn btn--ghost" onClick={test} disabled={testing}>{testing ? '测试中…' : '保存并测试连接'}</button>
-        <button className="btn btn--ghost" onClick={syncNow} disabled={syncing}>{syncing ? '同步中…' : '立即同步'}</button>
+        <button className="btn btn--ghost" onClick={syncNow} disabled={syncing || fullSyncing}>{syncing ? '同步中…' : '立即同步'}</button>
+        <button className="btn btn--gold" onClick={fullSyncNow} disabled={fullSyncing || syncing}>
+          {fullSyncing
+            ? (fullProg && fullProg.total ? `全量对比中 ${fullProg.done}/${fullProg.total} · 核对 ${fullProg.checked} · 在库 ${fullProg.in_library}` : '全量对比启动中…')
+            : '全量对比'}
+        </button>
       </div>
     </div>
   )

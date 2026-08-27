@@ -364,3 +364,78 @@ async def audit_library() -> dict:
         }
     finally:
         db.close()
+
+
+# ---------- 全量媒体库对比（手动/定时触发，后台分批执行） ----------
+_full_sync_state: dict = {"running": False, "total": 0, "done": 0, "checked": 0,
+                          "in_library": 0, "failed": 0, "started_at": None, "finished_at": None}
+
+
+def full_sync_status() -> dict:
+    """全量对比进度（供轮询/定时任务查询）。"""
+    return dict(_full_sync_state)
+
+
+async def full_sync_library(force: bool = True) -> dict:
+    """全量对比：分批游标扫描全部有番号任务，逐批查询 Emby。
+
+    与 sync_library_status 的差异：不受 limit 限制、强制全量（忽略缓存）。
+    返回 {total, checked, in_library, failed}；全程更新 _full_sync_state。
+    """
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        total = db.execute(
+            select(func.count()).where(Task.video_code.isnot(None))
+        ).scalar() or 0
+        _full_sync_state.update({"running": True, "total": total, "done": 0,
+                                 "checked": 0, "in_library": 0, "failed": 0,
+                                 "started_at": str(datetime.utcnow()), "finished_at": None})
+        cursor = None
+        checked = in_lib = failed = done = 0
+        while True:
+            stmt = select(Task).where(Task.video_code.isnot(None))
+            if cursor is not None:
+                stmt = stmt.where(Task.id < cursor)
+            tasks = db.execute(stmt.order_by(Task.id.desc()).limit(200)).scalars().all()
+            if not tasks:
+                break
+            cursor = tasks[-1].id
+            codes = [t.video_code for t in tasks]
+            results = await _check_many(codes)
+            for t in tasks:
+                r = results.get(t.video_code)
+                if r is None:
+                    failed += 1
+                    continue
+                t.media_in_library = r
+                checked += 1
+                if r:
+                    in_lib += 1
+            db.commit()
+            done += len(tasks)
+            _full_sync_state.update({"done": done, "checked": checked,
+                                     "in_library": in_lib, "failed": failed})
+        _full_sync_state.update({"running": False, "finished_at": str(datetime.utcnow())})
+        return {"ok": True, "total": total, "checked": checked, "in_library": in_lib, "failed": failed}
+    finally:
+        db.close()
+        _full_sync_state["running"] = False
+
+
+def start_full_sync() -> bool:
+    """后台线程启动全量对比；已在运行则返回 False。"""
+    if _full_sync_state.get("running"):
+        return False
+    import threading
+    threading.Thread(target=_run_full_sync_thread, daemon=True).start()
+    return True
+
+
+def _run_full_sync_thread():
+    import asyncio
+    try:
+        asyncio.run(full_sync_library())
+    except Exception as e:
+        logger.error("全量媒体库对比失败: %s", e)
+        _full_sync_state.update({"running": False, "finished_at": str(datetime.utcnow())})

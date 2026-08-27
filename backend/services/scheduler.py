@@ -100,6 +100,22 @@ async def start_scheduler() -> None:
         from services.ai_reports import daily_recommend_job
         add_cron_job(daily_recommend_job, "daily-recommend", hour=9, minute=0)
 
+        # Emby 全量媒体库对比：每周日 3:00（设置 emby_auto_full_sync=false 可关）
+        from services.media_server import full_sync_library
+        async def _emby_full_sync_job():
+            from models import Setting
+            from database import SessionLocal as _SL4
+            db4 = _SL4()
+            try:
+                row = db4.get(Setting, "emby_auto_full_sync")
+                enabled = (row.value if row else "true") != "false"
+            finally:
+                db4.close()
+            if not enabled:
+                return {"ok": True, "message": "全量对比已关闭（emby_auto_full_sync=false）"}
+            return await full_sync_library()
+        add_cron_job(_emby_full_sync_job, "emby-full-sync-weekly", day_of_week="sun", hour=3, minute=0)
+
         # 数据保留清理：每周一 9:30（LLMCache 30 天/用量 90 天/会话 90 天/审计 180 天）
         from services.cleanup import cleanup_job
         add_cron_job(cleanup_job, "data-cleanup-weekly", day_of_week="mon", hour=9, minute=30)

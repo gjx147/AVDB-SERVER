@@ -16,6 +16,23 @@ async def check_code(video_code: str, _user: CurrentUser):
     return {"video_code": video_code, "in_library": await check_in_library(video_code)}
 
 
+@router.post("/full-sync")
+def full_sync(_user: CurrentUser):
+    """全量媒体库对比（后台分批执行，进度可查 /full-sync-status）。"""
+    from services.media_server import start_full_sync, full_sync_status
+    if not start_full_sync():
+        st = full_sync_status()
+        return {"ok": False, "message": f"全量对比已在运行中（{st.get('done', 0)}/{st.get('total', 0)}）"}
+    return {"ok": True, "message": "全量对比已启动（后台执行）"}
+
+
+@router.get("/full-sync-status")
+def full_sync_status_endpoint(_user: CurrentUser):
+    """全量对比进度查询。"""
+    from services.media_server import full_sync_status
+    return {"ok": True, **full_sync_status()}
+
+
 @router.post("/sync")
 async def sync(_user: CurrentUser, limit: int = Query(200, le=1000), force: bool = Query(False, description="全量同步（默认增量：只查缓存为空或过期的）")):
     """批量同步在库状态（并发；查询失败不污染缓存）。"""
