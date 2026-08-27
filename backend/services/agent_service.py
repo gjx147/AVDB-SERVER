@@ -615,14 +615,28 @@ def _actor_crawl_works(db, args):
     if not url and actor.note and actor.note.startswith("source_url: "):
         url = actor.note[len("source_url: "):]
     has_url = bool(url)
+    # 锁忙时明确告知（底层会静默跳过，这里提前拦截让用户知道没启动）
+    try:
+        from services import scraper_lock
+        if scraper_lock.is_running():
+            return {"ok": False, "message": f"{actor.name} 的补齐未启动：爬虫正忙（有其他爬取任务在运行），请稍后重试或查看爬虫状态"}
+    except Exception:
+        pass
     try:
         from services.new_works_monitor import check_actor_new_works
         import asyncio as _aio
         def _run():
             try:
                 result = _aio.run(check_actor_new_works(actor_id, auto_add=False))
-                msg = str(result.get("message", "")) if isinstance(result, dict) else str(result)
-                _actor_job_record(actor_id, "done", msg or "完成")
+                if isinstance(result, dict):
+                    # 底层返回 error（如 scraper 忙/失败）必须如实记录，不能当成功
+                    if result.get("error"):
+                        _actor_job_record(actor_id, "failed", str(result["error"])[:200])
+                        return
+                    msg = result.get("message", "") or result.get("summary", "") or "完成"
+                else:
+                    msg = str(result)
+                _actor_job_record(actor_id, "done", msg[:200])
             except Exception as e:
                 _actor_job_record(actor_id, "failed", f"{type(e).__name__}: {e}")
         submitted = _bg_submit(f"crawl_works:{actor_id}", _run)
