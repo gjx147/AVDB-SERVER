@@ -29,6 +29,8 @@ const EDIT_FIELDS: { key: string; label: string }[] = [
   { key: 'tags', label: '标签' },
 ]
 
+import { useNavMode } from '../i18n/whisper'
+
 export function ActorDetail() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -192,6 +194,7 @@ export function ActorDetail() {
     const v = parseInt(localStorage.getItem('maxCoStarLimit') ?? '', 10)
     return Number.isFinite(v) && v > 0 ? v : 0
   })
+  const nl = useNavMode()
   const setMaxCoStarVal = (v: number) => {
     const n = Math.max(0, Math.min(99, Math.round(v)))
     setMaxCoStar(n)
@@ -512,7 +515,7 @@ export function ActorDetail() {
       {actorReleases !== null && actorReleases.length > 0 && (
         <div className="detail-main" style={{ marginBottom: 28 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div className="dm-label">新作发现（{actorReleases.length}）</div>
+            <div className="dm-label">{nl("新作发现")}（{actorReleases.length}）</div>
             <button className="btn btn--ghost btn--sm" onClick={() => nav('/new-releases')}>订阅上新</button>
           </div>
           <div>

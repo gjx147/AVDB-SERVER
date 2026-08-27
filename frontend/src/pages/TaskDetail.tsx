@@ -7,13 +7,14 @@ import { Icon } from '../components/Icons'
 import { MetaItem } from '../components/MetaItem'
 import { Heartburst } from '../components/Heartburst'
 import { useStore } from '../store/useStore'
-import { useWhisper } from '../i18n/whisper'
+import { useWhisper, useNavMode } from '../i18n/whisper'
 import { audio } from '../audio/engine'
 
 export function TaskDetail() {
   const { id } = useParams()
   const nav = useNavigate()
   const w = useWhisper()
+  const nl = useNavMode()
   const [task, setTask] = useState<Task | null | undefined>(undefined)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [thumbs, setThumbs] = useState<string[]>([])
@@ -341,7 +342,7 @@ export function TaskDetail() {
           {/* 预览图画廊 —— 显示所有缩略图（本地优先，远程 fallback） */}
           {thumbs.length > 0 && (
             <div style={{ marginBottom: 28 }}>
-              <div className="dm-label" style={{ marginBottom: 12 }}>预览图（{thumbs.length}）</div>
+              <div className="dm-label" style={{ marginBottom: 12 }}>{nl("预览图")}（{thumbs.length}）</div>
               {/* 大图查看：自适应高度，原图原比例 */}
               <div style={{
                 position: 'relative', borderRadius: 'var(--r-lg)', overflow: 'hidden',
@@ -399,20 +400,20 @@ export function TaskDetail() {
 
           {task.synopsis && (
             <div style={{ marginBottom: 24 }}>
-              <div className="dm-label" style={{ marginBottom: 8 }}>简介</div>
+              <div className="dm-label" style={{ marginBottom: 8 }}>{nl("简介")}</div>
               <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-body)' }}>{task.synopsis}</p>
             </div>
           )}
           {task.description && (
             <div style={{ marginBottom: 24 }}>
-              <div className="dm-label" style={{ marginBottom: 8 }}>描述</div>
+              <div className="dm-label" style={{ marginBottom: 8 }}>{nl("描述")}</div>
               <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--t-mute)' }}>{task.description}</p>
             </div>
           )}
 
           {task.note && (
             <div className="card" style={{ marginTop: 20 }}>
-              <div className="dm-label" style={{ marginBottom: 6 }}>备注</div>
+              <div className="dm-label" style={{ marginBottom: 6 }}>{nl("备注")}</div>
               <p style={{ fontSize: 13, color: 'var(--t-body)' }}>{task.note}</p>
             </div>
           )}
@@ -427,7 +428,7 @@ export function TaskDetail() {
         <div>
           <div className="card">
             <div className="card-head">
-              <div className="card-title">磁力链接</div>
+              <div className="card-title">{nl("磁力链接")}</div>
               {task.magnets && task.magnets.length > 0 && (
                 <button className="btn btn--ghost btn--sm" onClick={() => setDlOpen(!dlOpen)}>推送下载</button>
               )}

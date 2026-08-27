@@ -182,6 +182,17 @@ const NAV_WHISPER: Record<string, string> = {
   'Downloads': '收入囊中',
   'Downloaders': '接她回家',
   'Settings': '闺房布置',
+  /* detail sections */
+  '磁力链接': '她的钥匙',
+  '预览图': '今晚最亮的她',
+  '简介': '她的底细',
+  '描述': '细细读她',
+  '备注': '私人笔记',
+  '新作发现': '新欢将至',
+  '基本资料': '她的档案',
+  '编辑资料': '改写她',
+  '职业生涯': '她的年代',
+  '职业时间线': '她的时间线',
 }
 
 export function navLabel(normal: string): string {
