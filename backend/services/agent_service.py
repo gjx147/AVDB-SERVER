@@ -614,8 +614,7 @@ def _actor_crawl_works(db, args):
     url = actor.source_url or ""
     if not url and actor.note and actor.note.startswith("source_url: "):
         url = actor.note[len("source_url: "):]
-    if not url:
-        return {"ok": False, "message": f"演员 {actor.name} 无来源 URL，需先在演员库添加"}
+    has_url = bool(url)
     try:
         from services.new_works_monitor import check_actor_new_works
         import asyncio as _aio
@@ -630,7 +629,8 @@ def _actor_crawl_works(db, args):
         if not submitted:
             return {"ok": True, "message": f"{actor.name} 的爬取任务已在运行中，可对话「进度」查看"}
         _actor_job_record(actor_id, "running", "已提交，等待执行")
-        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品（后台进行，可对话「进度」查看）"}
+        mode = "（按名搜索源站）" if not has_url else ""
+        return {"ok": True, "message": f"已开始爬取 {actor.name} 的作品{mode}（后台进行，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
