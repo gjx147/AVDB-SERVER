@@ -51,6 +51,18 @@ def _actor_job_record(actor_id: int, status: str, message: str) -> None:
     _actor_jobs[actor_id] = {"status": status, "message": message[:200], "at": _dt.now().strftime("%H:%M")}
     if len(_actor_jobs) > _ACTOR_JOBS_MAX:
         _actor_jobs.clear()
+
+
+# 通用后台任务状态（推送/新作检查/资料刷新/媒体同步/整理等）
+_bg_jobs: dict[str, dict] = {}
+_BG_JOBS_MAX = 50
+
+
+def _bg_job_record(key: str, status: str, message: str) -> None:
+    from datetime import datetime as _dt
+    _bg_jobs[key] = {"status": status, "message": message[:200], "at": _dt.now().strftime("%H:%M")}
+    if len(_bg_jobs) > _BG_JOBS_MAX:
+        _bg_jobs.clear()
 from models import Task, Subscription, Setting, Rule
 
 # ---------- 确认 token（无状态 HMAC 签名，10 分钟过期，多 worker 兼容） ----------
@@ -758,11 +770,22 @@ def _push_download(db, args):
         return {"ok": False, "message": f"{t.video_code} 没有磁力链接，可先对话「搜索磁力」"}
     try:
         import asyncio as _aio
-        from services.download_strategy import push_to_downloader
+        from services.download_strategy import push_with_strategy
         def _run():
-            _aio.run(push_to_downloader(t.id, magnet))
+            try:
+                r = _aio.run(push_with_strategy(t.id))
+                if isinstance(r, dict):
+                    if r.get("ok") is False or r.get("error"):
+                        _bg_job_record(f"push:{t.id}", "failed", r.get("message") or r.get("error") or "推送失败")
+                    else:
+                        _bg_job_record(f"push:{t.id}", "done", r.get("message") or "已推送")
+                else:
+                    _bg_job_record(f"push:{t.id}", "done", str(r))
+            except Exception as e:
+                _bg_job_record(f"push:{t.id}", "failed", f"{type(e).__name__}: {e}")
         _bg_submit(f"push:{t.id}", _run)
-        return {"ok": True, "message": f"已推送 {t.video_code} 下载（后台）"}
+        _bg_job_record(f"push:{t.id}", "running", "已提交，等待执行")
+        return {"ok": True, "message": f"已推送 {t.video_code} 下载（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"推送失败：{e}"}
 
@@ -776,11 +799,16 @@ def _batch_push(db, args):
     rows = db.execute(select(Task).where(Task.id.in_(ids[:50]))).scalars().all()
     ok, skip = 0, 0
     import asyncio as _aio
-    from services.download_strategy import push_to_downloader
+    from services.download_strategy import push_with_strategy
     for t in rows:
         if t.best_magnet:
-            def _run(tid=t.id, mag=t.best_magnet):
-                _aio.run(push_to_downloader(tid, mag))
+            def _run(tid=t.id):
+                try:
+                    r = _aio.run(push_with_strategy(tid))
+                    msg = r.get("message") if isinstance(r, dict) else str(r)
+                    _bg_job_record(f"push:{tid}", "done" if r.get("ok") else "failed", msg or "推送完成")
+                except Exception as e:
+                    _bg_job_record(f"push:{tid}", "failed", f"{type(e).__name__}: {e}")
             _bg_submit(f"push:{t.id}", _run)
             ok += 1
         else:
@@ -827,9 +855,14 @@ def _new_release_check_all(db, args):
         import asyncio as _aio
         from routers.new_releases import check_all_now
         def _run():
-            _aio.run(check_all_now(db, "anonymous"))
+            try:
+                r = _aio.run(check_all_now(db, "anonymous"))
+                _bg_job_record("check_all", "done", str(r)[:200])
+            except Exception as e:
+                _bg_job_record("check_all", "failed", f"{type(e).__name__}: {e}")
         _bg_submit("check_all", _run)
-        return {"ok": True, "message": "已开始全量检查新作（后台进行）"}
+        _bg_job_record("check_all", "running", "已提交，等待执行")
+        return {"ok": True, "message": "已开始全量检查新作（后台进行，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -1035,6 +1068,8 @@ def _fill_works_status(db, args):
         st = actor_works_batch.status()
     except Exception as e:
         st = {"error": str(e)}
+    # 合并通用后台任务（倒序最近 5 条）
+    bg_jobs = [{"key": k, **j} for k, j in sorted(_bg_jobs.items(), key=lambda x: x[1].get("at", ""), reverse=True)[:5]]
     # 合并单演员任务（倒序最近 5 条）
     actor_jobs = []
     for aid, j in sorted(_actor_jobs.items(), key=lambda x: x[1].get("at", ""), reverse=True)[:5]:
@@ -1042,7 +1077,7 @@ def _fill_works_status(db, args):
         a = db.get(Actor, aid)
         actor_jobs.append({"actor_id": aid, "name": a.name if a else str(aid),
                            "status": j.get("status"), "message": j.get("message"), "at": j.get("at")})
-    return {"ok": True, "status": st, "actor_jobs": actor_jobs}
+    return {"ok": True, "status": st, "actor_jobs": actor_jobs, "bg_jobs": bg_jobs}
 
 
 def _recommendations(db, args):
@@ -1165,12 +1200,21 @@ def _actor_refresh_profile(db, args):
     if not a:
         return {"ok": False, "message": "演员不存在"}
     try:
-        from services.actor_profile import refresh_profile
-        import asyncio as _aio
+        from routers.actors import refresh_actor_profile
         def _run():
-            _aio.run(refresh_profile(aid))
+            from database import SessionLocal
+            ndb = SessionLocal()
+            try:
+                r = refresh_actor_profile(aid, ndb, "anonymous")
+                msg = r.get("message") if isinstance(r, dict) else str(r)
+                _bg_job_record(f"refresh_profile:{aid}", "done", msg or "刷新完成")
+            except Exception as e:
+                _bg_job_record(f"refresh_profile:{aid}", "failed", f"{type(e).__name__}: {e}")
+            finally:
+                ndb.close()
         _bg_submit(f"refresh_profile:{aid}", _run)
-        return {"ok": True, "message": f"已开始刷新 {a.name} 的资料（后台）"}
+        _bg_job_record(f"refresh_profile:{aid}", "running", "已提交，等待执行")
+        return {"ok": True, "message": f"已开始刷新 {a.name} 的资料（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -1237,9 +1281,14 @@ def _media_sync(db, args):
         import asyncio as _aio
         force = bool(args.get("force"))
         def _run():
-            _aio.run(sync("anonymous", limit=200, force=force))
+            try:
+                r = _aio.run(sync("anonymous", limit=200, force=force))
+                _bg_job_record("media_sync", "done", str(r)[:200])
+            except Exception as e:
+                _bg_job_record("media_sync", "failed", f"{type(e).__name__}: {e}")
         _bg_submit("media_sync", _run)
-        return {"ok": True, "message": "媒体服务器同步已开始（后台）"}
+        _bg_job_record("media_sync", "running", "已提交，等待执行")
+        return {"ok": True, "message": "媒体服务器同步已开始（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -1258,9 +1307,14 @@ def _organize_run(db, args):
         from routers.organize import run_all
         import asyncio as _aio
         def _run():
-            _aio.run(run_all("anonymous"))
+            try:
+                r = _aio.run(run_all("anonymous"))
+                _bg_job_record("organize_run", "done", str(r)[:200])
+            except Exception as e:
+                _bg_job_record("organize_run", "failed", f"{type(e).__name__}: {e}")
         _bg_submit("organize_run", _run)
-        return {"ok": True, "message": "整理任务已开始（后台）"}
+        _bg_job_record("organize_run", "running", "已提交，等待执行")
+        return {"ok": True, "message": "整理任务已开始（后台，可对话「进度」查看）"}
     except Exception as e:
         return {"ok": False, "message": f"启动失败：{e}"}
 
@@ -1309,11 +1363,9 @@ def _dnd_set(db, args):
 
 def _notify_test(db, args):
     try:
-        from routers.notifications import test_notify
+        from services.notifier import test_notify
         import asyncio as _aio
-        async def _run():
-            return await test_notify("anonymous")
-        r = _aio.run(_run())
+        r = _aio.run(test_notify())
         return {"ok": True, "message": f"测试通知已发送：{r}"}
     except Exception as e:
         return {"ok": False, "message": f"发送失败：{e}"}
@@ -1985,6 +2037,12 @@ def _result_to_text(tool_name: str, result: dict) -> str:
     if tool_name == "fill_works_status":
         st = result.get("status", {})
         lines = [f"全部补齐：{st}"]
+        bj = result.get("bg_jobs", [])
+        if bj:
+            lines.append("\n后台任务：")
+            for j in bj:
+                icon = {"running": "⏳", "done": "✅", "failed": "❌"}.get(j.get("status"), "•")
+                lines.append(f"- {icon} {j.get('key')}（{j.get('status')} {j.get('at', '')}）：{j.get('message', '')[:60]}")
         jobs = result.get("actor_jobs", [])
         if jobs:
             lines.append("\n单演员任务：")
