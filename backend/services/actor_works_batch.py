@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Optional
@@ -16,7 +17,9 @@ from typing import Optional
 logger = logging.getLogger("avdb.actor_works_batch")
 
 # 独立日志文件：data/actor_works_batch.log（与 app.log 分开，便于查看补齐过程）
-_log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "actor_works_batch.log")
+_log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
+os.makedirs(_log_dir, exist_ok=True)
+_log_path = os.path.join(_log_dir, "actor_works_batch.log")
 _file_handler = logging.FileHandler(_log_path, encoding="utf-8")
 _file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 logger.addHandler(_file_handler)
