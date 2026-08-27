@@ -1071,11 +1071,14 @@ def _task_dedupe(db, args):
 
 
 def _crawl_status(db, args):
-    """爬虫运行状态。"""
+    """爬虫运行状态（含日志尾部，查进度有细节）。"""
     try:
         from services.scraper_lock import is_running, get_info
         info = get_info() or {}
-        return {"ok": True, "running": is_running(), "owner": info.get("name") or info.get("cmd") or ""}
+        return {"ok": True, "running": is_running(),
+                "owner": info.get("name") or info.get("cmd") or "",
+                "pid": info.get("pid"),
+                "log": _scraper_log_tail() if is_running() else []}
     except Exception:
         return {"ok": False, "message": "无法获取爬虫状态"}
 
@@ -2098,7 +2101,15 @@ def _result_to_text(tool_name: str, result: dict) -> str:
                 lines.append(f"- {icon} {j.get('name')}（{j.get('status')} {j.get('at', '')}）：{j.get('message', '')[:60]}")
         return "\n".join(lines)
     if tool_name == "crawl_status":
-        return f"爬虫{'运行中' if result.get('running') else '空闲'}" + (f"（{result.get('owner')}）" if result.get('owner') else "")
+        head = f"爬虫{'运行中' if result.get('running') else '空闲'}"
+        if result.get("pid"):
+            head += f"（PID {result.get('pid')}）"
+        log = result.get("log") or []
+        if log:
+            return head + "\n最近日志：\n" + "\n".join(log)
+        if result.get("running"):
+            return head + "\n（日志暂无内容，爬虫可能刚启动）"
+        return head
     if tool_name in ("favorites_list", "collection_tasks", "wishlist_gaps"):
         items = result.get("items", [])
         if not items:
