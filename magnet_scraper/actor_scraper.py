@@ -244,6 +244,15 @@ class ActorScraper:
         logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else "")
                     + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else "")
                     + ("（仅单体作品）" if solo_only else ""))
+        if solo_only:
+            # t=s 单体过滤需登录；登录成功用 URL 过滤（省一半详情页访问），
+            # 失败/未配置账号则降级为详情页数女演员过滤（max_co_star=1，慢但可用）
+            if self.ensure_logged_in():
+                logger.info("已登录：单体过滤使用 t=s 列表过滤")
+            else:
+                logger.warning("未登录：单体过滤降级为详情页女演员数过滤（较慢）")
+                solo_only = False
+                max_co_star = 1
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )

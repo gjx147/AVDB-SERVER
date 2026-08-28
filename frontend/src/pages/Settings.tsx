@@ -209,6 +209,21 @@ export function Settings() {
                 <input id="site-url" className="input" value={s.javdb_url} onChange={(e) => upd({ javdb_url: e.target.value })} />
                 <div className="hint">如部署镜像站可填写自定义地址</div>
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="field">
+                  <label htmlFor="javdb-username">JavDB 账号（可选）</label>
+                  <input id="javdb-username" className="input" placeholder="用于单体作品过滤"
+                    value={s.javdb_username || ''}
+                    onChange={(e) => upd({ javdb_username: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label htmlFor="javdb-password">JavDB 密码</label>
+                  <input id="javdb-password" type="password" className="input" placeholder="已保存则显示 ***"
+                    value={s.javdb_password || ''}
+                    onChange={(e) => upd({ javdb_password: e.target.value })} />
+                  <div className="hint">登录后单体作品在列表页过滤（快一倍）；未配置或登录失败自动降级为详情页过滤</div>
+                </div>
+              </div>
               <div className="field">
                 <label htmlFor="http-proxy">代理地址</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>

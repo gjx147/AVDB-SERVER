@@ -268,6 +268,9 @@ export interface Settings {
   emby_auto_sync: string
   emby_auto_full_sync: string
   javdb_url: string
+  // JavDB 登录（单体作品 t=s 过滤需登录；凭据脱敏为 ***）
+  javdb_username?: string
+  javdb_password?: string
   // 通知配置（F3）
   notify_bark_key?: string
   notify_telegram_token?: string
