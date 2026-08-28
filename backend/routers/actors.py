@@ -265,14 +265,13 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
     # fallback: 旧数据 source_url 为空时从 note 解析
     if not url and actor.note and actor.note.startswith("source_url: "):
         url = actor.note[len("source_url: "):]
-    if not url:
-        raise HTTPException(status_code=400, detail="该演员无 JavDB URL，需先在演员库通过 URL 添加")
     max_co_star = (body.max_co_star if body else None)
     solo_only = bool(body.solo_only) if body else False
     # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
     # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
-    return start_actor_crawl(url, actor_id=actor.id, max_co_star=max_co_star, solo_only=solo_only)
+    return start_actor_crawl(url, actor_id=actor.id, max_co_star=max_co_star,
+                             solo_only=solo_only, actor_name=actor.name)
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──

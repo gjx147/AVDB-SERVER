@@ -514,7 +514,7 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
 
 def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: int | None = None,
-                      solo_only: bool = False) -> dict:
+                      solo_only: bool = False, actor_name: str | None = None) -> dict:
     """公共函数：触发演员作品爬取子进程（供 /api/crawl/actor 和 /api/actors/{id}/crawl-works 复用）。
 
     检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
@@ -522,7 +522,11 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
     max_co_star：最大共演人数限制（作品女演员数超过则跳过；None/0 = 不限）。
     solo_only：只爬单体作品（javdb 演员页 t=s 过滤）。
     """
-    cmd = ["crawl-actor", "--actor-url", actor_url]
+    if actor_name and not actor_url:
+        # 无 URL：按演员名搜索源站（搜索到自动回写 source_url）
+        cmd = ["crawl-actor", "--actor-name", actor_name]
+    else:
+        cmd = ["crawl-actor", "--actor-url", actor_url]
     if actor_id is not None:
         cmd += ["--actor-id", str(actor_id)]
     if max_co_star and max_co_star > 0:
@@ -530,10 +534,10 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
     if solo_only:
         cmd += ["--solo-only"]
     proc = _start_scraper_guarded(cmd, {
-        "mode": "actor", "actor_url": actor_url,
+        "mode": "actor", "actor_url": actor_url or f"search:{actor_name}",
         "started_at": _now_iso(),
     })
-    return {"ok": True, "pid": proc.pid, "mode": "actor", "actor_url": actor_url}
+    return {"ok": True, "pid": proc.pid, "mode": "actor", "actor_url": actor_url or f"search:{actor_name}"}
 
 
 @router.post("/actor")
