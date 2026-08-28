@@ -691,7 +691,10 @@ def _actor_crawl_works(db, args):
     # （立即启动爬虫子进程，日志进 scraper_stderr.log，全程爬取演员作品）
     try:
         from routers.crawl import start_actor_crawl
-        r = start_actor_crawl(url or "", actor_id=actor.id, actor_name=actor.name)
+        r = start_actor_crawl(
+            url or "", actor_id=actor.id, actor_name=actor.name,
+            max_co_star=int(args.get("max_co_star") or 0),
+            solo_only=bool(args.get("solo_only")))
         pid = r.get("pid") if isinstance(r, dict) else None
         _actor_job_record(actor_id, "running", f"爬虫子进程已启动（PID {pid}），日志见 scraper_stderr.log")
 
@@ -1796,7 +1799,7 @@ TOOLS = [
      "handler": _fill_works},
     {"name": "actor_crawl_works", "cn": "爬取演员作品", "is_write": True,
      "desc": "爬取指定演员的全部作品（后台进行）",
-     "args": {"actor_id": "演员 ID"}, "handler": _actor_crawl_works},
+     "args": {"actor_id": "演员 ID", "max_co_star": "最多合作演员数（0=全部，默认 0）", "solo_only": "true=只补单体作品（默认 false）"}, "handler": _actor_crawl_works},
     {"name": "collection_list", "cn": "收藏夹列表", "is_write": False,
      "desc": "查看收藏夹列表", "args": {}, "handler": _collection_list},
     {"name": "collection_create", "cn": "创建收藏夹", "is_write": True,
