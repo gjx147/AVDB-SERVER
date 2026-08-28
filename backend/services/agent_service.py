@@ -1519,6 +1519,16 @@ def _wishlist_gaps(db, args):
         return {"ok": False, "message": f"查询失败：{e}"}
 
 
+async def _run_auto_ingest(db, args):
+    """手动触发一轮存量自动入库。"""
+    from services.auto_ingest import run_auto_ingest_cycle
+    try:
+        return await run_auto_ingest_cycle(per_actor_limit=int(args.get("per_actor_limit") or 5),
+                                           max_actors=int(args.get("max_actors") or 20))
+    except Exception as e:
+        return {"ok": False, "message": f"触发失败：{e}"}
+
+
 async def _health_advice(db, args):
     from services.ai_reports import library_health_advice
     try:
@@ -1766,6 +1776,9 @@ TOOLS = [
     {"name": "tag_translate", "cn": "标签翻译", "is_write": False,
      "desc": "把库内英文标签翻译为中文（返回映射预览，确认后应用）",
      "args": {}, "handler": _tag_translate},
+    {"name": "run_auto_ingest", "cn": "存量自动入库", "is_write": True,
+     "desc": "扫描 auto_add 演员名下未在 Emby 的任务并自动提取+推送下载（每轮每演员限 5 部）",
+     "args": {}, "handler": _run_auto_ingest},
     {"name": "tag_translate_apply", "cn": "应用标签翻译", "is_write": True,
      "desc": "应用标签中英映射（把英文标签替换为中文）",
      "args": {"mapping": "英文→中文映射对象"}, "handler": _tag_translate_apply},

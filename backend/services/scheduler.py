@@ -100,6 +100,10 @@ async def start_scheduler() -> None:
         from services.ai_reports import daily_recommend_job
         add_cron_job(daily_recommend_job, "daily-recommend", hour=9, minute=0)
 
+        # 存量自动入库：每 6 小时（auto_add 演员名下未在库任务 → 提取+推送）
+        from services.auto_ingest import run_auto_ingest_cycle
+        add_interval_job(run_auto_ingest_cycle, "auto-ingest-cycle", seconds=6 * 3600)
+
         # Emby 全量媒体库对比：每周日 3:00（设置 emby_auto_full_sync=false 可关）
         from services.media_server import full_sync_library
         async def _emby_full_sync_job():
