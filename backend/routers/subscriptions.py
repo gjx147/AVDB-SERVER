@@ -136,6 +136,29 @@ def create_subscription(payload: SubscriptionCreate, db: DbSession, _user: Curre
     db.add(sub)
     db.commit()
     db.refresh(sub)
+
+    # 演员订阅：创建后自动首轮补齐——无 URL 时按名搜索源站回写，
+    # 爬全部作品并入库新作（URL/作品/新作一次到位）
+    if payload.sub_type == "actor" and payload.actor_id:
+        import threading
+
+        def _bootstrap_first_crawl():
+            try:
+                import asyncio as _aio
+                from database import SessionLocal as _SL
+                from services.new_works_monitor import check_actor_new_works
+                ndb = _SL()
+                try:
+                    _aio.run(check_actor_new_works(
+                        payload.actor_id, subscription_id=sub.id,
+                        auto_add=bool(payload.auto_add)))
+                finally:
+                    ndb.close()
+            except Exception:
+                pass
+
+        threading.Thread(target=_bootstrap_first_crawl, daemon=True).start()
+
     return sub
 
 
