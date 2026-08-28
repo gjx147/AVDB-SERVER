@@ -678,9 +678,8 @@ def _actor_crawl_works(db, args):
     url = actor.source_url or ""
     if not url and actor.note and actor.note.startswith("source_url: "):
         url = actor.note[len("source_url: "):]
-    if not url:
-        return {"ok": False, "message": f"演员 {actor.name} 无来源 URL，请先在演员详情页通过 JavDB 链接添加（与手动补齐按钮要求一致）"}
-    has_url = True
+    # 无 URL：按演员名搜索源站（与手动按钮一致，搜索到自动回写 URL）
+    has_url = bool(url)
     # 锁忙时明确告知（与手动按钮一致的 409 语义）
     try:
         from services import scraper_lock
@@ -692,7 +691,7 @@ def _actor_crawl_works(db, args):
     # （立即启动爬虫子进程，日志进 scraper_stderr.log，全程爬取演员作品）
     try:
         from routers.crawl import start_actor_crawl
-        r = start_actor_crawl(url, actor_id=actor.id)
+        r = start_actor_crawl(url or "", actor_id=actor.id, actor_name=actor.name)
         pid = r.get("pid") if isinstance(r, dict) else None
         _actor_job_record(actor_id, "running", f"爬虫子进程已启动（PID {pid}），日志见 scraper_stderr.log")
 
