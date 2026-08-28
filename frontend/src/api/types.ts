@@ -98,6 +98,7 @@ export interface Actor {
   height: string | null
   cup: string | null
   measurements: string | null
+  note: string | null
   debut_date: string | null
   description: string | null
   tags: string | null

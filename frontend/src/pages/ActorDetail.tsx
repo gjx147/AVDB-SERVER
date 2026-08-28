@@ -100,7 +100,7 @@ export function ActorDetail() {
 
   const crawlWorks = async () => {
     if (!actor) return
-    if (!actor.source_url) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
+    if (!actorUrl) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
     try {
       await api.actors.crawlWorks(actor.id, maxCoStar)
       toastOk(maxCoStar > 0 ? `已开始补齐 ${actor.name} 的作品（最大共演 ${maxCoStar} 人）` : `已开始补齐 ${actor.name} 的作品`)
@@ -108,7 +108,7 @@ export function ActorDetail() {
   }
   const crawlSoloWorks = async () => {
     if (!actor) return
-    if (!actor.source_url) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
+    if (!actorUrl) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
     try {
       await api.actors.crawlWorks(actor.id, maxCoStar, true)
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
@@ -195,6 +195,9 @@ export function ActorDetail() {
     return Number.isFinite(v) && v > 0 ? v : 0
   })
   const nl = useNavMode()
+  // 与后端 crawl_actor_works 一致的 URL 兜底：source_url 或 note 里的 "source_url: "
+  const actorUrl = actor?.source_url
+    || (actor?.note && actor.note.startsWith('source_url: ') ? actor.note.slice('source_url: '.length).trim() : '')
   const setMaxCoStarVal = (v: number) => {
     const n = Math.max(0, Math.min(99, Math.round(v)))
     setMaxCoStar(n)
@@ -408,12 +411,12 @@ export function ActorDetail() {
             <button className={`btn ${subscribed ? 'btn--ghost' : 'btn--gold'}`} onClick={toggleFollow}>
               <Icon.heart />{subscribed ? '已关注' : '关注'}
             </button>
-            <button className="btn btn--ghost" onClick={crawlWorks} disabled={!actor.source_url}
-              title={actor.source_url ? '爬取该演员作品列表并入库——已入库的作品自动跳过，只补新作（与「全部补齐」的跳过标记无关）' : '无 JavDB URL（需先通过 URL 添加）'}>
+            <button className="btn btn--ghost" onClick={crawlWorks} disabled={!actorUrl}
+              title={actorUrl ? '爬取该演员作品列表并入库——已入库的作品自动跳过，只补新作（与「全部补齐」的跳过标记无关）' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐作品
             </button>
-            <button className="btn btn--ghost" onClick={crawlSoloWorks} disabled={!actor.source_url}
-              title={actor.source_url ? '只爬取单体作品（javdb 演员页 t=s 过滤）——已入库的作品自动跳过，只补新作' : '无 JavDB URL（需先通过 URL 添加）'}>
+            <button className="btn btn--ghost" onClick={crawlSoloWorks} disabled={!actorUrl}
+              title={actorUrl ? '只爬取单体作品（javdb 演员页 t=s 过滤）——已入库的作品自动跳过，只补新作' : '无 JavDB URL（需先通过 URL 添加）'}>
               <Icon.download />补齐单体作品
             </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
