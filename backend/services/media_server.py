@@ -13,6 +13,8 @@ Immortal 参考：判断番号是否已在媒体库，缓存到 Task.media_in_li
 
 from __future__ import annotations
 
+import os
+
 import asyncio
 import logging
 import re
@@ -370,6 +372,18 @@ async def audit_library() -> dict:
 _full_sync_state: dict = {"running": False, "total": 0, "done": 0, "checked": 0,
                           "in_library": 0, "failed": 0, "started_at": None, "finished_at": None}
 
+# 全量对比独立日志：data/emby_sync.log（幂等挂载，避免重复 handler）
+if not any(getattr(h, "baseFilename", "").endswith("emby_sync.log") for h in logger.handlers):
+    try:
+        _sync_log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
+        os.makedirs(_sync_log_dir, exist_ok=True)
+        _sync_fh = logging.FileHandler(os.path.join(_sync_log_dir, "emby_sync.log"), encoding="utf-8")
+        logger.setLevel(logging.INFO)
+        _sync_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        logger.addHandler(_sync_fh)
+    except Exception:
+        pass
+
 
 def full_sync_status() -> dict:
     """全量对比进度（供轮询/定时任务查询）。"""
@@ -391,6 +405,7 @@ async def full_sync_library(force: bool = True) -> dict:
         _full_sync_state.update({"running": True, "total": total, "done": 0,
                                  "checked": 0, "in_library": 0, "failed": 0,
                                  "started_at": str(datetime.utcnow()), "finished_at": None})
+        logger.info("Emby 全量对比启动: %d 部作品", total)
         cursor = None
         checked = in_lib = failed = done = 0
         while True:
@@ -416,7 +431,9 @@ async def full_sync_library(force: bool = True) -> dict:
             done += len(tasks)
             _full_sync_state.update({"done": done, "checked": checked,
                                      "in_library": in_lib, "failed": failed})
+            logger.info("Emby 全量对比: 已核对 %d/%d（在库 %d，失败 %d）", done, total, in_lib, failed)
         _full_sync_state.update({"running": False, "finished_at": str(datetime.utcnow())})
+        logger.info("Emby 全量对比完成: 总 %d 部，已核对 %d，在库 %d，失败 %d", total, checked, in_lib, failed)
         return {"ok": True, "total": total, "checked": checked, "in_library": in_lib, "failed": failed}
     finally:
         db.close()
