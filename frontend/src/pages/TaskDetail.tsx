@@ -271,8 +271,8 @@ export function TaskDetail() {
                 {cast.length > 0 && (
                   <div className="cast-row">
                     {cast.map((c, i) => (
-                      <div key={i} className="cast-item" onClick={() => nav(`/library?q=${encodeURIComponent(c.name)}`)}
-                        title={`查看 ${c.name} 的作品`}>
+                      <div key={i} className="cast-item" onClick={() => c.id ? nav(`/actor/${c.id}`) : nav(`/library?q=${encodeURIComponent(c.name)}`)}
+                        title={c.id ? `查看 ${c.name} 的详情` : `在影片库搜索 ${c.name}（暂无演员档案）`}>
                         <div className="cast-avatar">
                           {c.avatar_url ? (
                             <img src={c.avatar_url} alt={c.name} referrerPolicy="no-referrer"
