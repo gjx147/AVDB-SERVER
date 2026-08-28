@@ -227,6 +227,9 @@ def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
     在锁内原子完成“检查是否已有活跳进程 + 登记 proc/info”；
     若锁被占用则立即杀掉刚启动的进程树（避免残留 Chromium）并抛 409。
     """
+    from routers.javdb_login import is_active as _login_active
+    if _login_active():
+        raise HTTPException(status_code=409, detail="JavDB 登录会话进行中，请完成或取消后再启动爬取")
     proc = _start_scraper(cmd_args)
     if not scraper_lock.try_acquire_and_set(proc, {**info, "pid": proc.pid}):
         # 锁被占用：回收刚启动的进程，避免孤儿 Chromium 残留

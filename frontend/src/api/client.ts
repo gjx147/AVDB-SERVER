@@ -443,6 +443,14 @@ export const api = {
     testProxy: (proxy: string) =>
       http.post<{ ok: boolean; message: string }>('/api/settings/test-proxy', { proxy }).then((r) => r.data),
   },
+  javdbLogin: {
+    start: () => http.post<ApiOk>('/api/javdb-login/start').then((r) => r.data),
+    screenshot: () => http.get<{ ok: boolean; image: string }>('/api/javdb-login/screenshot').then((r) => r.data),
+    submit: (d: { username: string; password: string; captcha?: string }) =>
+      http.post<{ ok: boolean; message: string }>('/api/javdb-login/submit', d).then((r) => r.data),
+    status: () => http.get<{ running: boolean; logged_in: boolean | null; message: string; elapsed: number }>('/api/javdb-login/status').then((r) => r.data),
+    cancel: () => http.post<ApiOk>('/api/javdb-login/cancel').then((r) => r.data),
+  },
 
   // ════════ Notifications（F2 通知中心）════════
   notifications: {

@@ -40,6 +40,51 @@ export function Settings() {
     api.s3Status().then(setS3Status).catch(() => {})
   }, [])
 
+  const [loginRunning, setLoginRunning] = useState(false)
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginShot, setLoginShot] = useState<string | null>(null)
+  const [loginMsg, setLoginMsg] = useState('')
+  const [loginForm, setLoginForm] = useState({ username: '', password: '', captcha: '' })
+
+  const startJavdbLogin = async () => {
+    setLoginBusy(true)
+    try {
+      await api.javdbLogin.start()
+      setLoginRunning(true)
+      setLoginMsg('')
+      setLoginShot(null)
+      setLoginForm({ username: '', password: '', captcha: '' })
+      pollLoginShot()
+    } catch (e) { toastErr(String((e as Error).message)) } finally { setLoginBusy(false) }
+  }
+
+  const pollLoginShot = async () => {
+    try {
+      const st = await api.javdbLogin.status()
+      if (!st.running) { setLoginRunning(false); setLoginMsg(st.message || '会话已结束'); return }
+      if (st.logged_in === true) { setLoginRunning(false); setLoginMsg(st.message); return }
+      setLoginMsg(st.message || '')
+      const shot = await api.javdbLogin.screenshot()
+      if (shot.ok) setLoginShot(shot.image)
+      setTimeout(pollLoginShot, 4000)
+    } catch { setTimeout(pollLoginShot, 6000) }
+  }
+
+  const submitJavdbLogin = async () => {
+    setLoginBusy(true)
+    try {
+      const r = await api.javdbLogin.submit(loginForm)
+      setLoginMsg(r.message)
+      if (r.ok) { setLoginRunning(false); setLoginShot(null) }
+      else { const shot = await api.javdbLogin.screenshot().catch(() => null); if (shot?.ok) setLoginShot(shot.image) }
+    } catch (e) { toastErr(String((e as Error).message)) } finally { setLoginBusy(false) }
+  }
+
+  const cancelJavdbLogin = async () => {
+    await api.javdbLogin.cancel().catch(() => {})
+    setLoginRunning(false); setLoginShot(null); setLoginMsg('已取消')
+  }
+
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={load} /></div>
   if (!s) return <div className="page"><Loading /></div>
 
@@ -252,6 +297,40 @@ export function Settings() {
                     <option value="-U,-C,-UC">无码 → 有字 → 无码有字</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="card" style={{ marginTop: 14 }}>
+                <div className="card-title">JavDB 登录（验证码人工输入）</div>
+                <div className="hint" style={{ marginBottom: 10 }}>
+                  单体作品过滤（t=s）需登录。验证码需人工填写：点“打开登录页”，看截图填账号密码验证码后提交；
+                  cookie 保存后后续爬取自动复用，无需重复登录。爬取进行中不可登录（共用浏览器配置）。
+                </div>
+                {!loginRunning ? (
+                  <button className="btn" disabled={loginBusy} onClick={startJavdbLogin}>
+                    {loginBusy ? '启动中…' : '打开 JavDB 登录页'}
+                  </button>
+                ) : (
+                  <div>
+                    {loginShot ? (
+                      <img src={loginShot} alt="JavDB 登录页" style={{ width: '100%', maxWidth: 420, border: '1px solid #333', borderRadius: 8, marginBottom: 10, display: 'block' }} />
+                    ) : (
+                      <div className="hint">等待登录页截图…</div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                      <input className="input" placeholder="账号" value={loginForm.username}
+                        onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} />
+                      <input className="input" type="password" placeholder="密码" value={loginForm.password}
+                        onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} />
+                      <input className="input" placeholder="验证码" value={loginForm.captcha}
+                        onChange={(e) => setLoginForm({ ...loginForm, captcha: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                      <button className="btn" disabled={loginBusy} onClick={submitJavdbLogin}>提交登录</button>
+                      <button className="btn btn--ghost" onClick={cancelJavdbLogin}>取消</button>
+                      <span className="hint">{loginMsg}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

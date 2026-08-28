@@ -219,6 +219,8 @@ app.include_router(transfer.import_router)
 app.include_router(organize.router)
 app.include_router(shares.router)
 app.include_router(rules.router)
+from routers import javdb_login as _javdb_login  # noqa: E402
+app.include_router(_javdb_login.router)
 
 
 @app.get("/api/public/share/{token}")
