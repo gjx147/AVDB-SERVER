@@ -110,7 +110,11 @@ def app_logs(_user: CurrentAdmin, limit: int = 100, filter: str = "", file: str 
     """
     from pathlib import Path
     filenames = {"app": "app.log", "scraper": "scraper_stderr.log", "downloaders": "downloaders.log",
-                 "actor_profile": "actor_profile.log"}
+                 "actor_profile": "actor_profile.log",
+                 "ai": "ai.log", "subscriptions": "subscriptions.log",
+                 "crawl_console": "crawl_console.log", "magnet": "magnet.log",
+                 "organize": "organize.log", "emby_sync": "emby_sync.log",
+                 "actor_works_batch": "actor_works_batch.log"}
     filename = filenames.get(file, "app.log")
     log_path = Path(get_settings().DATA_DIR) / filename
     if not log_path.exists():

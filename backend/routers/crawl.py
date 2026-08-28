@@ -200,6 +200,50 @@ def start_extract(req: CrawlRequest, _user: CurrentUser):
     return {"ok": True, "pid": proc.pid, "mode": "extract"}
 
 
+@router.get("/logs")
+def get_logs(file: str, lines: int, _user: CurrentUser):
+    """爬取控制台日志查看器：读 data/ 下白名单日志文件尾部。"""
+    from services.logging_config import LOG_FILES
+    if file not in LOG_FILES:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="非法日志文件")
+    from pathlib import Path
+    from config import get_settings
+    log_path = Path(get_settings().DATA_DIR) / file
+    items: list[str] = []
+    if log_path.exists():
+        raw = log_path.read_bytes()
+        text = None
+        for enc in ("utf-8", "gbk"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            text = raw.decode("utf-8", errors="replace")
+        all_lines = [ln for ln in text.strip().split("\n") if ln.strip()]
+        items = all_lines[-min(max(lines, 10), 500):]
+    return {"ok": True, "file": file, "name": LOG_FILES[file], "items": items}
+
+
+@router.get("/log-files")
+def list_log_files(_user: CurrentUser):
+    """可查看的日志文件清单。"""
+    from services.logging_config import LOG_FILES
+    from pathlib import Path
+    from config import get_settings
+    data_dir = Path(get_settings().DATA_DIR)
+    items = []
+    for fname, name in LOG_FILES.items():
+        p2 = data_dir / fname
+        items.append({"file": fname, "name": name,
+                      "exists": p2.exists(),
+                      "size": p2.stat().st_size if p2.exists() else 0,
+                      "mtime": p2.stat().st_mtime if p2.exists() else None})
+    return {"ok": True, "items": items}
+
+
 @router.get("/health")
 def crawl_health(db: DbSession, _user: CurrentUser):
     """爬虫健康概览（F3）：24h 成功率、失败原因归类、7 日趋势。"""

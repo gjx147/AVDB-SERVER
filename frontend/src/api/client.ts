@@ -288,7 +288,7 @@ export const api = {
   // ════════ System ════════
   system: {
     disk: () => http.get<DiskInfo>('/api/system/disk').then((r) => r.data),
-    logs: (file: 'app' | 'scraper' | 'downloaders' | 'actor_profile', limit = 300, filter = '') =>
+    logs: (file: 'app' | 'scraper' | 'downloaders' | 'actor_profile' | 'ai' | 'subscriptions' | 'crawl_console' | 'magnet' | 'organize' | 'emby_sync' | 'actor_works_batch', limit = 300, filter = '') =>
       http.get<{ lines: string[]; total: number; file: string; error?: string }>('/api/system/logs', { params: { file, limit, filter } }).then((r) => r.data),
   },
 
@@ -488,6 +488,12 @@ export const api = {
   aiUsage: (days = 7) =>
     http.get<{ ok: boolean; days: number; total: { calls: number; prompt_tokens: number; completion_tokens: number; cache_hits: number; cache_rate: number; est_cost: number }; daily: { date: string; calls: number; prompt_tokens: number; completion_tokens: number; avg_ms: number; cache_hits: number }[]; by_type: { task_type: string; calls: number; prompt_tokens: number; completion_tokens: number }[] }>(
       `/api/ai/usage?days=${days}`).then((r) => r.data),
+  crawlLogFiles: () =>
+    http.get<{ ok: boolean; items: { file: string; name: string; exists: boolean; size: number; mtime: number | null }[] }>(
+      '/api/crawl/log-files').then((r) => r.data),
+  crawlLogTail: (file: string, lines = 80) =>
+    http.get<{ ok: boolean; file: string; name: string; items: string[] }>(
+      `/api/crawl/logs?file=${encodeURIComponent(file)}&lines=${lines}`).then((r) => r.data),
   progressLite: () =>
     http.get<{ ok: boolean; running: boolean; pid?: number; mode?: string; log: string[] }>(
       '/api/ai/progress-lite').then((r) => r.data),

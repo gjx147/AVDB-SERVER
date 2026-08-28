@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore'
 export function Crawl() {
   const [status, setStatus] = useState<CrawlStatus | null | undefined>(undefined)
   const [logs, setLogs] = useState<string[] | null>(null)
-  const [fileLines, setFileLines] = useState<Record<string, string[] | null>>({ app: null, scraper: null, downloaders: null, actor_profile: null })
-  const [logSrc, setLogSrc] = useState<'db' | 'app' | 'scraper' | 'downloaders' | 'actor_profile'>('db')  // 日志来源
+  const [fileLines, setFileLines] = useState<Record<string, string[] | null>>({ app: null, scraper: null, downloaders: null, actor_profile: null, ai: null, subscriptions: null, crawl_console: null, magnet: null, organize: null, emby_sync: null, actor_works_batch: null })
+  const [logSrc, setLogSrc] = useState<'db' | 'app' | 'scraper' | 'downloaders' | 'actor_profile' | 'ai' | 'subscriptions' | 'crawl_console' | 'magnet' | 'organize' | 'emby_sync' | 'actor_works_batch'>('db')  // 日志来源
   const [logFilter, setLogFilter] = useState('')
   const [sources, setSources] = useState<ListSourceWithStats[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +28,7 @@ export function Crawl() {
       api.crawl.status().then((s) => { setStatus(s); setError(null); running = !!((s as { running?: boolean }).running) }).catch(() => setError('无法获取爬取状态'))
       api.crawl.logs().then((l) => setLogs(l.lines)).catch(() => setLogs([]))
       // 文件日志轮询（应用/爬虫子进程/下载器/演员资料）
-      for (const f of ['app', 'scraper', 'downloaders', 'actor_profile'] as const) {
+      for (const f of ['app', 'scraper', 'downloaders', 'actor_profile', 'ai', 'subscriptions', 'crawl_console', 'magnet', 'organize', 'emby_sync', 'actor_works_batch'] as const) {
         api.system.logs(f, 300).then((r) => setFileLines((prev) => ({ ...prev, [f]: r.lines }))).catch(() => {})
       }
     }
@@ -214,7 +214,7 @@ export function Crawl() {
             <div className="term-title">实时日志</div>
             {/* 日志来源切换：数据库 / 应用 app.log / 爬虫子进程 / 下载器 / 演员资料 */}
             <div className="seg" style={{ marginLeft: 10, background: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,143,179,.25)' }}>
-              {([['db', '数据库'], ['app', '应用'], ['scraper', '爬虫'], ['downloaders', '下载器'], ['actor_profile', '演员资料']] as const).map(([k, label]) => (
+              {([['db', '数据库'], ['app', '应用'], ['scraper', '爬虫'], ['downloaders', '下载器'], ['actor_profile', '演员资料'], ['actor_works_batch', '全部补齐'], ['subscriptions', '订阅上新'], ['ai', 'AI'], ['crawl_console', '调度'], ['magnet', '磁力'], ['organize', '整理'], ['emby_sync', 'Emby']] as const).map(([k, label]) => (
                 <button key={k} className={logSrc === k ? 'on' : ''} onClick={() => setLogSrc(k)}
                   style={{ color: logSrc === k ? 'var(--gold)' : 'rgba(243,219,230,.7)', fontSize: 11 }}>{label}</button>
               ))}
