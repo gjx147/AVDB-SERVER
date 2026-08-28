@@ -1340,26 +1340,34 @@ def _download_stats(db, args):
 
 def _drive115_status(db, args):
     try:
-        from services.drive115_client import get_quota, list_offline_tasks
+        from services.drive115_client import get_quota, get_task_list
         import asyncio as _aio
         async def _g():
             q = await get_quota()
-            tasks = await list_offline_tasks()
+            tasks = await get_task_list()
             return q, tasks
         q, tasks = _aio.run(_g())
-        return {"ok": True, "quota": q, "offline_tasks": len(tasks) if tasks else 0}
+        # get_task_list 返回 115 开放 API 原始结构，任务数兼容多字段
+        n_tasks = 0
+        if isinstance(tasks, dict):
+            d = tasks.get("data") or {}
+            tl = d.get("tasks") or d.get("task_list") or tasks.get("tasks") or []
+            if isinstance(tl, list):
+                n_tasks = len(tl)
+        return {"ok": True, "quota": q, "offline_tasks": n_tasks}
     except Exception as e:
         return {"ok": False, "message": f"115 状态获取失败：{e}"}
 
 
 def _media_check(db, args):
-    from routers.media_server import check_in_library
+    import asyncio as _aio
+    from services.media_server import check_in_library
     vc = str(args.get("video_code") or "").strip().upper()
     if not vc:
         return {"ok": False, "message": "需要番号"}
     try:
-        r = check_in_library(vc, db, "anonymous")
-        return {"ok": True, "video_code": vc, "result": r}
+        in_lib = _aio.run(check_in_library(vc))
+        return {"ok": True, "video_code": vc, "in_library": bool(in_lib)}
     except Exception as e:
         return {"ok": False, "message": f"查询失败：{e}"}
 
