@@ -1000,6 +1000,13 @@ def _task_delete(db, args):
     return {"ok": True, "message": f"已删除 {code or tid}"}
 
 
+def _cleanup_no_code_tasks(db, args):
+    """删除无番号任务（三类：提取失败/无番号条目/重定向不匹配）。"""
+    from services.tasks_cleanup import cleanup_no_code_tasks
+    dry = bool(args.get("dry_run", True))
+    return cleanup_no_code_tasks(db, dry_run=dry)
+
+
 def _batch_delete(db, args):
     ids = [int(x) for x in (args.get("task_ids") or []) if str(x).isdigit()]
     if not ids:
@@ -1646,6 +1653,12 @@ async def _preview_write(tool_name: str, args: dict, db) -> str:
         if tool_name in ("batch_push", "batch_delete", "ranking_add_tasks"):
             ids = [int(x) for x in (args.get("task_ids") or args.get("ranking_ids") or []) if str(x).isdigit()]
             return f"将影响 {len(ids)} 条记录；确认后执行"
+        if tool_name == "cleanup_no_code_tasks":
+            from services.tasks_cleanup import count_no_code_tasks
+            cnt = count_no_code_tasks(db)
+            if args.get("dry_run", True) is not False:
+                return f"将删除 {cnt} 个无番号任务（提取失败/无番号条目/重定向不匹配）；确认后执行"
+            return f"确认执行：删除 {cnt} 个无番号任务"
         if tool_name == "task_delete":
             t = db.get(Task, int(args.get("task_id") or 0))
             return f"将删除作品 {t.video_code if t else args.get('task_id')}；确认后执行"
@@ -1809,6 +1822,9 @@ TOOLS = [
     {"name": "batch_delete", "cn": "批量删除", "is_write": True,
      "desc": "批量删除作品任务（最多 200 个）",
      "args": {"task_ids": "作品 ID 数组"}, "handler": _batch_delete},
+    {"name": "cleanup_no_code_tasks", "cn": "清理无番号任务", "is_write": True,
+     "desc": "删除无番号任务（源页提取失败/无番号条目/重定向不匹配三类），默认先预览数量",
+     "args": {"dry_run": "默认 true 预览；false 执行删除"}, "handler": _cleanup_no_code_tasks},
     {"name": "drive115_offline_add", "cn": "115 离线下载", "is_write": True,
      "desc": "把磁力添加到 115 离线下载",
      "args": {"magnet": "磁力链接", "task_id": "作品 ID（可选，二选一）"},

@@ -116,6 +116,18 @@ async def start_scheduler() -> None:
             return await full_sync_library()
         add_cron_job(_emby_full_sync_job, "emby-full-sync-weekly", day_of_week="sun", hour=3, minute=0)
 
+        # 无番号任务清理：每日 4:00（源页结构变化/无番号条目/重定向不匹配 → 自动删除）
+        from services.tasks_cleanup import cleanup_no_code_tasks
+        def _no_code_cleanup_job():
+            from database import SessionLocal as _SL5
+            db5 = _SL5()
+            try:
+                r = cleanup_no_code_tasks(db5, dry_run=False)
+                return {"ok": True, "deleted": r.get("deleted", 0)}
+            finally:
+                db5.close()
+        add_cron_job(_no_code_cleanup_job, "no-code-cleanup-daily", hour=4, minute=0)
+
         # 数据保留清理：每周一 9:30（LLMCache 30 天/用量 90 天/会话 90 天/审计 180 天）
         from services.cleanup import cleanup_job
         add_cron_job(cleanup_job, "data-cleanup-weekly", day_of_week="mon", hour=9, minute=30)
