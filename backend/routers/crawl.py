@@ -30,10 +30,12 @@ router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 # 默认超时（30 分钟）
 # 爬虫硬超时（秒）：watchdog 超过该时长强杀进程。
-# 可用环境变量 SCRAPER_TIMEOUT_S 覆盖；默认 21600（6 小时）。
+# 可用环境变量 SCRAPER_TIMEOUT_S 覆盖；默认 43200（12 小时）。
+# 依据：实测每任务约 38 秒，995 任务的演员约需 10.5 小时——
+# 12 小时上限留足余量；更大的演员请按需调大该环境变量。
 # 历史 bug：曾固定 1800（30 分钟）——演员全量补齐动辄数千任务需 10h+，
 # 30 分钟必被 watchdog 杀掉，表现为"补齐自己停止、日志无报错"。
-_DEFAULT_TIMEOUT = int(os.environ.get("SCRAPER_TIMEOUT_S", "21600"))
+_DEFAULT_TIMEOUT = int(os.environ.get("SCRAPER_TIMEOUT_S", "43200"))
 
 # Phase 2 F07：scraper 回调共享密钥已移至 services.scraper_lock
 # （rotate_callback_token / get_callback_token），所有触发路径共用。
