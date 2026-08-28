@@ -18,7 +18,9 @@ from deps import CurrentAdmin
 
 router = APIRouter(prefix="/api/javdb-login", tags=["javdb-login"])
 
-PROFILE_DIR = Path("magnet_scraper/output/browser_profile").resolve()
+# 与爬虫 config.OUTPUT_DIR 同源：项目根/magnet_scraper/output/browser_profile
+# backend cwd=/app/backend，必须基于 __file__ 定位（/app/backend/routers → 上三级 = /app）
+PROFILE_DIR = Path(__file__).resolve().parent.parent.parent / "magnet_scraper" / "output" / "browser_profile"
 
 _state = {"running": False, "logged_in": None, "message": "", "started_at": 0.0}
 _lock = threading.Lock()
@@ -31,10 +33,19 @@ def is_active() -> bool:
     return _state["running"]
 
 
+def _db_path() -> Path:
+    """与 backend DATABASE_URL 同源的 SQLite 路径。"""
+    import os
+    url = os.environ.get("DATABASE_URL", "")
+    if url.startswith("sqlite:///"):
+        return Path(url[len("sqlite:///"):])
+    return Path("data/javdb.db")
+
+
 def _read_setting(key: str, default: str = "") -> str:
     try:
         import sqlite3
-        db = Path("data/javdb.db")
+        db = _db_path()
         if db.exists():
             conn = sqlite3.connect(str(db), timeout=5)
             row = conn.execute("SELECT value FROM settings WHERE key=? LIMIT 1", (key,)).fetchone()
@@ -93,6 +104,11 @@ def _session_thread() -> None:
             _state["message"] = "登录会话超时，已关闭"
     except Exception as e:
         _state["message"] = f"登录会话异常: {e}"
+        try:
+            import logging
+            logging.getLogger("avdb.javdb_login").error("登录会话异常", exc_info=True)
+        except Exception:
+            pass
     finally:
         _cleanup()
 
@@ -120,8 +136,11 @@ def start(_admin: CurrentAdmin):
 @router.get("/screenshot")
 def screenshot(_admin: CurrentAdmin):
     page = _ctx.get("page")
-    if not page or not _state["running"]:
+    if not _state["running"]:
         raise HTTPException(status_code=404, detail="无活跃登录会话")
+    if not page:
+        # 浏览器仍在启动（Playwright 启动+导航需数秒），前端稍后重试
+        return {"ok": False, "message": _state["message"] or "浏览器启动中，请稍候…"}
     try:
         png = page.screenshot(type="png")
         return {"ok": True, "image": "data:image/png;base64," + base64.b64encode(png).decode()}

@@ -306,9 +306,12 @@ export function Settings() {
                   cookie 保存后后续爬取自动复用，无需重复登录。爬取进行中不可登录（共用浏览器配置）。
                 </div>
                 {!loginRunning ? (
-                  <button className="btn" disabled={loginBusy} onClick={startJavdbLogin}>
-                    {loginBusy ? '启动中…' : '打开 JavDB 登录页'}
-                  </button>
+                  <div>
+                    <button className="btn" disabled={loginBusy} onClick={startJavdbLogin}>
+                      {loginBusy ? '启动中…' : '打开 JavDB 登录页'}
+                    </button>
+                    {loginMsg && <div className="hint" style={{ marginTop: 8 }}>{loginMsg}</div>}
+                  </div>
                 ) : (
                   <div>
                     {loginShot ? (
