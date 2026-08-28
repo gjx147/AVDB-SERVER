@@ -137,6 +137,27 @@ async def lifespan(app: FastAPI):
         logger.info("调度任务注册完成")
     except Exception as e:
         logger.warning(f"调度中心启动失败: {e}")
+
+    # 爬取自恢复：检测上次异常中断（容器重启/OOM）的爬取并自动续爬
+    try:
+        from routers.crawl import recover_interrupted_scraper
+        rec = recover_interrupted_scraper()
+        if rec.get("recovered"):
+            logger.warning(f"爬取自恢复: {rec.get('message')}")
+            try:
+                from services.notifier import notify
+                import asyncio as _aio
+                _aio.get_event_loop().run_until_complete(notify(
+                    "crawl_recover",
+                    "爬取已自动恢复",
+                    f"{rec.get('message')}（上次中断，重启后自动续爬）",
+                ))
+            except Exception:
+                pass
+        elif rec.get("message"):
+            logger.info(f"爬取恢复检查: {rec.get('message')}")
+    except Exception as e:
+        logger.warning(f"爬取恢复检查失败: {e}")
     yield
     # 关闭调度中心
     try:
@@ -247,21 +268,15 @@ def health():
 
 
 @app.get("/api/health/ready")
-def health_ready(db: Session = Depends(get_db)):
-    """就绪探针（readiness）—— 检查 DB 连接，迁移完成前返回 503。
+def health_ready():
+    """就绪探针（readiness）—— 进程能响应即就绪，零 DB 依赖。
 
-    用于反向代理/Docker healthcheck 判断服务是否可接受流量。
+    历史 bug：旧实现每次探针查 DB（SELECT 1）。爬虫（Playwright Chromium）
+    高负载时 uvicorn/DB 响应变慢，探针 5s 超时连续 3 次 → Docker 判定
+    unhealthy 重启容器 → 爬虫子进程全灭（表现为"补齐自己停止"）。
+    迁移/建表在 CMD 启动阶段完成，能响应请求即代表服务可用。
     """
-    try:
-        from sqlalchemy import text
-        db.execute(text("SELECT 1"))
-        return {"status": "ready", "db": "ok"}
-    except Exception as e:
-        from starlette.responses import JSONResponse
-        return JSONResponse(
-            status_code=503,
-            content={"status": "not_ready", "error": str(e)},
-        )
+    return {"status": "ready"}
 
 
 @app.get("/api/scheduler/jobs")

@@ -29,7 +29,11 @@ from services import scraper_lock
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 # 默认超时（30 分钟）
-_DEFAULT_TIMEOUT = 1800
+# 爬虫硬超时（秒）：watchdog 超过该时长强杀进程。
+# 可用环境变量 SCRAPER_TIMEOUT_S 覆盖；默认 21600（6 小时）。
+# 历史 bug：曾固定 1800（30 分钟）——演员全量补齐动辄数千任务需 10h+，
+# 30 分钟必被 watchdog 杀掉，表现为"补齐自己停止、日志无报错"。
+_DEFAULT_TIMEOUT = int(os.environ.get("SCRAPER_TIMEOUT_S", "21600"))
 
 # Phase 2 F07：scraper 回调共享密钥已移至 services.scraper_lock
 # （rotate_callback_token / get_callback_token），所有触发路径共用。
@@ -50,6 +54,16 @@ def _scraper_path() -> Path:
 def _python_exe() -> str:
     settings = get_settings()
     return settings.SCRAPER_PYTHON or sys.executable
+
+
+def _live_state_file() -> Path:
+    """爬取上下文落盘（容器意外重启后自恢复用）。
+
+    - _start_scraper_guarded 成功时写入 {cmd_args, info, started_at}
+    - 子进程正常收尾/手动停止时删除
+    - 启动时残留 = 上次爬取被异常打断（容器重启/OOM）→ 自动续爬
+    """
+    return Path("data") / "scraper_live.json"
 
 
 def _crawl_status_file() -> Path:
@@ -149,6 +163,59 @@ def _kill_process_tree(proc: subprocess.Popen) -> None:
             pass
 
 
+def _write_live_state(cmd_args: list[str], info: dict) -> None:
+    """写入爬取上下文（供重启自恢复）。"""
+    import json
+    try:
+        f = _live_state_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({
+            "cmd_args": [str(a) for a in cmd_args],
+            "info": {k: v for k, v in info.items() if isinstance(v, (str, int, float, bool)) or v is None},
+            "started_at": _now_iso(),
+            "pid": info.get("pid"),
+        }, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _clear_live_state() -> None:
+    """正常收尾/手动停止时清除爬取上下文。"""
+    try:
+        f = _live_state_file()
+        if f.exists():
+            f.unlink()
+    except Exception:
+        pass
+
+
+def recover_interrupted_scraper() -> dict:
+    """启动自恢复：检测上次异常中断（容器重启/OOM/被杀）的爬取并自动续爬。
+
+    返回 {"recovered": bool, "message": str}。供 lifespan 启动时调用。
+    """
+    import json as _json
+    f = _live_state_file()
+    if not f.exists():
+        return {"recovered": False, "message": "无中断爬取记录"}
+    try:
+        state = _json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return {"recovered": False, "message": "中断记录损坏，跳过"}
+    cmd_args = state.get("cmd_args") or []
+    if not cmd_args:
+        return {"recovered": False, "message": "中断记录无命令，跳过"}
+    mode = cmd_args[1] if len(cmd_args) > 1 else "?"
+    f.unlink(missing_ok=True)
+    if scraper_lock.is_running():
+        return {"recovered": False, "message": f"已有爬取在运行，跳过恢复 {mode}"}
+    try:
+        proc = _start_scraper_guarded(cmd_args, state.get("info") or {})
+        return {"recovered": True, "message": f"已自动续爬 {mode}（PID {proc.pid}）"}
+    except Exception as e:
+        return {"recovered": False, "message": f"自动续爬失败: {e}"}
+
+
 def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
     """原子启动 scraper 并注册全局锁（Phase 2 P1-1 TOCTOU 修复）。
 
@@ -167,6 +234,7 @@ def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
         except Exception:
             pass
         raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    _write_live_state(cmd_args, info)
     return proc
 
 
@@ -449,6 +517,7 @@ def unregister(authorization: str | None = Header(None)):
     # 进程结束，清理引用
     if proc and not scraper_lock.is_proc_alive(proc):
         scraper_lock.clear()
+        _clear_live_state()
     return {"ok": True}
 
 
@@ -481,6 +550,7 @@ def reap_timed_out_crawl() -> dict:
     reaped = False
     if proc is not None and scraper_lock.is_proc_alive(proc) and _is_timed_out(scraper_lock.get_info()):
         _kill_process_tree(proc)  # type: ignore
+        _clear_live_state()
         reaped = True
         if scraper_lock.get_proc() is proc:
             scraper_lock.clear()
