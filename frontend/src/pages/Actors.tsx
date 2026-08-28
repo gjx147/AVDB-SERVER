@@ -133,10 +133,6 @@ export function Actors() {
   }
   // 一键补齐演员作品
   const crawlWorks = async (a: Actor) => {
-    if (!a.source_url) {
-      toastErr('该演员无 JavDB URL，需先通过 URL 添加')
-      return
-    }
     try {
       await api.actors.crawlWorks(a.id)
       toastOk(`已开始补齐 ${a.name} 的作品`)
@@ -279,8 +275,8 @@ export function Actors() {
                 <button
                   className="btn btn--ghost btn--sm"
                   onClick={(e) => { e.stopPropagation(); crawlWorks(a) }}
-                  disabled={!a.source_url}
-                  title={a.source_url ? '爬取该演员的全部作品并入库' : '无 JavDB URL（需先通过 URL 添加）'}
+                  disabled={false}
+                  title={'爬取该演员的全部作品并入库（无 URL 时按名搜索源站）'}
                   style={{ flex: 1 }}>补齐作品</button>
               </div>
             </div>

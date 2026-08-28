@@ -100,7 +100,6 @@ export function ActorDetail() {
 
   const crawlWorks = async () => {
     if (!actor) return
-    if (!actorUrl) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
     try {
       await api.actors.crawlWorks(actor.id, maxCoStar)
       toastOk(maxCoStar > 0 ? `已开始补齐 ${actor.name} 的作品（最大共演 ${maxCoStar} 人）` : `已开始补齐 ${actor.name} 的作品`)
@@ -108,7 +107,6 @@ export function ActorDetail() {
   }
   const crawlSoloWorks = async () => {
     if (!actor) return
-    if (!actorUrl) { toastErr('该演员无 JavDB URL，需先通过 URL 添加'); return }
     try {
       await api.actors.crawlWorks(actor.id, maxCoStar, true)
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
