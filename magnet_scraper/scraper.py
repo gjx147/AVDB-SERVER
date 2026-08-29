@@ -2007,7 +2007,10 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
         try:
             logger.info(f"[{i}/{total}] 搜索番号: {code}")
             url = f"{config.BASE_URL}/search?q={quote(code)}&f=all"
-            if not scraper._goto_with_retry(url, max_retries=2):
+            try:
+                scraper.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as e:
+                logger.warning(f"{code}: 搜索页导航失败: {e}")
                 results["notfound"] += 1
                 continue
             scraper._handle_security_check()
