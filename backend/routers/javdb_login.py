@@ -83,6 +83,7 @@ def _session_thread() -> None:
         pw = sync_playwright().start()
         _ctx["pw"] = pw
         kwargs = dict(user_agent=UA, headless=True,
+                      channel="chromium",  # Docker 镜像只装完整版 chromium（与爬虫 scraper.py 同参），headless_shell 变体不存在
                       args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         proxy = _proxy_server()
         if proxy:
