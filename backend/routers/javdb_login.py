@@ -99,6 +99,27 @@ def _proxy_server() -> tuple[str, str, str]:
     return server, u.username or "", u.password or ""
 
 
+_GATE_SELECTORS = [
+    "text=是,我已滿18歲", "text=是,我已满18岁",  # 年龄确认（繁/简）
+    "button:has-text('同意')", "a:has-text('同意')",  # 条款同意页绿色按钮
+]
+
+
+def _pass_gate(page) -> None:
+    """自动点击同意页/年龄确认按钮（存在才点，点完等跳转）。"""
+    try:
+        for sel in _GATE_SELECTORS:
+            try:
+                btn = page.locator(sel).first
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click()
+                    page.wait_for_timeout(2500)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def _session_thread() -> None:
     from playwright.sync_api import sync_playwright
     try:
@@ -132,9 +153,19 @@ def _session_thread() -> None:
         if last_err is not None:
             raise last_err
         page.wait_for_timeout(3000)
+        # 新会话先弹同意页/年龄确认——自动点击（绿色按钮）
+        _pass_gate(page)
+        if "login" not in (page.url or ""):
+            try:
+                page.goto(login_url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2000)
+            except Exception:
+                pass
         _state["message"] = "登录页已打开，看截图填账号、密码、验证码后提交"
         deadline = time.time() + TIMEOUT_S
         while time.time() < deadline and not _ctx["stop"] and _state["logged_in"] is not True:
+            # 兜底过门（同意/年龄页可能延迟出现）
+            _pass_gate(page)
             # 截图缓存（本线程内调用 page，跨线程安全）
             try:
                 png = page.screenshot(type="png")
