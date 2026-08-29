@@ -219,6 +219,8 @@ app.include_router(transfer.import_router)
 app.include_router(organize.router)
 app.include_router(shares.router)
 app.include_router(rules.router)
+from routers import top250 as _top250  # noqa: E402
+app.include_router(_top250.router)
 from routers import javdb_login as _javdb_login  # noqa: E402
 app.include_router(_javdb_login.router)
 

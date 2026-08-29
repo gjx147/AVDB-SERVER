@@ -1994,6 +1994,74 @@ class MagnetScraper:
         logger.info("=" * 60)
 
 
+def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
+    """Top250 入库：逐番号搜索 JavDB 详情页 → 建/更新 Task → 回填 top250_entries.task_id。"""
+    import json as _json
+    from urllib.parse import urljoin, quote
+    results = {"added": 0, "existing": 0, "notfound": 0, "filled_magnet": 0}
+    total = len(codes)
+    with scraper.store._conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO list_sources (list_code, list_path) VALUES ('TOP250', '/top250')")
+        conn.commit()
+    for i, code in enumerate(codes, 1):
+        try:
+            logger.info(f"[{i}/{total}] 搜索番号: {code}")
+            url = f"{scraper.BASE_URL}/search?q={quote(code)}&f=all"
+            if not scraper._goto_with_retry(url, max_retries=2):
+                results["notfound"] += 1
+                continue
+            scraper._handle_security_check()
+            link = scraper.page.locator("a[href^='/v/']").first
+            if link.count() == 0:
+                logger.warning(f"{code}: 搜索无结果")
+                results["notfound"] += 1
+                continue
+            href = link.get_attribute("href") or ""
+            detail_url = urljoin(scraper.BASE_URL, href)
+            task_id = None
+            existed = False
+            with scraper.store._conn() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO list_sources (list_code, list_path) VALUES ('TOP250', '/top250')")
+                row = conn.execute("SELECT id, status FROM tasks WHERE url=?", (detail_url,)).fetchone()
+                if row:
+                    task_id, existed = row[0], True
+                    results["existing"] += 1
+                    logger.info(f"{code}: 已在库（task {task_id}）")
+                else:
+                    cur = conn.execute(
+                        "INSERT INTO tasks (list_source_id, url, video_code, status, created_at, updated_at)"
+                        " VALUES ((SELECT id FROM list_sources WHERE list_code='TOP250'), ?, ?, 'pending',"
+                        " datetime('now'), datetime('now'))",
+                        (detail_url, code))
+                    task_id = cur.lastrowid
+                    results["added"] += 1
+                    logger.info(f"{code}: 已建任务 task {task_id} -> {detail_url}")
+                conn.execute(
+                    "UPDATE top250_entries SET task_id=? WHERE kind=? AND number=?",
+                    (task_id, kind, code))
+                conn.commit()
+            # 手动导入带磁力：Task 直接填充（跳过爬取，可立即推送）
+            mrow = None
+            with scraper.store._conn() as conn:
+                mrow = conn.execute(
+                    "SELECT magnet FROM top250_entries WHERE kind=? AND number=?",
+                    (kind, code)).fetchone()
+            if mrow and mrow[0] and not existed:
+                magnet = mrow[0]
+                payload = _json.dumps([{"magnet": magnet, "name": code}])
+                scraper.store.mark_visited(detail_url, best_magnet=magnet,
+                                           magnets_json=payload, video_code=code)
+                results["filled_magnet"] += 1
+                logger.info(f"{code}: 磁力已填充（跳过爬取）")
+            time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
+        except Exception as e:
+            logger.error(f"{code}: 处理异常 {e}")
+            results["notfound"] += 1
+    logger.info(f"search-movie 完成: {results}")
+    return results
+
+
 def main():
     # 从 DB settings 读运行时覆盖值（crawl_delay 等）
     try:
@@ -2044,6 +2112,12 @@ def main():
     actor_parser.add_argument("--solo-only", action="store_true", help="只爬单体作品（javdb 演员页 t=s 过滤）")
     actor_parser.add_argument("--no-extract", action="store_true", help="只入库作品列表，不提取详情（磁力/元数据/图片）；巡检用")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
+
+    # Top250 番号搜索入库
+    sm_parser = subparsers.add_parser("search-movie", help="按番号搜索 JavDB 详情页并建任务（Top250 入库）")
+    sm_parser.add_argument("--codes", type=str, required=True, help="逗号分隔番号列表，如 IPX-811,SSIS-497")
+    sm_parser.add_argument("--kind", type=int, default=6, help="Top250 kind（回填 top250_entries.task_id）")
+    sm_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
     # 单任务提取
     single_parser = subparsers.add_parser("extract-single", help="提取单个 URL 的磁力链接")
@@ -2192,6 +2266,12 @@ def main():
                             logger.info("开始提取排行榜详情页（复用 extract 逻辑）...")
                             scraper.extract_magnets()
                             logger.info("排行榜详情提取完成")
+                elif args.command == "search-movie":
+                    codes = [c.strip().upper() for c in (getattr(args, "codes", "") or "").split(",") if c.strip()]
+                    if not codes:
+                        logger.error("search-movie: 未提供番号")
+                    else:
+                        run_search_movie(scraper, codes, int(getattr(args, "kind", 6) or 6))
                 elif args.command == "crawl-actor":
                     from actor_scraper import ActorScraper
                     a = ActorScraper(scraper)

@@ -443,6 +443,20 @@ export const api = {
     testProxy: (proxy: string) =>
       http.post<{ ok: boolean; message: string }>('/api/settings/test-proxy', { proxy }).then((r) => r.data),
   },
+  top250: {
+    query: (kind: number, force = false) => http.post<{ ok: boolean; kind: number; label: string; total: number; no_code: number; in_library_synced: number }>('/api/top250/query', { kind, force }).then((r) => r.data),
+    import: (kind: number, csvFile: File, magnetFile: File) => {
+      const fd = new FormData()
+      fd.append('kind', String(kind))
+      fd.append('csv_file', csvFile)
+      fd.append('magnet_file', magnetFile)
+      return http.post<{ ok: boolean; label: string; csv_rows: number; magnet_rows: number; magnet_matched: number; in_library_synced: number }>('/api/top250/import', fd).then((r) => r.data)
+    },
+    list: (kind: number, q = '', status = 'all') =>
+      http.get<{ ok: boolean; label: string; total: number; items: { id: number; rank: number; number: string; name: string; date: string | null; magnet_version: string | null; task_id: number | null; in_library: boolean }[] }>(`/api/top250/list`, { params: { kind, q, status } }).then((r) => r.data),
+    crawlMissing: (kind: number) => http.post<{ ok: boolean; queued: number; message: string }>('/api/top250/crawl-missing', { kind }).then((r) => r.data),
+    addTask: (id: number) => http.post<{ ok: boolean; message: string }>(`/api/top250/${id}/add-task`).then((r) => r.data),
+  },
   javdbLogin: {
     start: () => http.post<ApiOk>('/api/javdb-login/start').then((r) => r.data),
     screenshot: () => http.get<{ ok: boolean; image: string }>('/api/javdb-login/screenshot').then((r) => r.data),

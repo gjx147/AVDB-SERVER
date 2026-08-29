@@ -24,6 +24,7 @@ const nav: NavSection[] = [
     { to: '/favorites', label: '收藏', icon: <Icon.heart />, statKey: 'favorites' },
     { to: '/actors', label: '演员库', icon: <Icon.actor />, statKey: 'actors' },
     { to: '/rankings', label: '排行榜', icon: <Icon.trophy /> },
+    { to: '/top250', label: 'Top250', icon: <Icon.trophy /> },
   ]},
   { section: '采集', items: [
     { to: '/sources', label: '列表源', icon: <Icon.source /> },

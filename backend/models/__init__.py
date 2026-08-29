@@ -18,6 +18,7 @@ from models.collection import Collection, task_collections
 from models.download import Download
 from models.notify_log import NotifyLog
 from models.rating_history import RatingHistory
+from models.top250 import Top250Entry
 from models.rule import Rule
 from models.share_token import ShareToken
 from models.ai_usage import AiUsage
@@ -53,6 +54,7 @@ __all__ = [
     "ChatMessage",
     "AiUsage",
     "RatingHistory",
+    "Top250Entry",
     "Rule",
     "ShareToken",
 ]
