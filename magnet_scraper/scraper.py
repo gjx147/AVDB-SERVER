@@ -2000,6 +2000,10 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
     from urllib.parse import urljoin, quote
     results = {"added": 0, "existing": 0, "notfound": 0, "filled_magnet": 0}
     total = len(codes)
+    # 浏览器初始化（排行榜爬虫的 _ensure_browser 同款：page 为空则启动）
+    if not scraper.page:
+        scraper.init_browser()
+        logger.info("浏览器已初始化（search-movie）")
     with scraper.store._conn() as conn:
         conn.execute("INSERT OR IGNORE INTO list_sources (list_code, list_path) VALUES ('TOP250', '/top250')")
         conn.commit()
