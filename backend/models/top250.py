@@ -21,3 +21,6 @@ class Top250Entry(Base):
     magnet: Mapped[str | None] = mapped_column(Text)
     magnet_version: Mapped[str | None] = mapped_column(String(20))
     task_id: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[str | None] = mapped_column(String(20))   # 数据快照日（数据包 date / 导入日）
+    prev_rank: Mapped[int | None] = mapped_column(Integer)       # 上一次快照的名次（涨跌回放）
+    prev_date: Mapped[str | None] = mapped_column(String(20))    # 上一次快照日

@@ -2011,13 +2011,31 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                 results["notfound"] += 1
                 continue
             scraper._handle_security_check()
-            link = scraper.page.locator("a[href^='/v/']").first
-            if link.count() == 0:
-                logger.warning(f"{code}: 搜索无结果")
-                results["notfound"] += 1
-                continue
-            href = link.get_attribute("href") or ""
-            detail_url = urljoin(scraper.BASE_URL, href)
+            # 校验搜索结果标题含番号（防多义误配）：前 3 个结果条目逐个核对
+            detail_url = ""
+            cards = scraper.page.locator(".item").filter(
+                has=scraper.page.locator("a[href^='/v/']"))
+            for ci in range(min(3, cards.count())):
+                try:
+                    card = cards.nth(ci)
+                    card_title = (card.locator(".video-title").first.text_content() or "")
+                    norm_card = re.sub(r"[\s-]", "", card_title).upper()
+                    norm_code = re.sub(r"[\s-]", "", code)
+                    if norm_code in norm_card:
+                        detail_url = urljoin(scraper.BASE_URL,
+                                             card.locator("a[href^='/v/']").first.get_attribute("href") or "")
+                        break
+                except Exception:
+                    continue
+            if not detail_url:
+                link = scraper.page.locator("a[href^='/v/']").first
+                if link.count() == 0:
+                    logger.warning(f"{code}: 搜索无结果")
+                    results["notfound"] += 1
+                    continue
+                href = link.get_attribute("href") or ""
+                detail_url = urljoin(scraper.BASE_URL, href)
+                logger.warning(f"{code}: 未匹配到标题含番号的结果，使用第一条（可能误配）")
             task_id = None
             existed = False
             with scraper.store._conn() as conn:

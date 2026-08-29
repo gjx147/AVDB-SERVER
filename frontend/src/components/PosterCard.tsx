@@ -26,10 +26,11 @@ interface Props {
   centerImage?: boolean  // 可选：图片居中裁剪（演员方形头像用，默认 right center 影片封面）
   rank?: number  // 可选：排行榜名次（≤3 金银铜角标并放大，≤10 白玻璃角标）
   posterSrc?: string  // 可选：外部初始图源（未入库条目直连远程海报，跳过本地 cover 404）
+  extraBadge?: React.ReactNode  // 可选：叠加在 rank 角标旁的额外徽章（如 Top250 涨跌 ↑↓）
 }
 
 /** 影片库海报卡 —— 点击整卡进入详情页；左上角复选框用于批量选择 */
-export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank, posterSrc }: Props) {
+export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank, posterSrc, extraBadge }: Props) {
   const nav = useNavigate()
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
@@ -105,6 +106,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
             <span className="rank-badge">{rank}</span>
           )
         )}
+        {extraBadge}
         <div className="poster-grad-top">
           <span className="poster-code">{task.video_code || '—'}</span>
           {/* marginLeft:auto 始终贴右——排名海报番号被角标隐藏时，勾选框不会落回左侧盖住皇冠 */}

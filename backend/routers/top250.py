@@ -13,6 +13,8 @@ from sqlalchemy import select
 
 from database import Base, engine
 from deps import CurrentUser, DbSession
+from datetime import datetime
+
 from models import Task, Top250Entry
 
 router = APIRouter(prefix="/api/top250", tags=["top250"])
@@ -205,8 +207,9 @@ def import_files(db: DbSession, _user: CurrentUser, kind: int = 6,
             continue
         rank = int(parts[0]) if parts[0].isdigit() else 0
         number = parts[1].upper().replace(" ", "")
-        _upsert_entry(db, kind, rank, number, number,
+        _e = _upsert_entry(db, kind, rank, number, number,
                       parts[2] if len(parts) > 2 else None, KIND_LABELS.get(kind), None)
+        _e.updated_at = datetime.now().strftime("%Y-%m-%d")
         stats["csv_rows"] += 1
     db.commit()
 
@@ -269,9 +272,12 @@ def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "", 
             continue
         out.append({"id": e.id, "kind": e.kind, "rank": e.rank, "number": e.number,
                     "name": e.name, "date": e.date, "magnet_version": e.magnet_version,
-                    "poster_url": e.icon_url, "task_id": e.task_id, "in_library": in_lib})
+                    "poster_url": e.icon_url, "task_id": e.task_id, "in_library": in_lib,
+                    "updated_at": e.updated_at, "prev_rank": e.prev_rank,
+                    "prev_date": e.prev_date})
     db.commit()
-    return {"ok": True, "kind": kind,
+    snapshot = max((e.updated_at for e in rows if e.updated_at), default=None)
+    return {"ok": True, "kind": kind, "snapshot": snapshot,
             "label": KIND_LABELS.get(kind, f"JavDB {kind} TOP250"), "total": len(out), "items": out}
 
 

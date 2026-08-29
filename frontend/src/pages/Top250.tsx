@@ -28,6 +28,9 @@ interface Entry {
   magnet_version: string | null
   task_id: number | null
   in_library: boolean
+  updated_at: string | null
+  prev_rank: number | null
+  prev_date: string | null
 }
 
 function asTask(e: Entry): Task {
@@ -53,6 +56,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>('all')
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState('')
+  const [snapshot, setSnapshot] = useState<string | null>(null)
   const csvRef = useRef<HTMLInputElement>(null)
   const magRef = useRef<HTMLInputElement>(null)
 
@@ -63,6 +67,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
       const r = await api.top250.list(k)
       if (seq !== reqSeqRef.current) return
       setList(r.items)
+      setSnapshot(r.snapshot ?? null)
     } catch (e) { if (seq === reqSeqRef.current) toastErr(String((e as Error).message)) }
   }, [toastErr])
 
@@ -134,6 +139,15 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
       toastOk(r.message)
       await load(kind)
     } catch (err) { toastErr(String((err as Error).message)) }
+  }
+
+  const deltaBadge = (e: Entry) => {
+    if (!e.prev_rank || e.prev_date === e.updated_at) return null
+    const d = e.prev_rank - e.rank
+    const tip = `上次第 ${e.prev_rank} 位（${e.prev_date}）`
+    if (d > 0) return <span className="delta up" title={tip}>↑{d}</span>
+    if (d < 0) return <span className="delta down" title={tip}>↓{-d}</span>
+    return <span className="delta flat" title={tip}>持平</span>
   }
 
   const entryClick = (e: Entry) => {
@@ -217,6 +231,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
           </button>
         </div>
       )}
+      {snapshot ? <div className="hint" style={{ margin: '4px 0 10px' }}>数据快照：{snapshot}</div> : null}
       {msg ? <div className="hint" style={{ margin: '4px 0 10px' }}>{msg}</div> : null}
 
       {list === null ? <SkeletonGallery /> : entries.length === 0 ? (
@@ -231,6 +246,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
               {podiumEntries.map((e) => (
                 <PosterCard key={e.id} task={asTask(e)} rank={e.rank}
                   posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
+                  extraBadge={deltaBadge(e)}
                   onClick={() => entryClick(e)} />
               ))}
             </div>
@@ -239,6 +255,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
             {restEntries.map((e) => (
               <PosterCard key={e.id} task={asTask(e)} rank={e.rank <= 10 ? e.rank : undefined}
                 posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
+                extraBadge={deltaBadge(e)}
                 onClick={() => entryClick(e)} />
             ))}
           </div>
