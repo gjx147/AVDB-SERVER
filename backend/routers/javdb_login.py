@@ -203,19 +203,35 @@ def _session_thread() -> None:
 def _do_submit(page, cmd: dict) -> dict:
     """在会话线程内执行提交（Playwright 对象同线程安全）。"""
     try:
-        user_field = page.locator("input[name='username'], input[name='name'], #username, #name").first
-        pass_field = page.locator("input[name='password'], #password").first
+        # 字段为 placeholder 式设计（Username or Email / Password / Captcha code），
+        # 语言随账号设置切换英文/中文——placeholder 双语匹配 + type 兜底
+        user_field = page.locator(
+            "input[placeholder*='Username' i], input[placeholder*='用户' i], "
+            "input[placeholder*='邮箱' i], input[placeholder*='账号' i], "
+            "input[name='username'], input[name='email'], input[name='name'], #username").first
+        pass_field = page.locator("input[type='password']:visible").first
         if not user_field.count() or not pass_field.count():
             return {"ok": False, "message": "登录表单字段未找到，请重开会话"}
         user_field.fill(cmd.get("username") or "")
         pass_field.fill(cmd.get("password") or "")
         cap_txt = cmd.get("captcha") or ""
         if cap_txt:
-            cap = page.locator("input[name='captcha'], #captcha, input[name='code'], input[placeholder*='验证']").first
+            cap = page.locator(
+                "input[placeholder*='Captcha' i], input[placeholder*='验证码'], "
+                "input[name='captcha'], #captcha, input[name='code']").first
             if not cap.count():
                 return {"ok": False, "message": "验证码输入框未找到"}
             cap.fill(cap_txt)
-        page.locator("button[type='submit'], input[type='submit'], button:has-text('登')").first.click()
+        # 7 天免登录（减少重新登录频率）
+        try:
+            keep = page.locator("input[type='checkbox']").first
+            if keep.count() and not keep.is_checked():
+                keep.check()
+        except Exception:
+            pass
+        page.locator(
+            "button:has-text('Sign in'), button:has-text('登入'), button:has-text('登录'), "
+            "input[type='submit'], button[type='submit']").first.click()
         for _ in range(10):
             page.wait_for_timeout(2000)
             if "login" not in (page.url or ""):
