@@ -2179,7 +2179,7 @@ def main():
     if use_db:
         logger.info("使用数据库模式")
         store = SqliteTaskStore(Path(config.DB_PATH))
-        if args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender", "refresh-metadata"):
+        if args.command in ("ranking", "crawl-actor", "search-movie", "extract-single", "refresh-actor-gender", "refresh-metadata"):
             # 这些命令只需要 store，不需要 list_source
             logger.info(f"{args.command} 模式，跳过 list_source 初始化")
         elif getattr(args, "list_source_id", None):
