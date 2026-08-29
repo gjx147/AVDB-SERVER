@@ -37,6 +37,8 @@ export function Top250() {
   const toastErr = useStore((st) => st.toastErr)
   const [group, setGroup] = useState<KindGroup>('type')
   const [kind, setKind] = useState(6)
+  const [yearStart, setYearStart] = useState(2025)
+  const [yearEnd, setYearEnd] = useState(2008)
   const [label, setLabel] = useState('')
   const [items, setItems] = useState<Entry[] | null>(null)
   const [q, setQ] = useState('')
@@ -60,9 +62,15 @@ export function Top250() {
   const doQuery = async () => {
     setBusy('query')
     try {
-      const r = await api.top250.query(kind)
-      toastOk(`${r.label}：${r.total} 部已入库条目池（缺番号 ${r.no_code}，已同步在库 ${r.in_library_synced}）`)
-      setMsg(`${r.label} 查询完成：共 ${r.total} 部`)
+      const r = await api.top250.query(kind, false, group === 'year' ? yearEnd : undefined)
+      if (group === 'year') {
+        setMsg(`已批量查询 ${r.kinds.length} 个年份（${r.kinds[0]}~${r.kinds[r.kinds.length - 1]}），共 ${r.grand_total} 部入库条目池`)
+        toastOk(`批量查询完成：${r.grand_total} 部`)
+      } else {
+        const s0 = r.summary[0]
+        toastOk(`${s0.label}：${s0.total} 部（缺番号 ${s0.no_code}，同步在库 ${s0.in_library_synced}）`)
+        setMsg(`${s0.label} 查询完成：共 ${s0.total} 部`)
+      }
       await load()
     } catch (e) { toastErr(String((e as Error).message)) } finally { setBusy('') }
   }
@@ -115,11 +123,22 @@ export function Top250() {
             <button className={`px-3 py-1.5 text-sm ${group === 'type' ? 'bg-blue-600 text-white' : 'bg-white'}`} onClick={() => { setGroup('type'); setKind(6) }}>按类型</button>
             <button className={`px-3 py-1.5 text-sm ${group === 'year' ? 'bg-blue-600 text-white' : 'bg-white'}`} onClick={() => { setGroup('year'); setKind(2025) }}>按年份</button>
           </div>
-          <select className="input text-sm" value={kind} onChange={(e) => setKind(Number(e.target.value))}>
-            {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
-          </select>
+          {group === 'type' ? (
+            <select className="input text-sm" value={kind} onChange={(e) => setKind(Number(e.target.value))}>
+              {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+            </select>
+          ) : (
+            <div className="flex items-center gap-1 text-sm">
+              <input type="number" min={2008} max={2025} className="input text-sm w-24" value={yearStart}
+                onChange={(e) => setYearStart(Number(e.target.value))} />
+              <span className="text-gray-400">~</span>
+              <input type="number" min={2008} max={2025} className="input text-sm w-24" value={yearEnd}
+                onChange={(e) => setYearEnd(Number(e.target.value))} />
+              <span className="text-xs text-gray-400">起止年份（2008~2025）</span>
+            </div>
+          )}
           <button className="btn text-sm" disabled={busy !== ''} onClick={doQuery}>
-            {busy === 'query' ? '查询中…' : '从数据源查询'}
+            {busy === 'query' ? '查询中…' : (group === 'year' ? '批量查询年份区间' : '从数据源查询')}
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">

@@ -444,7 +444,7 @@ export const api = {
       http.post<{ ok: boolean; message: string }>('/api/settings/test-proxy', { proxy }).then((r) => r.data),
   },
   top250: {
-    query: (kind: number, force = false) => http.post<{ ok: boolean; kind: number; label: string; total: number; no_code: number; in_library_synced: number }>('/api/top250/query', { kind, force }).then((r) => r.data),
+    query: (kind: number, force = false, kindEnd?: number) => http.post<{ ok: boolean; kinds: number[]; label: string; grand_total: number; summary: { kind: number; label: string; total: number; no_code: number; in_library_synced: number }[] }>('/api/top250/query', { kind, force, kind_end: kindEnd ?? null }).then((r) => r.data),
     import: (kind: number, csvFile: File, magnetFile: File) => {
       const fd = new FormData()
       fd.append('kind', String(kind))

@@ -106,33 +106,46 @@ def _mark_in_library(db: DbSession, kind: int) -> int:
 
 class QueryBody(BaseModel):
     kind: int
+    kind_end: int | None = None  # 年份范围批量查询：kind..kind_end 逐年入库
     force: bool = False
 
 
 @router.post("/query")
 def query_kind(body: QueryBody, db: DbSession, _user: CurrentUser):
-    """从 jinjier 数据包查询指定 kind 的 TOP250（kind=6~10 / 2008~2025），幂等入库。"""
-    if body.kind not in VALID_KINDS:
+    """从 jinjier 数据包查询 TOP250（kind 单个，或 kind..kind_end 年份范围批量），幂等入库。"""
+    kinds = [body.kind]
+    if body.kind_end is not None:
+        if body.kind not in range(2008, 2026) or body.kind_end not in range(2008, 2026):
+            raise HTTPException(status_code=400, detail="年份范围查询仅支持 2008~2025")
+        if body.kind_end < body.kind:
+            raise HTTPException(status_code=400, detail="结束年份不能早于起始年份")
+        kinds = list(range(body.kind, body.kind_end + 1))
+    elif body.kind not in VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"无效 kind: {body.kind}")
     _table_ensure()
     dbf = _ensure_pkg(force=body.force)
     conn = sqlite3.connect(str(dbf))
-    rows = conn.execute(
-        "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
-        (body.kind,)).fetchall()
+    summary = []
+    grand_total = 0
+    for k in kinds:
+        rows = conn.execute(
+            "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
+            (k,)).fetchall()
+        no_code = 0
+        for rank, name, date, note, icon in rows:
+            code = _extract_number(name)
+            if not code:
+                no_code += 1
+                code = f"?(rank{rank})"
+            _upsert_entry(db, k, rank, code, name, date, note, icon)
+        db.commit()
+        synced = _mark_in_library(db, k)
+        grand_total += len(rows)
+        summary.append({"kind": k, "label": KIND_LABELS.get(k, f"JavDB {k} TOP250"),
+                        "total": len(rows), "no_code": no_code, "in_library_synced": synced})
     conn.close()
-    no_code = 0
-    for rank, name, date, note, icon in rows:
-        code = _extract_number(name)
-        if not code:
-            no_code += 1
-            code = f"?(rank{rank})"
-        _upsert_entry(db, body.kind, rank, code, name, date, note, icon)
-    db.commit()
-    synced = _mark_in_library(db, body.kind)
-    return {"ok": True, "kind": body.kind,
-            "label": KIND_LABELS.get(body.kind, f"JavDB {body.kind} TOP250"),
-            "total": len(rows), "no_code": no_code, "in_library_synced": synced}
+    return {"ok": True, "kinds": kinds, "grand_total": grand_total, "summary": summary,
+            "label": KIND_LABELS.get(body.kind, f"JavDB {body.kind} TOP250")}
 
 
 class ImportBody(BaseModel):
