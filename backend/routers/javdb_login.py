@@ -34,12 +34,17 @@ def is_active() -> bool:
 
 
 def _db_path() -> Path:
-    """与 backend DATABASE_URL 同源的 SQLite 路径。"""
+    """与 backend/爬虫同源的 SQLite 路径。
+
+    - DATABASE_URL 为 sqlite:/// 绝对路径时直接用
+    - 空串（compose 默认）时回退项目根/data/javdb.db（= /app/data/javdb.db，
+      与爬虫 config.DATA_DIR 同源；backend cwd=/app/backend，相对路径会错位）
+    """
     import os
     url = os.environ.get("DATABASE_URL", "")
     if url.startswith("sqlite:///"):
         return Path(url[len("sqlite:///"):])
-    return Path("data/javdb.db")
+    return Path(__file__).resolve().parent.parent.parent / "data" / "javdb.db"
 
 
 def _read_setting(key: str, default: str = "") -> str:
@@ -91,8 +96,18 @@ def _session_thread() -> None:
         ctx = pw.chromium.launch_persistent_context(str(PROFILE_DIR), **kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         _ctx["ctx"], _ctx["page"] = ctx, page
-        page.goto(f"{_read_setting('javdb_url', 'https://javdb.com').rstrip('/')}/login",
-                  wait_until="domcontentloaded", timeout=45000)
+        login_url = f"{_read_setting('javdb_url', 'https://javdb.com').rstrip('/')}/login"
+        last_err = None
+        for attempt in range(2):
+            try:
+                page.goto(login_url, wait_until="domcontentloaded", timeout=60000)
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                _state["message"] = f"登录页加载超时（第 {attempt + 1} 次），重试中…"
+        if last_err is not None:
+            raise last_err
         page.wait_for_timeout(3000)
         _state["message"] = "登录页已打开，看截图填账号、密码、验证码后提交"
         deadline = time.time() + TIMEOUT_S
