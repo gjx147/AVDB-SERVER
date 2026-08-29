@@ -2,6 +2,7 @@
 入库：按番号自动爬取（scraper search-movie）→ 影片库与 Top250 页同时可见。"""
 import re
 import sqlite3
+import threading
 import zipfile
 from pathlib import Path
 
@@ -21,6 +22,21 @@ KIND_LABELS = {6: "JavDB TOP250", 7: "JavDB 有码 TOP250", 8: "JavDB 无码 TOP
 
 PKG_CANDIDATES = ["https://jinjier.art/20260112.gif", "https://jinjier.art/sql/20260112.gif"]
 VALID_KINDS = (*KIND_LABELS.keys(), *range(2008, 2026))
+_pkg_lock = threading.Lock()
+
+
+def _latest_pkg_url() -> str | None:
+    """从 jinjier.art/sql 页面解析最新数据包文件名（日期最大的 .gif）。"""
+    try:
+        r = httpx.get("https://jinjier.art/sql", timeout=20, follow_redirects=True)
+        hits = re.findall(r'["\']([^"\']*?(\d{8})\.gif)["\']', r.text)
+        if hits:
+            best = max(hits, key=lambda h: int(h[1]))
+            path = best[0]
+            return path if path.startswith("http") else "https://jinjier.art/" + path.lstrip("/")
+    except Exception:
+        pass
+    return None
 
 
 def _db_path() -> Path:
@@ -33,28 +49,38 @@ def _table_ensure() -> None:
 
 
 def _ensure_pkg(force: bool = False) -> Path:
-    """下载数据包（伪装 .gif 的 zip）并解压出 sqlite（幂等）。"""
-    db = _db_path()
-    if db.exists() and not force:
-        return db
-    last = None
-    for url in PKG_CANDIDATES:
-        try:
-            r = httpx.get(url, timeout=90, follow_redirects=True)
-            if r.status_code != 200 or len(r.content) < 100000:
-                last = f"{url} -> HTTP {r.status_code} ({len(r.content)}B)"
-                continue
-            tmp_zip = db.with_suffix(".zip")
-            tmp_zip.write_bytes(r.content)
-            with zipfile.ZipFile(tmp_zip) as z:
-                name = [n for n in z.namelist() if n.endswith(".sqlite3")][0]
-                z.extract(name, db.parent)
-                (db.parent / name).rename(db)
-            tmp_zip.unlink(missing_ok=True)
+    """下载数据包（动态解析最新版本）并解压出 sqlite（幂等 + 并发锁 + 原子落盘）。"""
+    with _pkg_lock:
+        db = _db_path()
+        if db.exists() and not force:
             return db
-        except Exception as e:
-            last = f"{url} -> {e}"
-    raise HTTPException(status_code=502, detail=f"jinjier 数据包下载失败：{last}")
+        candidates = []
+        latest = _latest_pkg_url()
+        if latest:
+            candidates.append(latest)
+        for c in PKG_CANDIDATES:
+            if c not in candidates:
+                candidates.append(c)
+        last = None
+        for url in candidates:
+            try:
+                r = httpx.get(url, timeout=90, follow_redirects=True)
+                if r.status_code != 200 or len(r.content) < 100000:
+                    last = f"{url} -> HTTP {r.status_code} ({len(r.content)}B)"
+                    continue
+                tmp_zip = db.with_suffix(".downloading")
+                tmp_zip.write_bytes(r.content)
+                with zipfile.ZipFile(tmp_zip) as z:
+                    name = [n for n in z.namelist() if n.endswith(".sqlite3")][0]
+                    z.extract(name, db.parent)
+                tmp_name = db.with_suffix(".tmp")
+                (db.parent / name).rename(tmp_name)
+                tmp_name.replace(db)  # 原子替换
+                tmp_zip.unlink(missing_ok=True)
+                return db
+            except Exception as e:
+                last = f"{url} -> {e}"
+        raise HTTPException(status_code=502, detail=f"jinjier 数据包下载失败：{last}")
 
 
 def _extract_number(name: str) -> str:
@@ -91,14 +117,19 @@ def _upsert_entry(db: DbSession, kind: int, rank: int, number: str, name: str,
 
 
 def _mark_in_library(db: DbSession, kind: int) -> int:
-    """按番号匹配 tasks.video_code 回填 task_id。"""
+    """按番号批量匹配 tasks.video_code 回填 task_id（IN 一次查询，避免 N+1）。"""
     entries = db.execute(select(Top250Entry).where(Top250Entry.kind == kind,
                                                    Top250Entry.task_id.is_(None))).scalars().all()
+    codes = [e.number for e in entries if e.number and not e.number.startswith("?")]
+    if not codes:
+        return 0
+    tasks = db.execute(select(Task).where(Task.video_code.in_(codes))).scalars().all()
+    by_code = {t.video_code: t.id for t in tasks}
     hit = 0
     for e in entries:
-        t = db.execute(select(Task).where(Task.video_code == e.number)).scalars().first()
-        if t:
-            e.task_id = t.id
+        tid = by_code.get(e.number)
+        if tid:
+            e.task_id = tid
             hit += 1
     db.commit()
     return hit
@@ -159,8 +190,13 @@ def import_files(db: DbSession, _user: CurrentUser, kind: int = 6,
     if kind not in KIND_LABELS:
         raise HTTPException(status_code=400, detail="手动导入仅支持类型榜 kind=6~10")
     _table_ensure()
-    csv_text = csv_file.file.read().decode("utf-8-sig", errors="replace")
-    magnet_text = magnet_file.file.read().decode("utf-8-sig", errors="replace")
+    LIMIT = 5 * 1024 * 1024
+    csv_bytes = csv_file.file.read()
+    mag_bytes = magnet_file.file.read()
+    if len(csv_bytes) > LIMIT or len(mag_bytes) > LIMIT:
+        raise HTTPException(status_code=413, detail="文件超过 5MB 上限")
+    csv_text = csv_bytes.decode("utf-8-sig", errors="replace")
+    magnet_text = mag_bytes.decode("utf-8-sig", errors="replace")
 
     stats = {"csv_rows": 0, "magnet_rows": 0, "magnet_matched": 0, "no_code": 0}
     for line in csv_text.splitlines():
@@ -210,14 +246,19 @@ def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "", 
     _table_ensure()
     rows = db.execute(select(Top250Entry).where(Top250Entry.kind == kind)
                       .order_by(Top250Entry.rank)).scalars().all()
+    # 批量匹配在库状态（一次 IN 查询，避免 N+1）
+    missing = [e for e in rows if e.task_id is None and e.number and not e.number.startswith("?")]
+    if missing:
+        codes = [e.number for e in missing]
+        tmap = {t.video_code: t.id for t in
+                db.execute(select(Task).where(Task.video_code.in_(codes))).scalars().all()}
+        for e in missing:
+            if e.number in tmap:
+                e.task_id = tmap[e.number]
+        db.commit()
     out = []
     for e in rows:
         in_lib = e.task_id is not None
-        if not in_lib and e.number and not e.number.startswith("?"):
-            t = db.execute(select(Task).where(Task.video_code == e.number)).scalars().first()
-            if t:
-                e.task_id = t.id
-                in_lib = True
         if q and q.upper() not in (e.number or "").upper() and q not in (e.name or ""):
             continue
         if status == "in" and not in_lib:

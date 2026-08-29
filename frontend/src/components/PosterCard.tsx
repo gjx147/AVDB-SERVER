@@ -25,10 +25,11 @@ interface Props {
   onClick?: () => void  // 可选：自定义点击行为（Rankings 用）
   centerImage?: boolean  // 可选：图片居中裁剪（演员方形头像用，默认 right center 影片封面）
   rank?: number  // 可选：排行榜名次（≤3 金银铜角标并放大，≤10 白玻璃角标）
+  posterSrc?: string  // 可选：外部初始图源（未入库条目直连远程海报，跳过本地 cover 404）
 }
 
 /** 影片库海报卡 —— 点击整卡进入详情页；左上角复选框用于批量选择 */
-export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank }: Props) {
+export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank, posterSrc }: Props) {
   const nav = useNavigate()
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
@@ -47,7 +48,8 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
   })()
 
   // 图片源：先试本地缓存，失败后 fallback 到远程
-  const [imgSrc, setImgSrc] = useState(withImageAuth(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`))
+  const [imgSrc, setImgSrc] = useState(posterSrc ??
+    withImageAuth(`${coverFileUrl(task.id)}?v=${task.updated_at || '0'}`))
   const [triedRemote, setTriedRemote] = useState(false)
 
   // 深悬停预览薄纱层：远程样品图（Boudoir 解扣式披露第 3 层）
@@ -67,7 +69,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
 
   const handleImgError = (e: React.MouseEvent<HTMLImageElement>) => {
     // 本地缓存失败 → 尝试远程封面；再失败挂 broken 类（保持画框占位，由 CSS 隐藏）
-    if (!triedRemote && remoteCover) {
+    if (!triedRemote && !posterSrc && remoteCover) {
       setTriedRemote(true)
       setImgSrc(remoteCover)
     } else {

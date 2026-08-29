@@ -56,11 +56,14 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   const csvRef = useRef<HTMLInputElement>(null)
   const magRef = useRef<HTMLInputElement>(null)
 
+  const reqSeqRef = useRef(0)  // 快速切换 kind 的响应竞态防护（丢弃旧响应）
   const load = useCallback(async (k: number) => {
+    const seq = ++reqSeqRef.current
     try {
       const r = await api.top250.list(k)
+      if (seq !== reqSeqRef.current) return
       setList(r.items)
-    } catch (e) { toastErr(String((e as Error).message)) }
+    } catch (e) { if (seq === reqSeqRef.current) toastErr(String((e as Error).message)) }
   }, [toastErr])
 
   useEffect(() => { load(kind) }, [kind, load])
@@ -68,7 +71,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   // 年份模式：进入页面若该年份尚无数据，自动从数据包查询（首次会下载数据包缓存到服务器）
   const autoQ = useRef<Set<number>>(new Set())
   useEffect(() => {
-    if (mode !== 'year' || autoQ.current.has(kind)) return
+    if (autoQ.current.has(kind)) return
     autoQ.current.add(kind)
     let cancelled = false
     ;(async () => {
@@ -84,7 +87,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
       } catch { /* 自动查询失败静默，用户可手动点查询 */ }
     })()
     return () => { cancelled = true }
-  }, [kind, mode])
+  }, [kind])
 
   const doQuery = async () => {
     setBusy('query')
@@ -112,8 +115,16 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
     try {
       const r = await api.top250.crawlMissing(kind)
       toastOk(r.message)
-      setMsg(r.message)
-      await load(kind)
+      setMsg(r.message + '（进度将自动刷新）')
+      // 轮询入库状态（爬虫逐番号回填，15s/轮 × 30 轮 ≈ 7.5 分钟窗口）
+      let rounds = 0
+      const poll = async () => {
+        rounds += 1
+        await load(kind)
+        if (rounds < 30) setTimeout(poll, 15000)
+        else setMsg(msg + '（轮询结束，可手动刷新）')
+      }
+      setTimeout(poll, 15000)
     } catch (e) { toastErr(String((e as Error).message)) } finally { setBusy('') }
   }
 
@@ -219,6 +230,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
             <div className="podium">
               {podiumEntries.map((e) => (
                 <PosterCard key={e.id} task={asTask(e)} rank={e.rank}
+                  posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
                   onClick={() => entryClick(e)} />
               ))}
             </div>
@@ -226,6 +238,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
           <div className="gallery">
             {restEntries.map((e) => (
               <PosterCard key={e.id} task={asTask(e)} rank={e.rank <= 10 ? e.rank : undefined}
+                posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
                 onClick={() => entryClick(e)} />
             ))}
           </div>
