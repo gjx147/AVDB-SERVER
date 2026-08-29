@@ -65,6 +65,27 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
 
   useEffect(() => { load(kind) }, [kind, load])
 
+  // 年份模式：进入页面若该年份尚无数据，自动从数据包查询（首次会下载数据包缓存到服务器）
+  const autoQ = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    if (mode !== 'year' || autoQ.current.has(kind)) return
+    autoQ.current.add(kind)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await api.top250.list(kind)
+        if (!cancelled && r.items.length === 0) {
+          const q = await api.top250.query(kind)
+          if (!cancelled) {
+            toastOk(`${q.label}：${q.grand_total} 部已自动加载`)
+            await load(kind)
+          }
+        }
+      } catch { /* 自动查询失败静默，用户可手动点查询 */ }
+    })()
+    return () => { cancelled = true }
+  }, [kind, mode])
+
   const doQuery = async () => {
     setBusy('query')
     try {
