@@ -2006,7 +2006,7 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
     for i, code in enumerate(codes, 1):
         try:
             logger.info(f"[{i}/{total}] 搜索番号: {code}")
-            url = f"{scraper.BASE_URL}/search?q={quote(code)}&f=all"
+            url = f"{config.BASE_URL}/search?q={quote(code)}&f=all"
             if not scraper._goto_with_retry(url, max_retries=2):
                 results["notfound"] += 1
                 continue
@@ -2022,7 +2022,7 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                     norm_card = re.sub(r"[\s-]", "", card_title).upper()
                     norm_code = re.sub(r"[\s-]", "", code)
                     if norm_code in norm_card:
-                        detail_url = urljoin(scraper.BASE_URL,
+                        detail_url = urljoin(config.BASE_URL,
                                              card.locator("a[href^='/v/']").first.get_attribute("href") or "")
                         break
                 except Exception:
@@ -2034,7 +2034,7 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                     results["notfound"] += 1
                     continue
                 href = link.get_attribute("href") or ""
-                detail_url = urljoin(scraper.BASE_URL, href)
+                detail_url = urljoin(config.BASE_URL, href)
                 logger.warning(f"{code}: 未匹配到标题含番号的结果，使用第一条（可能误配）")
             task_id = None
             existed = False
