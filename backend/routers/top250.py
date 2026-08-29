@@ -228,7 +228,7 @@ def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "", 
             continue
         out.append({"id": e.id, "kind": e.kind, "rank": e.rank, "number": e.number,
                     "name": e.name, "date": e.date, "magnet_version": e.magnet_version,
-                    "task_id": e.task_id, "in_library": in_lib})
+                    "poster_url": e.icon_url, "task_id": e.task_id, "in_library": in_lib})
     db.commit()
     return {"ok": True, "kind": kind,
             "label": KIND_LABELS.get(kind, f"JavDB {kind} TOP250"), "total": len(out), "items": out}
