@@ -100,8 +100,10 @@ def _proxy_server() -> tuple[str, str, str]:
 
 
 _GATE_SELECTORS = [
+    "text=Yes, I am",  # 年龄确认（英文界面，绿色按钮 Yes, I am.）
     "text=是,我已滿18歲", "text=是,我已满18岁",  # 年龄确认（繁/简）
-    "button:has-text('同意')", "a:has-text('同意')",  # 条款同意页绿色按钮
+    "button:has-text('同意')", "a:has-text('同意')",  # 条款同意页
+    "button:has-text('Agree')", "a:has-text('Agree')",
 ]
 
 
