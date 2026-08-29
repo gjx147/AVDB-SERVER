@@ -2167,7 +2167,7 @@ def main():
 
     use_db = getattr(args, "list_code", None) or getattr(args, "list_source_id", None)
     # ranking 和 crawl-actor 命令始终需要数据库存储
-    if not use_db and args.command in ("ranking", "crawl-actor", "extract-single", "refresh-actor-gender", "refresh-metadata"):
+    if not use_db and args.command in ("ranking", "crawl-actor", "search-movie", "extract-single", "refresh-actor-gender", "refresh-metadata"):
         use_db = True
     store = None
     list_source_id = None
