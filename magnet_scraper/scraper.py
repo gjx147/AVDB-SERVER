@@ -435,6 +435,12 @@ class MagnetScraper:
                 "timezone_id": "America/New_York",
             }
             
+            # 登录态桥接：设置页人工登录导出的 cookie 文件存在则加载
+            auth_file = config.OUTPUT_DIR / "javdb_auth.json"
+            if auth_file.exists():
+                context_options["storage_state"] = str(auth_file)
+                logger.info(f"已加载 JavDB 登录态: {auth_file}")
+
             self.context = self.browser.new_context(**context_options)
 
             # 创建页面

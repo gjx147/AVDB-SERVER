@@ -325,6 +325,13 @@ class ActorScraper:
                     break
             ok = self.is_logged_in()
             logger.info(f"自动登录{'成功' if ok else '失败'}")
+            if ok:
+                try:
+                    from config import OUTPUT_DIR
+                    self.page.context.storage_state(path=str(OUTPUT_DIR / "javdb_auth.json"))
+                    logger.info("登录态已导出（javdb_auth.json）")
+                except Exception:
+                    pass
             return ok
         except Exception as e:
             logger.warning(f"自动登录异常: {e}")

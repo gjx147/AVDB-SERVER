@@ -193,7 +193,13 @@ def _session_thread() -> None:
             time.sleep(2)
         if _state["logged_in"] is True:
             time.sleep(2)  # cookie 落盘
-            _state["message"] = "登录成功，cookie 已保存"
+            # 导出 storage_state（cookie+localStorage）供爬虫进程加载（跨进程登录态桥接）
+            try:
+                auth_path = PROFILE_DIR.parent / "javdb_auth.json"
+                _ctx["ctx"].storage_state(path=str(auth_path))
+                _state["message"] = "登录成功，cookie 已保存并同步给爬虫"
+            except Exception as e:
+                _state["message"] = f"登录成功，但 storage_state 导出失败: {e}"
         elif time.time() >= deadline:
             _state["message"] = "登录会话超时，已关闭"
     except Exception as e:
