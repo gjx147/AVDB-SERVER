@@ -42,11 +42,11 @@ function asTask(e: Entry): Task {
   } as unknown as Task
 }
 
-export function Top250() {
+export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   const nav = useNavigate()
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
-  const [kind, setKind] = useState(6)
+  const [kind, setKind] = useState(mode === 'cat' ? 6 : 2025)
   const [list, setList] = useState<Entry[] | null>(null)
   const [view, setView] = useState<'grid' | 'row'>('grid')
   const [searchQ, setSearchQ] = useState('')
@@ -123,10 +123,12 @@ export function Top250() {
 
   return (
     <div className="page">
-      <PageHead eyebrow="Top250" title={<>Top<em>250</em></>}
-        sub="JavDB 高分经典片单——按类别与年份浏览，一键入库走完整链路。">
+      <PageHead eyebrow="Top250" title={mode === 'cat' ? <>TOP250 · <em>类别</em></> : <>TOP250 · <em>年份</em></>}
+        sub={mode === 'cat'
+          ? 'JavDB 分类 TOP250——总榜/有码/无码/欧美/FC2，一键入库走完整链路。'
+          : 'JavDB 年度 TOP250——按年份浏览历届高分片单，一键入库走完整链路。'}>
         <button className="btn btn--ghost btn--sm" onClick={doQuery} disabled={busy !== ''}>
-          <Icon.refresh />{busy === 'query' ? '查询中…' : '从数据源查询'}
+          <Icon.refresh />{busy === 'query' ? '查询中…' : '查询数据源'}
         </button>
         <button className="btn btn--ghost btn--sm" disabled={busy !== ''}
           onClick={() => csvRef.current?.click()}>
@@ -143,12 +145,14 @@ export function Top250() {
       </PageHead>
 
       <div className="gallery-toolbar">
-        <div className="seg">
-          {CATS.map((c) => (
-            <button key={c.kind} className={kind === c.kind ? 'on' : ''}
-              onClick={() => setKind(c.kind)}>{c.label}</button>
-          ))}
-        </div>
+        {mode === 'cat' && (
+          <div className="seg">
+            {CATS.map((c) => (
+              <button key={c.kind} className={kind === c.kind ? 'on' : ''}
+                onClick={() => setKind(c.kind)}>{c.label}</button>
+            ))}
+          </div>
+        )}
         <div className="search">
           <Icon.search />
           <input placeholder="搜索番号…" value={searchQ}
@@ -169,23 +173,23 @@ export function Top250() {
         </button>
       </div>
 
-      <div className="gallery-toolbar" style={{ marginTop: -8 }}>
-        <div className="seg" style={{ flexWrap: 'wrap' }}>
-          {YEARS.map((y) => (
-            <button key={y} className={kind === y ? 'on' : ''} onClick={() => setKind(y)}>{y}</button>
-          ))}
-        </div>
-        {kind >= 2008 && (
+      {mode === 'year' && (
+        <div className="gallery-toolbar" style={{ marginTop: -8 }}>
+          <div className="seg" style={{ flexWrap: 'wrap' }}>
+            {YEARS.map((y) => (
+              <button key={y} className={kind === y ? 'on' : ''} onClick={() => setKind(y)}>{y}</button>
+            ))}
+          </div>
           <button className="btn btn--ghost btn--sm" onClick={doQuery} disabled={busy !== ''}>
             <Icon.refresh />查询 {kind} 榜
           </button>
-        )}
-        {msg ? <span className="hint" style={{ whiteSpace: 'nowrap' }}>{msg}</span> : null}
-      </div>
+        </div>
+      )}
+      {msg ? <div className="hint" style={{ margin: '4px 0 10px' }}>{msg}</div> : null}
 
       {list === null ? <SkeletonGallery /> : entries.length === 0 ? (
         <Empty icon="○" title="暂无数据"
-          sub="先点「从数据源查询」（jinjier 数据包）或通过页头按钮手动导入 csv 与磁力文件。" />
+          sub="先点「查询数据源」（jinjier 数据包）或通过页头按钮手动导入 csv 与磁力文件。" />
       ) : filtered.length === 0 ? (
         <Empty icon="○" title="无匹配结果" sub="尝试更换筛选条件或搜索关键词。" />
       ) : view === 'grid' ? (
@@ -234,3 +238,6 @@ export function Top250() {
     </div>
   )
 }
+
+export function Top250Cats() { return <Top250View mode="cat" /> }
+export function Top250Years() { return <Top250View mode="year" /> }

@@ -18,7 +18,8 @@ const Favorites   = lazy(() => import('./pages/Favorites').then(m => ({ default:
 const Actors      = lazy(() => import('./pages/Actors').then(m => ({ default: m.Actors })))
 const ActorDetail = lazy(() => import('./pages/ActorDetail').then(m => ({ default: m.ActorDetail })))
 const Rankings    = lazy(() => import('./pages/Rankings').then(m => ({ default: m.Rankings })))
-const Top250      = lazy(() => import('./pages/Top250').then(m => ({ default: m.Top250 })))
+const Top250Cats  = lazy(() => import('./pages/Top250').then(m => ({ default: m.Top250Cats })))
+const Top250Years = lazy(() => import('./pages/Top250').then(m => ({ default: m.Top250Years })))
 const ListSources = lazy(() => import('./pages/ListSources').then(m => ({ default: m.ListSources })))
 const Crawl       = lazy(() => import('./pages/Crawl').then(m => ({ default: m.Crawl })))
 const Subscriptions = lazy(() => import('./pages/Subscriptions').then(m => ({ default: m.Subscriptions })))
@@ -130,7 +131,8 @@ export default function App() {
             <Route path="/actors" element={<Actors />} />
             <Route path="/actor/:id" element={<ActorDetail />} />
             <Route path="/rankings" element={<Rankings />} />
-        <Route path="/top250" element={<Top250 />} />
+        <Route path="/top250-cats" element={<Top250Cats />} />
+        <Route path="/top250-years" element={<Top250Years />} />
             <Route path="/sources" element={<ListSources />} />
             <Route path="/crawl" element={<Crawl />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
