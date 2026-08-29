@@ -605,7 +605,7 @@ class MagnetScraper:
                 # 处理年龄验证后返回
                 try:
                     logger.debug("检查年龄验证...")
-                    age_btn = self.page.locator("text=是,我已滿18歲").first
+                    age_btn = self.page.locator("text=是,我已滿18歲, text=是,我已满18岁, text=Yes, I am").first
                     if age_btn.count() > 0:
                         logger.info("找到年龄验证按钮，点击确认...")
                         age_btn.click()

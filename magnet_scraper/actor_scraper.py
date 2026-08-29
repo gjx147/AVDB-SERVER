@@ -225,6 +225,119 @@ class ActorScraper:
             logger.error(f"搜索演员失败: {e}")
             return []
 
+    # ── JavDB 登录（t=s 单体过滤为登录限定功能，未登录访问会被 302 到 /login）──
+
+    def _read_credentials(self) -> tuple[str, str]:
+        """从 DB settings 表读 javdb_username / javdb_password。"""
+        try:
+            with self.store._conn() as conn:
+                rows = conn.execute(
+                    "SELECT key, value FROM settings WHERE key IN ('javdb_username','javdb_password')"
+                ).fetchall()
+        except Exception:
+            return "", ""
+        d = {k: v for k, v in rows}
+        return (d.get("javdb_username") or "", d.get("javdb_password") or "")
+
+    def is_logged_in(self) -> bool:
+        """检测登录态：未登录页面有 /login 链接，登录后没有。"""
+        try:
+            self._ensure_browser()
+            self._goto_with_retry(f"{self.BASE_URL}/", max_retries=2)
+            self.page.wait_for_timeout(2000)
+            login_link = self.page.locator("a[href='/login']").first
+            return login_link.count() == 0
+        except Exception as e:
+            logger.warning(f"登录态检测失败（视为未登录）: {e}")
+            return False
+
+    def ensure_logged_in(self) -> bool:
+        """确保登录：已登录直接返回；否则用配置的账号自动登录。
+
+        返回 True=已登录（t=s 可用）；False=登录失败/未配置（调用方降级）。
+        """
+        if self.is_logged_in():
+            logger.info("JavDB 登录态有效")
+            return True
+        username, password = self._read_credentials()
+        if not username or not password:
+            logger.info("未配置 JavDB 账号（settings: javdb_username/javdb_password）")
+            return False
+        logger.info(f"尝试自动登录 JavDB（账号: {username[:3]}***）")
+        try:
+            self._ensure_browser()
+            if not self._goto_with_retry(f"{self.BASE_URL}/login", max_retries=2):
+                logger.warning("登录页导航失败")
+                return False
+            # 过门：同意页/年龄确认（语言随界面，繁简英都点）
+            for sel in ("text=是,我已滿18歲", "text=是,我已满18岁", "text=Yes, I am",
+                        "button:has-text('同意')", "button:has-text('Agree')"):
+                try:
+                    btn = self.page.locator(sel).first
+                    if btn.count() > 0 and btn.is_visible():
+                        btn.click()
+                        self.page.wait_for_timeout(2500)
+                except Exception:
+                    continue
+            if "login" not in (self.page.url or ""):
+                self._goto_with_retry(f"{self.BASE_URL}/login", max_retries=2)
+            # 等待 Turnstile 自动通过
+            for _ in range(10):
+                if "login" not in (self.page.url or ""):
+                    break
+                self.page.wait_for_timeout(2000)
+            # 填表（placeholder 双语匹配，与 backend 侧登录会话一致）
+            user_field = self.page.locator(
+                "input[placeholder*='Username' i], input[placeholder*='用户' i], "
+                "input[placeholder*='邮箱' i], input[placeholder*='账号' i], "
+                "input[name='username'], input[name='email'], input[name='name'], #username").first
+            pass_field = self.page.locator("input[type='password']:visible").first
+            if not user_field.count() or not pass_field.count():
+                logger.warning("登录表单字段未找到（页面结构可能变化）")
+                return False
+            user_field.fill(username)
+            pass_field.fill(password)
+            captcha = self._read_captcha_text() or ""
+            cap = self.page.locator(
+                "input[placeholder*='Captcha' i], input[placeholder*='验证码'], "
+                "input[name='captcha'], #captcha, input[name='code']").first
+            if cap.count():
+                if captcha:
+                    cap.fill(captcha)
+                else:
+                    logger.warning("需要验证码但无法自动识别——爬虫侧自动登录不可用，将降级")
+                    return False
+            else:
+                logger.info("未出现验证码输入框（可能已跳过）")
+            # 7 天免登录
+            try:
+                keep = self.page.locator("input[type='checkbox']").first
+                if keep.count() and not keep.is_checked():
+                    keep.check()
+            except Exception:
+                pass
+            self.page.locator(
+                "button:has-text('Sign in'), button:has-text('登入'), button:has-text('登录'), "
+                "input[type='submit'], button[type='submit']").first.click()
+            for _ in range(15):
+                self.page.wait_for_timeout(2000)
+                if "login" not in (self.page.url or ""):
+                    break
+            ok = self.is_logged_in()
+            logger.info(f"自动登录{'成功' if ok else '失败'}")
+            return ok
+        except Exception as e:
+            logger.warning(f"自动登录异常: {e}")
+            return False
+
+    def _read_captcha_text(self) -> str:
+        """读取验证码图片文字（预留 OCR 接入点；当前返回空=无法自动识别）。
+
+        登录流程遇验证码：有人工辅助登录（backend 设置页）兜底，
+        爬虫侧自动登录在无验证码时可用；带验证码则返回 False 降级。
+        """
+        return ""
+
     def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0, solo_only: bool = False) -> dict:
         """完整爬取演员信息 + 作品列表。
 
