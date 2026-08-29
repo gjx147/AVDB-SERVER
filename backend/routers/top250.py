@@ -50,11 +50,26 @@ def _table_ensure() -> None:
     Top250Entry.__table__.create(bind=engine, checkfirst=True)
 
 
+def _pkg_valid(db: Path) -> bool:
+    """缓存文件完整性校验（可打开 + ranks 表有数据）；失败删除（自愈）。"""
+    try:
+        conn = sqlite3.connect(str(db))
+        row = conn.execute("SELECT COUNT(*) FROM ranks").fetchone()
+        conn.close()
+        return bool(row and row[0] > 0)
+    except Exception:
+        try:
+            db.unlink()
+        except Exception:
+            pass
+        return False
+
+
 def _ensure_pkg(force: bool = False) -> Path:
-    """下载数据包（动态解析最新版本）并解压出 sqlite（幂等 + 并发锁 + 原子落盘）。"""
+    """下载数据包（动态解析最新版本）并解压出 sqlite（幂等 + 并发锁 + 原子落盘 + 损坏自愈）。"""
     with _pkg_lock:
         db = _db_path()
-        if db.exists() and not force:
+        if db.exists() and not force and _pkg_valid(db):
             return db
         candidates = []
         latest = _latest_pkg_url()
