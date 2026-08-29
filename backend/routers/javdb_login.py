@@ -163,7 +163,14 @@ def _session_thread() -> None:
                 page.wait_for_timeout(2000)
             except Exception:
                 pass
-        _state["message"] = "登录页已打开，看截图填账号、密码、验证码后提交"
+        # 已登录检测：header 无 /login 链接 = 登录态有效（cookie 已在 profile）
+        try:
+            if page.locator("a[href='/login']").first.count() == 0:
+                _state["logged_in"] = True
+                _state["message"] = "当前已是登录状态，无需重复登录（可直接跑单体补齐走快速通道）"
+        except Exception:
+            pass
+        _state["message"] = _state["message"] or "登录页已打开，看截图填账号、密码、验证码后提交"
         deadline = time.time() + TIMEOUT_S
         while time.time() < deadline and not _ctx["stop"] and _state["logged_in"] is not True:
             # 兜底过门（同意/年龄页可能延迟出现）
