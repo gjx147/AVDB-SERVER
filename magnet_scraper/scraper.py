@@ -2005,7 +2005,7 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
         scraper.init_browser()
         logger.info("浏览器已初始化（search-movie）")
     with scraper.store._conn() as conn:
-        conn.execute("INSERT OR IGNORE INTO list_sources (list_code, list_path) VALUES ('TOP250', '/top250')")
+        conn.execute("INSERT OR IGNORE INTO list_sources (list_code, list_path, created_at) VALUES ('TOP250', '/top250', datetime('now'))")
         conn.commit()
     for i, code in enumerate(codes, 1):
         try:
@@ -2047,7 +2047,7 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
             existed = False
             with scraper.store._conn() as conn:
                 conn.execute(
-                    "INSERT OR IGNORE INTO list_sources (list_code, list_path) VALUES ('TOP250', '/top250')")
+                    "INSERT OR IGNORE INTO list_sources (list_code, list_path, created_at) VALUES ('TOP250', '/top250', datetime('now'))")
                 row = conn.execute("SELECT id, status FROM tasks WHERE url=?", (detail_url,)).fetchone()
                 if row:
                     task_id, existed = row[0], True
