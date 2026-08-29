@@ -316,8 +316,8 @@ def crawl_missing(body: CrawlBody, db: DbSession, _user: CurrentUser):
              .scalars().first()]
     if not codes:
         return {"ok": True, "queued": 0, "message": "没有未入库条目"}
-    scraper = Path(__file__).resolve().parent.parent / "magnet_scraper" / "scraper.py"
-    cmd = [str(scraper), "search-movie", "--codes", ",".join(codes), "--kind", str(body.kind)]
+    # cmd_args 不含脚本路径（_start_scraper 内部拼 python + scraper.py）
+    cmd = ["search-movie", "--codes", ",".join(codes), "--kind", str(body.kind)]
     proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": body.kind,
                                         "count": len(codes)})
     return {"ok": True, "queued": len(codes), "pid": proc.pid,
@@ -334,7 +334,6 @@ def add_task(number: str, db: DbSession, _user: CurrentUser, kind: int = 6):
     number = number.upper().replace(" ", "")
     if db.execute(select(Task).where(Task.video_code == number)).scalars().first():
         return {"ok": True, "message": "已在影片库"}
-    scraper = Path(__file__).resolve().parent.parent / "magnet_scraper" / "scraper.py"
-    cmd = [str(scraper), "search-movie", "--codes", number, "--kind", str(kind)]
+    cmd = ["search-movie", "--codes", number, "--kind", str(kind)]
     proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": kind, "count": 1})
     return {"ok": True, "message": f"已启动 {number} 的搜索入库（PID {proc.pid}）"}
