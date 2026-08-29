@@ -11,6 +11,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from database import engine
 from deps import CurrentUser, DbSession
 from models import Task, Top250Magnet
 from models.top250 import Top250Entry  # 旧表（一次性磁力迁移用）
