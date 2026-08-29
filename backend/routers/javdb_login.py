@@ -74,11 +74,26 @@ def _cleanup() -> None:
     _state["running"] = False
 
 
-def _proxy_server() -> str:
+def _proxy_server() -> tuple[str, str, str]:
+    """返回 (server, username, password)。
+
+    优先级：settings 表 http_proxy（用户配置，与爬虫实际生效一致）
+    → 进程 env HTTP_PROXY/HTTPS_PROXY（compose 注入，兜底）。
+    127.0.0.1/localhost 换 host.docker.internal（容器内网关）。
+    user:pass@host 形式拆出鉴权（playwright proxy 参数要求）。
+    """
+    import os
+    from urllib.parse import urlparse
     v = _read_setting("http_proxy")
-    if v and ("127.0.0.1" in v or "localhost" in v):
+    if not v:
+        v = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+    if not v:
+        return "", "", ""
+    if "127.0.0.1" in v or "localhost" in v:
         v = v.replace("127.0.0.1", "host.docker.internal").replace("localhost", "host.docker.internal")
-    return v
+    u = urlparse(v if "//" in v else "//" + v)
+    server = f"{u.scheme or 'http'}://{u.hostname or 'host.docker.internal'}:{u.port or 80}"
+    return server, u.username or "", u.password or ""
 
 
 def _session_thread() -> None:
@@ -90,9 +105,14 @@ def _session_thread() -> None:
         kwargs = dict(user_agent=UA, headless=True,
                       channel="chromium",  # Docker 镜像只装完整版 chromium（与爬虫 scraper.py 同参），headless_shell 变体不存在
                       args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
-        proxy = _proxy_server()
+        proxy, proxy_user, proxy_pass = _proxy_server()
         if proxy:
-            kwargs["proxy"] = {"server": proxy}
+            pdict = {"server": proxy}
+            if proxy_user:
+                pdict["username"] = proxy_user
+            if proxy_pass:
+                pdict["password"] = proxy_pass
+            kwargs["proxy"] = pdict
         ctx = pw.chromium.launch_persistent_context(str(PROFILE_DIR), **kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         _ctx["ctx"], _ctx["page"] = ctx, page
