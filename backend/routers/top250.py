@@ -1,9 +1,9 @@
-"""Top250 独立模块——两种数据来源：jinjier.art 数据包查询 / 手动导入 csv+magnet。
-入库：按番号自动爬取（scraper search-movie）→ 影片库与 Top250 页同时可见。"""
+"""Top250 数据层——jinjier.sqlite3 直读（不转存）+ 手动磁力导入 + 实时入库联查。"""
 import re
 import sqlite3
 import threading
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -11,34 +11,17 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from database import Base, engine
 from deps import CurrentUser, DbSession
-from datetime import datetime
-
-from models import Task, Top250Entry
+from models import Task, Top250Magnet
+from models.top250 import Top250Entry  # 旧表（一次性磁力迁移用）
 
 router = APIRouter(prefix="/api/top250", tags=["top250"])
 
 KIND_LABELS = {6: "JavDB TOP250", 7: "JavDB 有码 TOP250", 8: "JavDB 无码 TOP250",
                9: "JavDB 欧美 TOP250", 10: "JavDB FC2 TOP250"}
-
-PKG_CANDIDATES = ["https://jinjier.art/20260112.gif", "https://jinjier.art/sql/20260112.gif"]
 VALID_KINDS = (*KIND_LABELS.keys(), *range(2008, 2026))
+RANKS_DB = Path("data/jinjier_ranks.db")
 _pkg_lock = threading.Lock()
-
-
-def _latest_pkg_url() -> str | None:
-    """从 jinjier.art/sql 页面解析最新数据包文件名（日期最大的 .gif）。"""
-    try:
-        r = httpx.get("https://jinjier.art/sql", timeout=20, follow_redirects=True)
-        hits = re.findall(r'["\']([^"\']*?(\d{8})\.gif)["\']', r.text)
-        if hits:
-            best = max(hits, key=lambda h: int(h[1]))
-            path = best[0]
-            return path if path.startswith("http") else "https://jinjier.art/" + path.lstrip("/")
-    except Exception:
-        pass
-    return None
 
 
 def _db_path() -> Path:
@@ -46,12 +29,42 @@ def _db_path() -> Path:
 
 
 def _table_ensure() -> None:
-    """Top250 独立表（项目无迁移体系，checkfirst 幂等建表）。"""
-    Top250Entry.__table__.create(bind=engine, checkfirst=True)
+    """主库建表（top250_magnets）+ 旧 top250_entries 磁力一次性迁移。"""
+    Top250Magnet.__table__.create(bind=engine, checkfirst=True)
+    # 旧表磁力迁移（仅一次：旧表有磁力且新表为空时）
+    try:
+        with engine.connect() as conn:
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(top250_entries)")}
+            if "magnet" not in cols:
+                return
+        from database import SessionLocal
+        odb = SessionLocal()
+        try:
+            old_rows = odb.execute(select(Top250Entry).where(Top250Entry.magnet.is_not(None))).scalars().all()
+            if not old_rows:
+                return
+            have = {(m.kind, m.number) for m in odb.execute(select(Top250Magnet)).scalars().all()}
+            moved = 0
+            for e in old_rows:
+                if (e.kind, e.number) in have:
+                    continue
+                odb.add(Top250Magnet(kind=e.kind, number=e.number, magnet=e.magnet,
+                                     magnet_version=e.magnet_version, updated_at=e.updated_at))
+                moved += 1
+            odb.commit()
+            if moved:
+                print(f"[top250] 旧磁力迁移 {moved} 条")
+        finally:
+            odb.close()
+    except Exception:
+        pass
+
+
+def _ranks_db() -> Path:
+    return Path(__file__).resolve().parent.parent / "data" / "jinjier_ranks.db"
 
 
 def _pkg_valid(db: Path) -> bool:
-    """缓存文件完整性校验（可打开 + ranks 表有数据）；失败删除（自愈）。"""
     try:
         conn = sqlite3.connect(str(db))
         row = conn.execute("SELECT COUNT(*) FROM ranks").fetchone()
@@ -65,17 +78,30 @@ def _pkg_valid(db: Path) -> bool:
         return False
 
 
+def _latest_pkg_url() -> str | None:
+    try:
+        r = httpx.get("https://jinjier.art/sql", timeout=20, follow_redirects=True)
+        hits = re.findall(r'["\']([^"\']*?(\d{8})\.gif)["\']', r.text)
+        if hits:
+            best = max(hits, key=lambda h: int(h[1]))
+            path = best[0]
+            return path if path.startswith("http") else "https://jinjier.art/" + path.lstrip("/")
+    except Exception:
+        pass
+    return None
+
+
 def _ensure_pkg(force: bool = False) -> Path:
-    """下载数据包（动态解析最新版本）并解压出 sqlite（幂等 + 并发锁 + 原子落盘 + 损坏自愈）。"""
+    """下载数据包（动态解析最新版本）原子落盘 + 损坏自愈。"""
     with _pkg_lock:
-        db = _db_path()
+        db = _ranks_db()
         if db.exists() and not force and _pkg_valid(db):
             return db
         candidates = []
         latest = _latest_pkg_url()
         if latest:
             candidates.append(latest)
-        for c in PKG_CANDIDATES:
+        for c in ["https://jinjier.art/20260112.gif", "https://jinjier.art/sql/20260112.gif"]:
             if c not in candidates:
                 candidates.append(c)
         last = None
@@ -83,7 +109,7 @@ def _ensure_pkg(force: bool = False) -> Path:
             try:
                 r = httpx.get(url, timeout=90, follow_redirects=True)
                 if r.status_code != 200 or len(r.content) < 100000:
-                    last = f"{url} -> HTTP {r.status_code} ({len(r.content)}B)"
+                    last = f"{url} -> HTTP {r.status_code}"
                     continue
                 tmp_zip = db.with_suffix(".downloading")
                 tmp_zip.write_bytes(r.content)
@@ -92,7 +118,7 @@ def _ensure_pkg(force: bool = False) -> Path:
                     z.extract(name, db.parent)
                 tmp_name = db.with_suffix(".tmp")
                 (db.parent / name).rename(tmp_name)
-                tmp_name.replace(db)  # 原子替换
+                tmp_name.replace(db)
                 tmp_zip.unlink(missing_ok=True)
                 return db
             except Exception as e:
@@ -109,9 +135,9 @@ def _version_of(dn: str) -> str:
     low = dn.lower()
     if "-uc" in low:
         return "-UC"
-    if re.search(r"-c\.", low) or "-c " in low or low.endswith("-c"):
+    if re.search(r"-c\.", low) or low.endswith("-c"):
         return "-C"
-    if re.search(r"-u\.", low) or "-u " in low or low.endswith("-u"):
+    if re.search(r"-u\.", low) or low.endswith("-u"):
         return "-U"
     if "-bd" in low:
         return "-BD"
@@ -122,114 +148,115 @@ def _version_of(dn: str) -> str:
     return "-"
 
 
-def _upsert_entry(db: DbSession, kind: int, rank: int, number: str, name: str,
-                  date: str | None, note: str | None, icon_url: str | None) -> Top250Entry:
-    e = db.execute(select(Top250Entry).where(Top250Entry.kind == kind,
-                                             Top250Entry.number == number)).scalar_one_or_none()
-    if not e:
-        e = Top250Entry(kind=kind, number=number)
-        db.add(e)
-    e.rank, e.name, e.date, e.note, e.icon_url = rank, name, date, note, icon_url
-    return e
-
-
-def _mark_in_library(db: DbSession, kind: int) -> int:
-    """按番号批量匹配 tasks.video_code 回填 task_id（IN 一次查询，避免 N+1）。"""
-    entries = db.execute(select(Top250Entry).where(Top250Entry.kind == kind,
-                                                   Top250Entry.task_id.is_(None))).scalars().all()
-    codes = [e.number for e in entries if e.number and not e.number.startswith("?")]
-    if not codes:
-        return 0
-    tasks = db.execute(select(Task).where(Task.video_code.in_(codes))).scalars().all()
-    by_code = {t.video_code: t.id for t in tasks}
-    hit = 0
-    for e in entries:
-        tid = by_code.get(e.number)
-        if tid:
-            e.task_id = tid
-            hit += 1
-    db.commit()
-    return hit
-
-
-class QueryBody(BaseModel):
-    kind: int
-    kind_end: int | None = None  # 年份范围批量查询：kind..kind_end 逐年入库
+class QueryBody(BaseModel := __import__("pydantic").BaseModel):
+    __annotations__ = {"kind": int, "kind_end": int | None, "force": bool}
+    kind: int = 6
+    kind_end: int | None = None
     force: bool = False
 
 
 @router.post("/query")
 def query_kind(body: QueryBody, db: DbSession, _user: CurrentUser):
-    """从 jinjier 数据包查询 TOP250（kind 单个，或 kind..kind_end 年份范围批量），幂等入库。"""
-    kinds = [body.kind]
-    if body.kind_end is not None:
-        if body.kind not in range(2008, 2026) or body.kind_end not in range(2008, 2026):
-            raise HTTPException(status_code=400, detail="年份范围查询仅支持 2008~2025")
-        if body.kind_end < body.kind:
-            raise HTTPException(status_code=400, detail="结束年份不能早于起始年份")
-        kinds = list(range(body.kind, body.kind_end + 1))
-    elif body.kind not in VALID_KINDS:
+    """刷新数据包（下载最新快照替换本地 jinjier_ranks.db）并返回统计。"""
+    if body.kind not in VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"无效 kind: {body.kind}")
     _table_ensure()
     dbf = _ensure_pkg(force=body.force)
     conn = sqlite3.connect(str(dbf))
+    kinds = [body.kind]
+    if body.kind_end is not None:
+        kinds = list(range(body.kind, body.kind_end + 1))
     summary = []
-    grand_total = 0
+    grand = 0
+    snapshot = None
     for k in kinds:
         rows = conn.execute(
-            "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
-            (k,)).fetchall()
-        no_code = 0
-        for rank, name, date, note, icon in rows:
-            code = _extract_number(name)
-            if not code:
-                no_code += 1
-                code = f"?(rank{rank})"
-            _upsert_entry(db, k, rank, code, name, date, note, icon)
-        db.commit()
-        synced = _mark_in_library(db, k)
-        grand_total += len(rows)
+            "SELECT COUNT(*), MAX(date) FROM ranks WHERE kind=?", (k,)).fetchone()
+        snapshot = max(snapshot or "", rows[1] or "")
+        grand += rows[0]
         summary.append({"kind": k, "label": KIND_LABELS.get(k, f"JavDB {k} TOP250"),
-                        "total": len(rows), "no_code": no_code, "in_library_synced": synced})
+                        "total": rows[0], "snapshot": rows[1]})
     conn.close()
-    return {"ok": True, "kinds": kinds, "grand_total": grand_total, "summary": summary,
-            "label": KIND_LABELS.get(body.kind, f"JavDB {body.kind} TOP250")}
+    return {"ok": True, "kinds": kinds, "grand_total": grand, "snapshot": snapshot,
+            "summary": summary, "label": KIND_LABELS.get(body.kind, f"JavDB {body.kind} TOP250")}
+
+
+@router.get("/list")
+def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "",
+                 status: str = "all"):
+    """榜单列表：ranks 直读 + 手动磁力 join + 实时入库联查。"""
+    _table_ensure()
+    dbf = _ranks_db()
+    if not dbf.exists():
+        raise HTTPException(status_code=409, detail="TOP250 数据尚未加载——先点「查询数据源」")
+    if not _pkg_valid(dbf):
+        raise HTTPException(status_code=409, detail="TOP250 数据文件损坏——点「查询数据源」自动重下")
+    conn = sqlite3.connect(str(dbf))
+    rows = conn.execute(
+        "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
+        (kind,)).fetchall()
+    conn.close()
+
+    # 手动导入磁力
+    mag = {m.number: m for m in db.execute(
+        select(Top250Magnet).where(Top250Magnet.kind == kind)).scalars().all()}
+
+    # 番号提取 + 入库联查（批量）
+    parsed = []
+    for rank, name, date, note, icon in rows:
+        code = _extract_number(name)
+        parsed.append({"rank": rank, "number": code or f"?(rank{rank})", "name": name,
+                       "date": date or "", "icon": icon or ""})
+    codes = [p["number"] for p in parsed if not p["number"].startswith("?")]
+    tmap = {}
+    if codes:
+        for t in db.execute(select(Task).where(Task.video_code.in_(codes))).scalars().all():
+            tmap[t.video_code] = t
+
+    out = []
+    snapshot = max((p["date"] for p in parsed), default=None)
+    for p in parsed:
+        num = p["number"]
+        t = tmap.get(num)
+        m = mag.get(num)
+        mv = m.magnet_version if m else None
+        in_lib = t is not None
+        if q and q.upper() not in num.upper() and q not in p["name"]:
+            continue
+        if status == "in" and not in_lib:
+            continue
+        if status == "missing" and in_lib:
+            continue
+        if status == "nomagnet" and not (m or (in_lib and t and t.best_magnet)):
+            continue
+        out.append({"id": hash((kind, num)) & 0x7FFFFFFF, "kind": kind, "rank": p["rank"],
+                    "number": num, "name": p["name"], "date": p["date"],
+                    "poster_url": p["icon"], "magnet_version": mv,
+                    "task_id": t.id if t else None, "in_library": in_lib,
+                    "updated_at": p["date"], "prev_rank": None, "prev_date": None})
+    return {"ok": True, "kind": kind, "snapshot": snapshot,
+            "label": KIND_LABELS.get(kind, f"JavDB {kind} TOP250"), "total": len(out), "items": out}
 
 
 class ImportBody(BaseModel):
-    kind: int = 6
+    __annotations__ = {"kind": int}
 
 
 @router.post("/import")
 def import_files(db: DbSession, _user: CurrentUser, kind: int = 6,
                  csv_file: UploadFile = File(...), magnet_file: UploadFile = File(...)):
-    """手动导入 top250-code.csv + top250-magnet.txt（幂等 upsert；仅类型榜 6~10）。"""
+    """手动导入：磁力写入 top250_magnets（csv 仅校验统计）。"""
     if kind not in KIND_LABELS:
         raise HTTPException(status_code=400, detail="手动导入仅支持类型榜 kind=6~10")
     _table_ensure()
     LIMIT = 5 * 1024 * 1024
-    csv_bytes = csv_file.file.read()
     mag_bytes = magnet_file.file.read()
-    if len(csv_bytes) > LIMIT or len(mag_bytes) > LIMIT:
+    if len(mag_bytes) > LIMIT:
         raise HTTPException(status_code=413, detail="文件超过 5MB 上限")
-    csv_text = csv_bytes.decode("utf-8-sig", errors="replace")
     magnet_text = mag_bytes.decode("utf-8-sig", errors="replace")
+    csv_text = csv_file.file.read().decode("utf-8-sig", errors="replace")
 
-    stats = {"csv_rows": 0, "magnet_rows": 0, "magnet_matched": 0, "no_code": 0}
-    for line in csv_text.splitlines():
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 2 or not parts[1]:
-            continue
-        rank = int(parts[0]) if parts[0].isdigit() else 0
-        number = parts[1].upper().replace(" ", "")
-        _e = _upsert_entry(db, kind, rank, number, number,
-                      parts[2] if len(parts) > 2 else None, KIND_LABELS.get(kind), None)
-        _e.updated_at = datetime.now().strftime("%Y-%m-%d")
-        stats["csv_rows"] += 1
-    db.commit()
-
-    entries = db.execute(select(Top250Entry).where(Top250Entry.kind == kind)).scalars().all()
-    by_code = {e.number.upper(): e for e in entries}
+    stats = {"magnet_rows": 0, "magnet_imported": 0, "csv_rows": 0}
     for line in magnet_text.splitlines():
         line = line.strip()
         if not line.startswith("magnet:"):
@@ -241,98 +268,72 @@ def import_files(db: DbSession, _user: CurrentUser, kind: int = 6,
         if not cm:
             continue
         code = f"{cm.group(1).upper()}-{cm.group(2)}"
-        e = by_code.get(code)
-        if not e:
-            continue
-        e.magnet = line
-        e.magnet_version = _version_of(dn)
-        stats["magnet_matched"] += 1
+        existing = db.execute(select(Top250Magnet).where(
+            Top250Magnet.kind == kind, Top250Magnet.number == code)).scalar_one_or_none()
+        ver = _version_of(dn)
+        if existing:
+            existing.magnet, existing.magnet_version = line, ver
+            existing.updated_at = datetime.now().strftime("%Y-%m-%d")
+        else:
+            db.add(Top250Magnet(kind=kind, number=code, magnet=line, magnet_version=ver,
+                                updated_at=datetime.now().strftime("%Y-%m-%d")))
+        stats["magnet_imported"] += 1
+    stats["csv_rows"] = sum(1 for l in csv_text.splitlines() if l.strip())
     db.commit()
-    no_code = db.execute(select(Top250Entry).where(
-        Top250Entry.kind == kind, Top250Entry.number.like("?%"))).scalars().all()
-    stats["no_code"] = len(no_code)
-    for e in no_code:
-        db.delete(e)
-    db.commit()
-    stats["in_library_synced"] = _mark_in_library(db, kind)
     return {"ok": True, "kind": kind, "label": KIND_LABELS.get(kind), **stats}
 
 
-@router.get("/list")
-def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "", status: str = "all"):
-    """列表：rank/番号/标题/日期/磁力版本/入库状态。status=all|in|missing|nomagnet。"""
-    _table_ensure()
-    rows = db.execute(select(Top250Entry).where(Top250Entry.kind == kind)
-                      .order_by(Top250Entry.rank)).scalars().all()
-    # 批量匹配在库状态（一次 IN 查询，避免 N+1）
-    missing = [e for e in rows if e.task_id is None and e.number and not e.number.startswith("?")]
-    if missing:
-        codes = [e.number for e in missing]
-        tmap = {t.video_code: t.id for t in
-                db.execute(select(Task).where(Task.video_code.in_(codes))).scalars().all()}
-        for e in missing:
-            if e.number in tmap:
-                e.task_id = tmap[e.number]
-        db.commit()
-    out = []
-    for e in rows:
-        in_lib = e.task_id is not None
-        if q and q.upper() not in (e.number or "").upper() and q not in (e.name or ""):
-            continue
-        if status == "in" and not in_lib:
-            continue
-        if status == "missing" and in_lib:
-            continue
-        if status == "nomagnet" and e.magnet:
-            continue
-        out.append({"id": e.id, "kind": e.kind, "rank": e.rank, "number": e.number,
-                    "name": e.name, "date": e.date, "magnet_version": e.magnet_version,
-                    "poster_url": e.icon_url, "task_id": e.task_id, "in_library": in_lib,
-                    "updated_at": e.updated_at, "prev_rank": e.prev_rank,
-                    "prev_date": e.prev_date})
-    db.commit()
-    snapshot = max((e.updated_at for e in rows if e.updated_at), default=None)
-    return {"ok": True, "kind": kind, "snapshot": snapshot,
-            "label": KIND_LABELS.get(kind, f"JavDB {kind} TOP250"), "total": len(out), "items": out}
-
-
 class CrawlBody(BaseModel):
-    kind: int
-
-
-def _launch_search_movie(codes: list[str], kind: int) -> int:
-    from routers.crawl import _start_scraper_guarded
-    from services.scraper_lock import is_running
-    if is_running():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
-    scraper = Path(__file__).resolve().parent.parent / "magnet_scraper" / "scraper.py"
-    cmd = [str(scraper), "search-movie", "--codes", ",".join(codes), "--kind", str(kind)]
-    proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": kind, "count": len(codes)})
-    return proc.pid
+    __annotations__ = {"kind": int}
+    kind: int = 6
 
 
 @router.post("/crawl-missing")
 def crawl_missing(body: CrawlBody, db: DbSession, _user: CurrentUser):
-    """批量入库：该 kind 未入库番号交给爬虫 search-movie（搜索详情页→建任务→提取）。"""
-    rows = db.execute(select(Top250Entry).where(
-        Top250Entry.kind == body.kind, Top250Entry.task_id.is_(None))).scalars().all()
-    codes = [e.number for e in rows if e.number and not e.number.startswith("?")]
+    """批量入库：该 kind 下未入库番号交给爬虫 search-movie。"""
+    from routers.crawl import _start_scraper_guarded
+    from services.scraper_lock import is_running
+    if is_running():
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    _table_ensure()
+    dbf = _ranks_db()
+    if not dbf.exists():
+        raise HTTPException(status_code=409, detail="TOP250 数据尚未加载——先点「查询数据源」")
+    conn = sqlite3.connect(str(dbf))
+    rows = conn.execute(
+        "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
+        (body.kind,)).fetchall()
+    conn.close()
+    parsed = []
+    for rank, name, date, note, icon in rows:
+        code = _extract_number(name)
+        if code:
+            parsed.append({"rank": rank, "number": code, "name": name, "date": date or "",
+                           "icon": icon or ""})
+    codes = [p["number"] for p in parsed
+             if not db.execute(select(Task).where(Task.video_code == p["number"]))
+             .scalars().first()]
     if not codes:
         return {"ok": True, "queued": 0, "message": "没有未入库条目"}
-    pid = _launch_search_movie(codes, body.kind)
-    return {"ok": True, "queued": len(codes), "pid": pid,
-            "message": f"已启动番号搜索入库（{len(codes)} 部），完成后自动回填入库状态"}
+    scraper = Path(__file__).resolve().parent.parent / "magnet_scraper" / "scraper.py"
+    cmd = [str(scraper), "search-movie", "--codes", ",".join(codes), "--kind", str(body.kind)]
+    proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": body.kind,
+                                        "count": len(codes)})
+    return {"ok": True, "queued": len(codes), "pid": proc.pid,
+            "message": f"已启动番号搜索入库（{len(codes)} 部）"}
 
 
-@router.post("/{entry_id}/add-task")
-def add_task(entry_id: int, db: DbSession, _user: CurrentUser):
-    """单部入库。"""
-    e = db.get(Top250Entry, entry_id)
-    if not e:
-        raise HTTPException(status_code=404, detail="条目不存在")
-    if e.number.startswith("?"):
-        return {"ok": False, "message": "该条目无有效番号"}
-    if e.task_id:
-        return {"ok": True, "task_id": e.task_id, "message": "已在影片库"}
-    pid = _launch_search_movie([e.number], e.kind)
-    return {"ok": True, "message": f"已启动 {e.number} 的搜索入库（PID {pid}）"}
+@router.post("/{number}/add-task")
+def add_task(number: str, db: DbSession, _user: CurrentUser, kind: int = 6):
+    """单部入库（按番号）。"""
+    from routers.crawl import _start_scraper_guarded
+    from services.scraper_lock import is_running
+    if is_running():
+        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    number = number.upper().replace(" ", "")
+    if db.execute(select(Task).where(Task.video_code == number)).scalars().first():
+        return {"ok": True, "message": "已在影片库"}
+    scraper = Path(__file__).resolve().parent.parent / "magnet_scraper" / "scraper.py"
+    cmd = [str(scraper), "search-movie", "--codes", number, "--kind", str(kind)]
+    proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": kind, "count": 1})
+    return {"ok": True, "message": f"已启动 {number} 的搜索入库（PID {proc.pid}）"}

@@ -456,7 +456,7 @@ export const api = {
       http.get<{ ok: boolean; label: string; total: number; items: { id: number; kind: number; rank: number; number: string; name: string; date: string | null; poster_url: string | null; magnet_version: string | null; task_id: number | null; in_library: boolean; updated_at: string | null; prev_rank: number | null; prev_date: string | null }[];
     snapshot: string | null }>(`/api/top250/list`, { params: { kind, q, status } }).then((r) => r.data),
     crawlMissing: (kind: number) => http.post<{ ok: boolean; queued: number; message: string }>('/api/top250/crawl-missing', { kind }).then((r) => r.data),
-    addTask: (id: number) => http.post<{ ok: boolean; message: string }>(`/api/top250/${id}/add-task`).then((r) => r.data),
+    addTask: (number: string, kind: number) => http.post<{ ok: boolean; message: string }>(`/api/top250/${number}/add-task?kind=${kind}`).then((r) => r.data),
   },
   javdbLogin: {
     start: () => http.post<ApiOk>('/api/javdb-login/start').then((r) => r.data),

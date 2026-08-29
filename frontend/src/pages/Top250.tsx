@@ -135,7 +135,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
 
   const addOne = async (e: Entry) => {
     try {
-      const r = await api.top250.addTask(e.id)
+      const r = await api.top250.addTask(e.number, kind)
       toastOk(r.message)
       await load(kind)
     } catch (err) { toastErr(String((err as Error).message)) }
