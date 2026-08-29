@@ -24,7 +24,10 @@ PROFILE_DIR = Path(__file__).resolve().parent.parent.parent / "magnet_scraper" /
 
 _state = {"running": False, "logged_in": None, "message": "", "started_at": 0.0}
 _lock = threading.Lock()
-_ctx = {"pw": None, "ctx": None, "page": None, "stop": False}
+_ctx = {"pw": None, "ctx": None, "page": None, "stop": False,
+        "shot": None,          # 会话线程自产的最新截图（data url），端点只读
+        "cmd": None,           # 待处理命令 {"action": "submit", ...}（端点投递，线程消费）
+        "submit_result": None}  # submit 处理结果（线程写，端点读）
 TIMEOUT_S = 300
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
@@ -132,6 +135,21 @@ def _session_thread() -> None:
         _state["message"] = "登录页已打开，看截图填账号、密码、验证码后提交"
         deadline = time.time() + TIMEOUT_S
         while time.time() < deadline and not _ctx["stop"] and _state["logged_in"] is not True:
+            # 截图缓存（本线程内调用 page，跨线程安全）
+            try:
+                png = page.screenshot(type="png")
+                _ctx["shot"] = "data:image/png;base64," + base64.b64encode(png).decode()
+            except Exception:
+                pass
+            # 消费命令（submit / cancel）
+            cmd = _ctx.get("cmd")
+            if cmd:
+                _ctx["cmd"] = None
+                if cmd.get("action") == "cancel":
+                    _ctx["stop"] = True
+                    break
+                if cmd.get("action") == "submit":
+                    _ctx["submit_result"] = _do_submit(page, cmd)
             time.sleep(2)
         if _state["logged_in"] is True:
             time.sleep(2)  # cookie 落盘
@@ -147,6 +165,36 @@ def _session_thread() -> None:
             pass
     finally:
         _cleanup()
+
+
+def _do_submit(page, cmd: dict) -> dict:
+    """在会话线程内执行提交（Playwright 对象同线程安全）。"""
+    try:
+        user_field = page.locator("input[name='username'], input[name='name'], #username, #name").first
+        pass_field = page.locator("input[name='password'], #password").first
+        if not user_field.count() or not pass_field.count():
+            return {"ok": False, "message": "登录表单字段未找到，请重开会话"}
+        user_field.fill(cmd.get("username") or "")
+        pass_field.fill(cmd.get("password") or "")
+        cap_txt = cmd.get("captcha") or ""
+        if cap_txt:
+            cap = page.locator("input[name='captcha'], #captcha, input[name='code'], input[placeholder*='验证']").first
+            if not cap.count():
+                return {"ok": False, "message": "验证码输入框未找到"}
+            cap.fill(cap_txt)
+        page.locator("button[type='submit'], input[type='submit'], button:has-text('登')").first.click()
+        for _ in range(10):
+            page.wait_for_timeout(2000)
+            if "login" not in (page.url or ""):
+                break
+        logged = "login" not in (page.url or "")
+        if logged:
+            _state["logged_in"] = True
+            return {"ok": True, "message": "登录成功！cookie 已保存，后续爬取自动复用"}
+        _state["message"] = "登录未成功（账号/密码/验证码有误或被拦截），看新截图重试"
+        return {"ok": False, "message": _state["message"]}
+    except Exception as e:
+        return {"ok": False, "message": f"提交异常: {e}"}
 
 
 class SubmitBody(BaseModel):
@@ -171,50 +219,32 @@ def start(_admin: CurrentAdmin):
 
 @router.get("/screenshot")
 def screenshot(_admin: CurrentAdmin):
-    page = _ctx.get("page")
     if not _state["running"]:
         raise HTTPException(status_code=404, detail="无活跃登录会话")
-    if not page:
-        # 浏览器仍在启动（Playwright 启动+导航需数秒），前端稍后重试
+    shot = _ctx.get("shot")
+    if not shot:
         return {"ok": False, "message": _state["message"] or "浏览器启动中，请稍候…"}
-    try:
-        png = page.screenshot(type="png")
-        return {"ok": True, "image": "data:image/png;base64," + base64.b64encode(png).decode()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"截图失败: {e}")
+    return {"ok": True, "image": shot}
 
 
 @router.post("/submit")
 def submit(body: SubmitBody, _admin: CurrentAdmin):
-    page = _ctx.get("page")
-    if not page or not _state["running"]:
+    if not _state["running"]:
         raise HTTPException(status_code=404, detail="无活跃登录会话")
-    try:
-        user_field = page.locator("input[name='username'], input[name='name'], #username, #name").first
-        pass_field = page.locator("input[name='password'], #password").first
-        if not user_field.count() or not pass_field.count():
-            return {"ok": False, "message": "登录表单字段未找到，请重开会话"}
-        user_field.fill(body.username)
-        pass_field.fill(body.password)
-        if body.captcha:
-            cap = page.locator("input[name='captcha'], #captcha, input[name='code'], input[placeholder*='验证']").first
-            if not cap.count():
-                return {"ok": False, "message": "验证码输入框未找到"}
-            cap.fill(body.captcha)
-        page.locator("button[type='submit'], input[type='submit'], button:has-text('登')").first.click()
-        for _ in range(10):
-            page.wait_for_timeout(2000)
-            if "login" not in (page.url or ""):
-                break
-        logged = "login" not in (page.url or "")
-        if logged:
-            _state["logged_in"] = True
-            _state["message"] = "登录成功！cookie 已保存，后续爬取自动复用"
-            return {"ok": True, "message": _state["message"]}
-        _state["message"] = "登录未成功（账号/密码/验证码有误或被拦截），看新截图重试"
-        return {"ok": False, "message": _state["message"]}
-    except Exception as e:
-        return {"ok": False, "message": f"提交异常: {e}"}
+    # 投递给会话线程执行（Playwright 对象不能跨线程调用）
+    _ctx["cmd"] = {"action": "submit", "username": body.username,
+                   "password": body.password, "captcha": body.captcha}
+    for _ in range(25):  # 最长等 25s（提交流程内部 ~20s）
+        time.sleep(1)
+        r = _ctx.get("submit_result")
+        if r is not None:
+            _ctx["submit_result"] = None
+            if r.get("ok"):
+                _state["message"] = r["message"]
+            else:
+                _state["message"] = r["message"]
+            return r
+    return {"ok": False, "message": "提交处理超时，请稍后查看状态重试"}
 
 
 @router.get("/status")
@@ -226,7 +256,8 @@ def status(_admin: CurrentAdmin):
 
 @router.post("/cancel")
 def cancel(_admin: CurrentAdmin):
+    _ctx["cmd"] = {"action": "cancel"}
     _ctx["stop"] = True
-    _cleanup()
+    threading.Thread(target=lambda: (time.sleep(3), _cleanup()), daemon=True).start()
     _state["message"] = "已取消"
     return {"ok": True}
