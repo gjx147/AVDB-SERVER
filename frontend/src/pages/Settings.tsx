@@ -286,6 +286,14 @@ export function Settings() {
                 <div className="field"><label htmlFor="crawl-delay-max">爬取延迟上限 (秒)</label><input id="crawl-delay-max" className="input" type="number" value={s.crawl_delay_max} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_delay_max: +v }) }} /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="field"><label htmlFor="crawl-detail-delay-min">详情页延迟下限 (秒)</label><input id="crawl-detail-delay-min" className="input" type="number" min={0} value={s.crawl_detail_delay_min ?? 20} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_detail_delay_min: +v }) }} /></div>
+                <div className="field"><label htmlFor="crawl-detail-delay-max">详情页延迟上限 (秒)</label><input id="crawl-detail-delay-max" className="input" type="number" min={0} value={s.crawl_detail_delay_max ?? 40} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_detail_delay_max: +v }) }} /></div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 10 }}>
+                详情页延迟 = 提取每个任务的元数据/磁力前的随机等待（反爬保护，默认 20-40 秒）。调小爬得更
+                快但更容易触发 Cloudflare 风控；每个任务实际耗时 ≈ 详情页延迟 + 页面处理时间。
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="field"><label htmlFor="max-pages">默认最大页数</label><input id="max-pages" className="input" type="number" value={s.max_pages_default} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ max_pages_default: +v }) }} /></div>
                 <div className="field"><label htmlFor="preferred-suffixes">磁力后缀优先级</label>
                   <select id="preferred-suffixes" className="input" value={s.preferred_suffixes} onChange={(e) => upd({ preferred_suffixes: e.target.value })}>

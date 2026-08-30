@@ -237,6 +237,8 @@ export interface CrawlLogLine {
 export interface Settings {
   crawl_delay_min: number
   crawl_delay_max: number
+  crawl_detail_delay_min: number
+  crawl_detail_delay_max: number
   max_pages_default: number
   aria2_rpc_url: string
   aria2_token: string

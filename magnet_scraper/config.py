@@ -29,7 +29,7 @@ def get_settings_override():
 
     scraper 启动时调一次，覆盖 config 里的 env 默认值。
     """
-    global REQUEST_DELAY_MIN, REQUEST_DELAY_MAX
+    global REQUEST_DELAY_MIN, REQUEST_DELAY_MAX, DETAIL_DELAY_MIN, DETAIL_DELAY_MAX
     try:
         import sqlite3
         from pathlib import Path
@@ -40,7 +40,9 @@ def get_settings_override():
         conn.row_factory = sqlite3.Row
         try:
             for key, attr in [("crawl_delay_min", "REQUEST_DELAY_MIN"),
-                              ("crawl_delay_max", "REQUEST_DELAY_MAX")]:
+                              ("crawl_delay_max", "REQUEST_DELAY_MAX"),
+                              ("crawl_detail_delay_min", "DETAIL_DELAY_MIN"),
+                              ("crawl_detail_delay_max", "DETAIL_DELAY_MAX")]:
                 row = conn.execute("SELECT value FROM settings WHERE key=? LIMIT 1", (key,)).fetchone()
                 if row and row[0]:
                     val = int(row[0])
