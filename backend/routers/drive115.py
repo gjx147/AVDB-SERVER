@@ -58,8 +58,16 @@ async def quota(_user: CurrentUser):
     r = await get_quota()
     if "error" in r:
         return {"ok": False, "message": r["error"]}
+    if r.get("ok") is False:
+        return {"ok": False, "message": r.get("message") or "115 未授权"}
+    # 115 官方失败时 HTTP 200 但 state != 1
+    if isinstance(r.get("state"), int) and r.get("state") != 1:
+        return {"ok": False, "message": f"115 接口错误: {r.get('message') or r.get('error') or r}"}
     data = r.get("data") or r
-    quota_obj = data.get("quota") or data
+    # 口径兼容：data.quota / data.size / data（get_quota_info 变体）
+    quota_obj = data.get("quota") or data.get("size") or data
+    if isinstance(quota_obj, dict):
+        quota_obj = {k: v for k, v in quota_obj.items()}
 
     def _num(v):
         try:
