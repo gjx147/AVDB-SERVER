@@ -2055,8 +2055,8 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                     logger.info(f"{code}: 已在库（task {task_id}）")
                 else:
                     cur = conn.execute(
-                        "INSERT INTO tasks (list_source_id, url, video_code, status, created_at, updated_at)"
-                        " VALUES ((SELECT id FROM list_sources WHERE list_code='TOP250'), ?, ?, 'pending',"
+                        "INSERT INTO tasks (list_source_id, url, video_code, status, retry_count, is_favorite, created_at, updated_at)"
+                        " VALUES ((SELECT id FROM list_sources WHERE list_code='TOP250'), ?, ?, 'pending', 0, 0,"
                         " datetime('now'), datetime('now'))",
                         (detail_url, code))
                     task_id = cur.lastrowid
