@@ -2084,6 +2084,13 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
             logger.error(f"{code}: 处理异常 {e}")
             results["notfound"] += 1
     logger.info(f"search-movie 完成: {results}")
+    # 建任务后自动跑提取流程（磁力/元数据/图片入库）——与排行榜爬取对齐
+    if results["added"] > 0:
+        logger.info("自动提取：扫描 pending 任务爬取磁力/元数据/图片…")
+        try:
+            scraper.extract_magnets(limit=None)
+        except Exception as e:
+            logger.error(f"提取流程异常（任务已建，可稍后手动提取）: {e}")
     return results
 
 
