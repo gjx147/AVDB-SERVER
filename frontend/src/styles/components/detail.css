@@ -68,4 +68,4 @@
 .actor-avatar-zoom{transition:transform .3s cubic-bezier(.23,1,.32,1),box-shadow .3s}
 .actor-avatar-zoom:hover{transform:scale(1.03);box-shadow:0 8px 24px rgba(220,20,60,.12)}
 /* 在库徽章 */
-.badge-lib{position:absolute;top:6px;right:6px;background:rgba(30,158,104,.92);color:#fff;font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(30,158,104,.3)}
+.badge-lib{flex:none;align-self:flex-start;margin-right:6px;background:rgba(30,158,104,.92);color:#fff;font-size:10px;padding:3px 7px;border-radius:999px;letter-spacing:.05em}

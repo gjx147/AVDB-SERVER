@@ -108,6 +108,9 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
         )}
         {extraBadge}
         <div className="poster-grad-top">
+          {task.media_in_library === true && (
+            <span className="badge-lib" title="已在 Emby 媒体库">库</span>
+          )}
           <span className="poster-code">{task.video_code || '—'}</span>
           {/* marginLeft:auto 始终贴右——排名海报番号被角标隐藏时，勾选框不会落回左侧盖住皇冠 */}
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
@@ -117,7 +120,6 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
                 {selected ? '✓' : ''}
               </div>
             )}
-            {task.is_favorite ? <div className="badge-fav">♥</div> : null}
           </div>
         </div>
         <div className="poster-info">
@@ -134,6 +136,8 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
             {task.rating && <span className="poster-score">♥ {task.rating}</span>}
           </div>
         </div>
+        {/* 收藏红心：右下角（poster-info 上层） */}
+        {task.is_favorite ? <div className="badge-fav">♥</div> : null}
       </div>
       <div className="poster-caption">
         <div className="cap-code">{task.video_code || '—'}</div>

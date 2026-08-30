@@ -706,11 +706,11 @@ export function ActorDetail() {
                     onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.2' }}
                     onLoad={(e) => { e.currentTarget.classList.add('loaded') }} />
                   <div className="poster-grad-top">
+                    {m.media_in_library === true && (
+                      <span className="badge-lib" title="已在 Emby 媒体库">库</span>
+                    )}
                     <span className="poster-code">{m.video_code || '—'}</span>
                     <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-                      {m.media_in_library === true && (
-                        <span className="badge-lib" title="已在 Emby 媒体库">库</span>
-                      )}
                       <div className={`poster-check${selected.has(m.id) ? ' on' : ''}`} role="checkbox"
                         aria-checked={selected.has(m.id)} tabIndex={0}
                         onClick={(e) => { e.stopPropagation(); toggleSel(m.id) }}
