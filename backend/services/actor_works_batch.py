@@ -152,19 +152,26 @@ def _run() -> None:
                     url = actor.note[len("source_url: "):]
         finally:
             db.close()
-        if not url:
-            _bump("skipped")
-            logger.info("补齐 %s: 无 JavDB URL，跳过", name)
-            continue
         # ③ 触发爬取（409 锁竞争等空闲重试一次）
+        # 无 URL 不再直接跳过：按名字搜索兜底（crawl-actor --actor-name，
+        # 与订阅监控/手动补齐按钮同路径，搜索命中后自动回写 source_url）
         started = False
         try:
-            start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+            if url:
+                start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+            else:
+                logger.info("补齐 %s: 无 JavDB URL，按名字搜索源站（命中后自动回写）", name)
+                start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name)
             started = True
         except Exception as e:
+            def _retry():
+                if url:
+                    start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+                else:
+                    start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name)
             if "已有爬取任务" in str(e) and _wait_lock_idle(wait_min):
                 try:
-                    start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+                    _retry()
                     started = True
                 except Exception as e2:
                     logger.warning("补齐 %s 触发失败: %s", name, e2)
@@ -186,7 +193,7 @@ def _run() -> None:
         _state["current_actor_id"] = None
         _state["current_name"] = None
         _state["last_summary"] = (
-            f"全部补齐完成：成功 {_state['done']}，跳过 {_state['skipped']}（无 JavDB URL），"
+            f"全部补齐完成：成功 {_state['done']}，搜索补录计入成功（无 URL 演员按名字搜索），"
             f"已补齐跳过 {_state['marked_skipped']}，失败 {_state['failed']}"
         )
     logger.info("全部补齐作品结束: %s", _state["last_summary"])
