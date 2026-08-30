@@ -45,9 +45,9 @@ async def run_ranking_crawl_cycle() -> dict:
 
         # 检查全局锁：手动触发的 scraper 在跑则跳过本轮（下个定时点再试）
         from services import scraper_lock
-        if scraper_lock.is_running():
-            logger.warning("手动爬取进行中，跳过本轮自动排行爬取")
-            return {"ok": False, "message": "手动爬取进行中"}
+        if scraper_lock.is_running(scraper_lock.CHANNEL_MAIN):
+            logger.warning("main 通道爬取进行中，跳过本轮自动排行爬取")
+            return {"ok": False, "message": "爬取进行中"}
 
         # 串行逐个触发（日→月→周→演员月榜），失败不中断后续榜单
         from services.auto_crawl import _run_scraper

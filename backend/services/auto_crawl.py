@@ -50,7 +50,8 @@ def _python_exe() -> str:
     return get_settings().SCRAPER_PYTHON or sys.executable
 
 
-async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
+async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT,
+                       channel: str = "main") -> bool:
     """非阻塞执行 scraper 子进程。返回是否成功(exit 0)。
 
     架构修复：start_new_session 创建进程组，超时时整组 kill（Chromium 子树不残留）。
@@ -63,6 +64,10 @@ async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
     # 否则子进程 register/unregister 回调被 401 拒绝）
     from services import scraper_lock
     env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.get_callback_token()
+
+    # 双通道：top250 通道独立浏览器配置目录
+    if channel == scraper_lock.CHANNEL_TOP250:
+        env["SCRAPER_PROFILE"] = "browser_profile_top250"
 
     # 从 DB settings 读 proxy + javdb_url（与 crawl.py _start_scraper 一致）
     try:
@@ -115,7 +120,8 @@ async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
             "pid": proc.pid,
             "started_at": datetime.utcnow().isoformat(),
             "auto": True,
-        }):
+            "channel": channel,
+        }, channel=channel):
             # 锁被占用：回收刚启动的进程，避免残留 Chromium
             _kill_process_tree(proc)
             try:
@@ -160,11 +166,10 @@ async def _run_scraper(args: list[str], timeout: int = _BATCH_TIMEOUT) -> bool:
         logger.error("scraper 执行异常: %s", e)
         return False
     finally:
-        # Phase 2 P1-3：按身份释放锁（get_proc() is proc 才 clear，防 ABA）
+        # Phase 2 P1-3：按身份释放锁（clear_if_current 防 ABA；通道感知）
         if proc is not None:
             from services import scraper_lock
-            if scraper_lock.get_proc() is proc:
-                scraper_lock.clear()
+            scraper_lock.clear_if_current(proc, channel)
         log_file.close()
 
 
@@ -211,11 +216,11 @@ async def run_scan_cycle() -> dict:
     if _state["running"]:
         logger.warning("已有爬取在运行，跳过本次")
         return {"ok": False, "message": "已在运行"}
-    # 检查全局锁：手动触发的 scraper 在跑则跳过（避免并发互踩浏览器）
+    # 检查 main 通道锁：订阅/常规爬取进行中则跳过（top250 通道独立，不阻塞 scan）
     from services import scraper_lock
-    if scraper_lock.is_running():
-        logger.warning("手动爬取进行中，跳过自动 scan")
-        return {"ok": False, "message": "手动爬取进行中"}
+    if scraper_lock.is_running(scraper_lock.CHANNEL_MAIN):
+        logger.warning("main 通道爬取进行中，跳过自动 scan")
+        return {"ok": False, "message": "爬取进行中"}
     _state["running"] = True
     _state["current"] = "scan"
     results = []
@@ -243,13 +248,16 @@ async def run_scan_cycle() -> dict:
 
 
 async def run_extract_cycle() -> dict:
-    """对所有列表源执行一轮 extract。"""
+    """对所有列表源执行一轮 extract（消费 pending 队列）。
+
+    根因修复：此前固定 --failed-only 只消费 failed 队列，search-movie/scan
+    建的 pending 任务（status='pending'）永远无人提取——Top250 只建壳不爬
+    元数据/磁力就是这个原因。pending 交本周期，failed 交 auto_retry（5 分钟级）。
+    双通道：TOP250 源走 top250 通道（不阻塞订阅通道的源），其余走 main。
+    """
     if _state["running"]:
         return {"ok": False, "message": "已在运行"}
     from services import scraper_lock
-    if scraper_lock.is_running():
-        logger.warning("手动爬取进行中，跳过自动 extract")
-        return {"ok": False, "message": "手动爬取进行中"}
     _state["running"] = True
     _state["current"] = "extract"
     results = []
@@ -261,10 +269,15 @@ async def run_extract_cycle() -> dict:
             db.close()
 
         for src in sources:
+            ch = scraper_lock.CHANNEL_TOP250 if src.list_code == "TOP250" else scraper_lock.CHANNEL_MAIN
+            if scraper_lock.is_running(ch):
+                results.append({"source": src.list_code, "extract_ok": False, "skipped": "通道忙碌"})
+                continue
             _state["current"] = f"extract:{src.list_code}"
             ok = await _run_scraper(
-                ["extract", "--list-source-id", str(src.id), "--failed-only"],
+                ["extract", "--list-source-id", str(src.id)],
                 timeout=_BATCH_TIMEOUT,  # 单源 extract 100+ 任务约 2.5-3.5h，见模块常量注释
+                channel=ch,
             )
             results.append({"source": src.list_code, "extract_ok": ok})
         _state["last_run"] = "extract"

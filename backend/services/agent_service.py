@@ -683,7 +683,7 @@ def _actor_crawl_works(db, args):
     # 锁忙时明确告知（与手动按钮一致的 409 语义）
     try:
         from services import scraper_lock
-        if scraper_lock.is_running():
+        if scraper_lock.is_running(scraper_lock.CHANNEL_MAIN):
             return {"ok": False, "message": f"{actor.name} 的补齐未启动：爬虫正忙（有其他爬取任务在运行），请稍后重试或查看爬虫状态"}
     except Exception:
         pass

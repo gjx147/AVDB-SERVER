@@ -70,6 +70,20 @@ async def run_retry_cycle() -> dict:
             logger.info("自动重试: 无失败任务需要重试")
             return {"ok": True, "retried": 0}
 
+        # 双通道：按源的 list_code 选通道（TOP250 源走 top250 通道）
+        from models import ListSource
+        from sqlalchemy import select as _select
+        _code_by_sid = {
+            sid: code
+            for sid, code in db.execute(
+                _select(ListSource.id, ListSource.list_code)
+            ).all()
+        }
+
+        def _channel_for(sid: int) -> str:
+            from services.scraper_lock import CHANNEL_TOP250
+            return CHANNEL_TOP250 if _code_by_sid.get(sid) == "TOP250" else "main"
+
         logger.info(
             "自动重试: %d 个列表源存在可重试失败任务 (max_count=%d)",
             len(failed_source_ids), max_count,
@@ -79,22 +93,24 @@ async def run_retry_cycle() -> dict:
         # 注意：extract 不带 --list-source-id 会走文件模式（读 PENDING_URLS_FILE，
         # 完全不碰 DB 的 failed 队列），因此必须按源逐个触发，与 auto_crawl.run_extract_cycle 对齐。
         try:
+            from services.auto_crawl import _run_scraper
+            import asyncio
             from services import scraper_lock
-            if scraper_lock.is_running():
-                logger.warning("自动重试: 已有爬取在运行，跳过 extract 触发")
-            else:
-                from services.auto_crawl import _run_scraper
-                import asyncio
 
-                async def _retry_failed_serially():
-                    # 串行触发（全局爬取锁同一时刻只允许一个 scraper，
-                    # 并发触发只会被锁拒绝并自灭，串行避免浪费）
-                    for sid in failed_source_ids:
-                        await _run_scraper(
-                            ["extract", "--list-source-id", str(sid), "--failed-only"]
-                        )
+            async def _retry_failed_serially():
+                # 串行触发（同通道爬取锁同一时刻只允许一个 scraper，
+                # 并发触发只会被锁拒绝并自灭，串行避免浪费）
+                for sid in failed_source_ids:
+                    ch = _channel_for(sid)
+                    if scraper_lock.is_running(ch):
+                        logger.info("自动重试: %s 通道忙碌，跳过源 %s", ch, sid)
+                        continue
+                    await _run_scraper(
+                        ["extract", "--list-source-id", str(sid), "--failed-only"],
+                        channel=ch,
+                    )
 
-                asyncio.create_task(_retry_failed_serially())
+            asyncio.create_task(_retry_failed_serially())
         except Exception as e:
             logger.warning("自动重试: 触发 extract 失败: %s", e)
 

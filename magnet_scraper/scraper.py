@@ -415,7 +415,10 @@ class MagnetScraper:
             # 创建浏览器上下文
             # 固定 profile 目录：登录态（cookie）跨爬取任务复用，避免每次重新登录。
             # 爬虫全局锁（scraper_lock）保证同一时间只有一个进程使用该目录。
-            temp_dir = config.OUTPUT_DIR / "browser_profile"
+            # 双通道：SCRAPER_PROFILE env 指定配置目录名（默认 browser_profile；
+            # top250 通道启动时注入 browser_profile_top250，与订阅通道并行互不干扰）
+            _profile_name = os.environ.get("SCRAPER_PROFILE", "browser_profile")
+            temp_dir = config.OUTPUT_DIR / _profile_name
             logger.info(f"浏览器配置文件目录: {temp_dir}")
             temp_dir.mkdir(parents=True, exist_ok=True)
             self.profile_dir = temp_dir

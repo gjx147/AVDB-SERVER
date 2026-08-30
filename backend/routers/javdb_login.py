@@ -200,6 +200,8 @@ def _session_thread() -> None:
                 _state["message"] = "登录成功，cookie 已保存并同步给爬虫"
             except Exception as e:
                 _state["message"] = f"登录成功，但 storage_state 导出失败: {e}"
+            # 双通道：登录成功后把 cookie 同步到 top250 通道 profile
+            _sync_top250_profile()
         elif time.time() >= deadline:
             _state["message"] = "登录会话超时，已关闭"
     except Exception as e:
@@ -211,6 +213,37 @@ def _session_thread() -> None:
             pass
     finally:
         _cleanup()
+
+
+def _sync_top250_profile() -> bool:
+    """登录成功后把主 profile（cookie）同步到 top250 通道 profile。
+
+    双通道：top250 通道用独立浏览器目录（browser_profile_top250），
+    与订阅通道并行跑。登录态只存在主 profile，这里整目录拷贝过去。
+    拷贝前要求 top250 通道空闲（无 Chromium 使用该目录）。
+    """
+    import shutil
+    from services.scraper_lock import is_running, CHANNEL_TOP250
+    top250_dir = PROFILE_DIR.parent / "browser_profile_top250"
+    if not PROFILE_DIR.exists():
+        return False
+    if is_running(CHANNEL_TOP250):
+        return False  # top250 在跑，等下次登录再同步
+    try:
+        if top250_dir.exists():
+            shutil.rmtree(top250_dir, ignore_errors=True)
+        shutil.copytree(PROFILE_DIR, top250_dir, dirs_exist_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def ensure_top250_profile() -> bool:
+    """top250 通道启动前引导：profile 缺失时从主 profile 拷贝（一次性）。"""
+    top250_dir = PROFILE_DIR.parent / "browser_profile_top250"
+    if top250_dir.exists() and any(top250_dir.iterdir()):
+        return True
+    return _sync_top250_profile()
 
 
 def _do_submit(page, cmd: dict) -> dict:

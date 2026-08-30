@@ -284,6 +284,58 @@ def import_files(db: DbSession, _user: CurrentUser, kind: int = 6,
     return {"ok": True, "kind": kind, "label": KIND_LABELS.get(kind), **stats}
 
 
+def _start_extract_chain(proc) -> None:
+    """search-movie 子进程结束后，自动链式触发 TOP250 源的 extract（pending 提取）。
+
+    修复：search-movie 只建 status='pending' 的任务壳（番号+详情页 URL），
+    元数据/磁力要靠后续 extract 抓取；此前 extract 周期只消费 failed 队列，
+    pending 永远无人处理——Top250 一直不自动爬元数据/磁力的根因。
+    链式提取走 top250 独立通道（独立锁+独立浏览器配置），不阻塞订阅爬取。
+    """
+    import threading
+    import time as _time
+
+    def _run():
+        try:
+            proc.wait(timeout=8 * 3600)
+        except Exception:
+            return
+        _time.sleep(5)  # 等 scraper 收尾（锁释放/DB 落盘）
+        from services.scraper_lock import is_running, CHANNEL_TOP250
+        from routers.javdb_login import is_active as _login_active
+        if _login_active() or is_running(CHANNEL_TOP250):
+            return  # 引导/占用时放弃链式（extract 周期会兜底）
+        from database import SessionLocal
+        from models import ListSource
+        from sqlalchemy import select
+        db = SessionLocal()
+        try:
+            src = db.execute(
+                select(ListSource).where(ListSource.list_code == "TOP250")
+            ).scalars().first()
+        finally:
+            db.close()
+        if src is None:
+            return
+        from routers.crawl import _start_scraper_guarded
+        try:
+            _start_scraper_guarded(
+                ["extract", "--list-source-id", str(src.id)],
+                {"mode": "extract", "list_code": "TOP250", "auto_chain": True,
+                 "started_at": _now_iso_top250()},
+                channel="top250",
+            )
+        except Exception:
+            pass  # 占用时由 extract 周期兜底
+
+    threading.Thread(target=_run, daemon=True, name="top250-extract-chain").start()
+
+
+def _now_iso_top250() -> str:
+    from datetime import datetime
+    return datetime.utcnow().isoformat()
+
+
 class CrawlBody(BaseModel):
     __annotations__ = {"kind": int}
     kind: int = 6
@@ -293,9 +345,9 @@ class CrawlBody(BaseModel):
 def crawl_missing(body: CrawlBody, db: DbSession, _user: CurrentUser):
     """批量入库：该 kind 下未入库番号交给爬虫 search-movie。"""
     from routers.crawl import _start_scraper_guarded
-    from services.scraper_lock import is_running
-    if is_running():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    from services.scraper_lock import is_running, CHANNEL_TOP250
+    if is_running(CHANNEL_TOP250):
+        raise HTTPException(status_code=409, detail="Top250 爬取通道忙碌")
     _table_ensure()
     dbf = _ranks_db()
     if not dbf.exists():
@@ -319,21 +371,27 @@ def crawl_missing(body: CrawlBody, db: DbSession, _user: CurrentUser):
     # cmd_args 不含脚本路径（_start_scraper 内部拼 python + scraper.py）
     cmd = ["search-movie", "--codes", ",".join(codes), "--kind", str(body.kind)]
     proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": body.kind,
-                                        "count": len(codes)})
+                                        "count": len(codes), "channel": "top250",
+                                        "started_at": _now_iso_top250()},
+                                  channel="top250")
+    _start_extract_chain(proc)
     return {"ok": True, "queued": len(codes), "pid": proc.pid,
-            "message": f"已启动番号搜索入库（{len(codes)} 部）"}
+            "message": f"已启动番号搜索入库（{len(codes)} 部），完成后自动提取元数据/磁力"}
 
 
 @router.post("/{number}/add-task")
 def add_task(number: str, db: DbSession, _user: CurrentUser, kind: int = 6):
     """单部入库（按番号）。"""
     from routers.crawl import _start_scraper_guarded
-    from services.scraper_lock import is_running
-    if is_running():
-        raise HTTPException(status_code=409, detail="已有爬取任务在运行")
+    from services.scraper_lock import is_running, CHANNEL_TOP250
+    if is_running(CHANNEL_TOP250):
+        raise HTTPException(status_code=409, detail="Top250 爬取通道忙碌")
     number = number.upper().replace(" ", "")
     if db.execute(select(Task).where(Task.video_code == number)).scalars().first():
         return {"ok": True, "message": "已在影片库"}
     cmd = ["search-movie", "--codes", number, "--kind", str(kind)]
-    proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": kind, "count": 1})
-    return {"ok": True, "message": f"已启动 {number} 的搜索入库（PID {proc.pid}）"}
+    proc = _start_scraper_guarded(cmd, {"mode": "search-movie", "kind": kind, "count": 1,
+                                        "channel": "top250", "started_at": _now_iso_top250()},
+                                  channel="top250")
+    _start_extract_chain(proc)
+    return {"ok": True, "message": f"已启动 {number} 的搜索入库（PID {proc.pid}），完成后自动提取"}

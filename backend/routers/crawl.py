@@ -93,7 +93,7 @@ def _get_setting_from_db(key: str) -> str:
         return ""
 
 
-def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
+def _start_scraper(cmd_args: list[str], channel: str = "main") -> subprocess.Popen:
     """启动 scraper 子进程。
 
     架构修复：
@@ -108,6 +108,10 @@ def _start_scraper(cmd_args: list[str]) -> subprocess.Popen:
     # Phase 2 F07：轮换回调共享密钥，注入子进程 env
     # （register/unregister 端点校验 Authorization: Bearer <token>）
     env["SCRAPER_CALLBACK_TOKEN"] = scraper_lock.rotate_callback_token()
+
+    # 双通道：top250 通道用独立浏览器配置目录（cookie 由登录流程/启动引导同步）
+    if channel == scraper_lock.CHANNEL_TOP250:
+        env["SCRAPER_PROFILE"] = "browser_profile_top250"
 
     # 从 DB 读运行时代理配置，覆盖 env（让 scraper 子进程的 Playwright 生效）
     proxy = _get_proxy_from_db()
@@ -212,13 +216,14 @@ def recover_interrupted_scraper() -> dict:
     if scraper_lock.is_running():
         return {"recovered": False, "message": f"已有爬取在运行，跳过恢复 {mode}"}
     try:
-        proc = _start_scraper_guarded(cmd_args, state.get("info") or {})
+        _ch = (state.get("info") or {}).get("channel") or "main"
+        proc = _start_scraper_guarded(cmd_args, state.get("info") or {}, channel=_ch)
         return {"recovered": True, "message": f"已自动续爬 {mode}（PID {proc.pid}）"}
     except Exception as e:
         return {"recovered": False, "message": f"自动续爬失败: {e}"}
 
 
-def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
+def _start_scraper_guarded(cmd_args: list[str], info: dict, channel: str = "main") -> subprocess.Popen:
     """原子启动 scraper 并注册全局锁（Phase 2 P1-1 TOCTOU 修复）。
 
     旧实现 try_acquire() → Popen → set_proc() 之间存在竞态窗口：
@@ -230,8 +235,11 @@ def _start_scraper_guarded(cmd_args: list[str], info: dict) -> subprocess.Popen:
     from routers.javdb_login import is_active as _login_active
     if _login_active():
         raise HTTPException(status_code=409, detail="JavDB 登录会话进行中，请完成或取消后再启动爬取")
-    proc = _start_scraper(cmd_args)
-    if not scraper_lock.try_acquire_and_set(proc, {**info, "pid": proc.pid}):
+    if channel == scraper_lock.CHANNEL_TOP250:
+        from routers.javdb_login import ensure_top250_profile
+        ensure_top250_profile()
+    proc = _start_scraper(cmd_args, channel)
+    if not scraper_lock.try_acquire_and_set(proc, {**info, "pid": proc.pid, "channel": channel}, channel=channel):
         # 锁被占用：回收刚启动的进程，避免孤儿 Chromium 残留
         _kill_process_tree(proc)
         try:
@@ -480,17 +488,18 @@ def refresh_metadata(_user: CurrentUser, body: dict | None = None):
 
 @router.post("/stop")
 def stop_crawl(_user: CurrentUser):
-    """停止当前爬取进程（杀整个进程树）。"""
-    proc = scraper_lock.get_proc()
-    if proc and scraper_lock.is_proc_alive(proc):
-        _kill_process_tree(proc)
-        try:
-            proc.wait(timeout=10)
-        except Exception:
-            pass
-    # Phase 2 P1-3：按身份释放（防止清掉并发新注册的锁）
-    if proc is not None and scraper_lock.get_proc() is proc:
-        scraper_lock.clear()
+    """停止当前爬取进程（杀整个进程树；双通道全停）。"""
+    for _ch in (scraper_lock.CHANNEL_MAIN, scraper_lock.CHANNEL_TOP250):
+        proc = scraper_lock.get_proc(_ch)
+        if proc and scraper_lock.is_proc_alive(proc):
+            _kill_process_tree(proc)
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                pass
+        # Phase 2 P1-3：按身份释放（防止清掉并发新注册的锁）
+        if proc is not None and scraper_lock.get_proc(_ch) is proc:
+            scraper_lock.clear(_ch)
     return {"ok": True, "message": "已停止"}
 
 
@@ -509,8 +518,10 @@ def _verify_callback_token(authorization: str | None) -> bool:
 def register(body: dict, authorization: str | None = Header(None)):
     if not _verify_callback_token(authorization):
         raise HTTPException(status_code=401, detail="未授权")
-    info = scraper_lock.get_info()
-    scraper_lock.set_proc(scraper_lock.get_proc(), {**info, **body, "registered": True})
+    # 双通道：按回调 pid 定位登记通道（scraper 子进程上报 os.getpid()）
+    ch = scraper_lock.find_channel_by_pid(body.get("pid")) or scraper_lock.CHANNEL_MAIN
+    info = scraper_lock.get_info(ch)
+    scraper_lock.set_proc(scraper_lock.get_proc(ch), {**info, **body, "registered": True}, channel=ch)
     return {"ok": True}
 
 
@@ -518,11 +529,12 @@ def register(body: dict, authorization: str | None = Header(None)):
 def unregister(authorization: str | None = Header(None)):
     if not _verify_callback_token(authorization):
         raise HTTPException(status_code=401, detail="未授权")
-    proc = scraper_lock.get_proc()
-    # 进程结束，清理引用
-    if proc and not scraper_lock.is_proc_alive(proc):
-        scraper_lock.clear()
-        _clear_live_state()
+    # 双通道：回调无 body，按"已登记且进程已退出"清扫对应通道
+    for _ch in (scraper_lock.CHANNEL_MAIN, scraper_lock.CHANNEL_TOP250):
+        _proc = scraper_lock.get_proc(_ch)
+        if _proc and not scraper_lock.is_proc_alive(_proc):
+            scraper_lock.clear(_ch)
+            _clear_live_state()
     return {"ok": True}
 
 
@@ -551,19 +563,26 @@ def reap_timed_out_crawl() -> dict:
     保证前端不轮询时僵尸进程也能被回收。
     幂等：每次重查 poll()，且按身份（get_proc() is proc）clear，防 ABA。
     """
-    proc = scraper_lock.get_proc()
+    running = False
     reaped = False
-    if proc is not None and scraper_lock.is_proc_alive(proc) and _is_timed_out(scraper_lock.get_info()):
-        _kill_process_tree(proc)  # type: ignore
-        _clear_live_state()
-        reaped = True
-        if scraper_lock.get_proc() is proc:
-            scraper_lock.clear()
-    elif proc is not None and not scraper_lock.is_proc_alive(proc):
-        # 进程已退出但锁未清理（僵尸锁）
-        if scraper_lock.get_proc() is proc:
-            scraper_lock.clear()
-    return {"running": scraper_lock.is_proc_alive(proc), "reaped": reaped}
+    for _ch in (scraper_lock.CHANNEL_MAIN, scraper_lock.CHANNEL_TOP250):
+        proc = scraper_lock.get_proc(_ch)
+        if proc is None:
+            continue
+        if scraper_lock.is_proc_alive(proc):
+            running = True
+            if _ch == scraper_lock.CHANNEL_MAIN and _is_timed_out(scraper_lock.get_info(_ch)):
+                _kill_process_tree(proc)  # type: ignore
+                _clear_live_state()
+                reaped = True
+                if scraper_lock.get_proc(_ch) is proc:
+                    scraper_lock.clear(_ch)
+                running = False
+        else:
+            # 进程已退出但锁未清理（僵尸锁）
+            if scraper_lock.get_proc(_ch) is proc:
+                scraper_lock.clear(_ch)
+    return {"running": running, "reaped": reaped}
 
 
 # ── Phase 1 补端点：日志查询 ──
