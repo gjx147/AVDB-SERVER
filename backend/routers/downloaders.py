@@ -210,6 +210,20 @@ def _test_qbittorrent_sync(config: dict) -> dict:
         return {"ok": False, "message": str(e)}
 
 
+@router.post("/rename-all")
+def cd2_rename_all(_admin: CurrentAdmin):
+    """CD2 一键整理：全部已推送未整理的 clouddrive 记录立即整理。"""
+    import asyncio as _aio
+    from services.cd2_rename import run_rename_all
+    try:
+        loop = _aio.get_event_loop()
+    except RuntimeError:
+        loop = _aio.new_event_loop()
+        _aio.set_event_loop(loop)
+    r = loop.run_until_complete(_aio.to_thread(run_rename_all))
+    return r
+
+
 @router.post("/test")
 @router.post("/test-connection")  # 兼容前端旧路径
 async def test_connection(body: dict, db: DbSession, _user: CurrentUser):

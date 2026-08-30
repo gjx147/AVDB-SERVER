@@ -50,6 +50,15 @@ export function Downloaders() {
     } finally { setTesting(null) }
   }
 
+  const [renaming, setRenaming] = useState(false)
+  const renameAll = async () => {
+    setRenaming(true)
+    try {
+      const r = await api.cd2Rename.renameAll()
+      toastOk(`CD2 整理完成：${r.organized}/${r.total} 项成功`)
+    } catch (e) { toastErr(String((e as Error).message)) } finally { setRenaming(false) }
+  }
+
   return (
     <div className="page">
       <PageHead eyebrow="Downloaders" title={<>下载器<em>配置</em></>}
@@ -99,6 +108,11 @@ export function Downloaders() {
               <input id="cd2-delay" type="number" min={0} className="input" style={{ width: 120 }}
                 value={s.cd2_rename_delay_seconds ?? 300}
                 onChange={(e) => upd({ cd2_rename_delay_seconds: Number(e.target.value) || 0 } as never)} />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <button className="btn btn--gold btn--sm" onClick={renameAll} disabled={renaming}>
+                {renaming ? '整理中…' : '一键整理全部'}
+              </button>
             </div>
           </div>
         </div>

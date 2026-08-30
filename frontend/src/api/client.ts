@@ -458,6 +458,9 @@ export const api = {
     crawlMissing: (kind: number) => http.post<{ ok: boolean; queued: number; message: string }>('/api/top250/crawl-missing', { kind }).then((r) => r.data),
     addTask: (number: string, kind: number) => http.post<{ ok: boolean; message: string }>(`/api/top250/${number}/add-task?kind=${kind}`).then((r) => r.data),
   },
+  cd2Rename: {
+    renameAll: () => http.post<{ ok: boolean; total: number; organized: number; results: { video_code: string | null; ok: boolean; message: string }[] }>('/api/downloaders/rename-all').then((r) => r.data),
+  },
   javdbLogin: {
     start: () => http.post<ApiOk>('/api/javdb-login/start').then((r) => r.data),
     screenshot: () => http.get<{ ok: boolean; image: string }>('/api/javdb-login/screenshot').then((r) => r.data),

@@ -191,6 +191,36 @@ def run_rename_now(task_id: int | None, video_code: str | None) -> tuple[bool, s
             loop.close()
 
 
+def run_rename_all() -> dict:
+    """一键整理：全部 clouddrive 已推送未整理的下载记录，逐个立即整理。"""
+    from database import SessionLocal
+    from models import Download
+    from sqlalchemy import select
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            select(Download).where(
+                Download.downloader == "clouddrive",
+                Download.status.in_(["pushed", "completed"]),
+                Download.organized == False,  # noqa: E712
+            )).scalars().all()
+        total = len(rows)
+        ok_count = 0
+        results = []
+        for dl in rows:
+            try:
+                ok, msg = run_rename_now(dl.task_id, dl.video_code)
+            except Exception as e:
+                ok, msg = False, f"异常: {e}"
+            if ok:
+                ok_count += 1
+            results.append({"dl_id": dl.id, "video_code": dl.video_code,
+                            "ok": ok, "message": msg})
+        return {"ok": True, "total": total, "organized": ok_count, "results": results}
+    finally:
+        db.close()
+
+
 async def test_rename(config: dict) -> dict:
     """测试配置（供 downloaders.test_connection 调用）：列下载文件夹验证可达。"""
     from services.cd2_client import get_token_or_login, list_folder
