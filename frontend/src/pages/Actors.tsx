@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { Actor } from '../api/types'
 import { PageHead, Empty, ErrorEmpty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
+import { Pager } from '../components/Pager'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -286,13 +287,12 @@ export function Actors() {
 
       {/* 分页 */}
       {total > PAGE && (
-        <div className="pager">
-          <button disabled={page === 0} onClick={() => goPage(page - 1)}>上一页</button>
-          <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 13, color: 'var(--t-mute)', padding: '0 14px' }}>
-            {page * PAGE + 1}-{Math.min((page + 1) * PAGE, total)} / 共 {total} 条
-          </span>
-          <button disabled={(page + 1) * PAGE >= total} onClick={() => goPage(page + 1)}>下一页</button>
-        </div>
+        <Pager
+          page={page + 1}
+          totalPages={Math.ceil(total / PAGE)}
+          onPage={(p) => goPage(p - 1)}
+          info={`${page * PAGE + 1}-${Math.min((page + 1) * PAGE, total)} / 共 ${total} 条`}
+        />
       )}
 
       {/* 批量操作栏 */}

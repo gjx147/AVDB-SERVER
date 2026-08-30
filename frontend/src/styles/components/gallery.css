@@ -138,4 +138,8 @@
 .pager button:hover{border-color:var(--gold);color:var(--gold)}
 .pager button.on{background:var(--gold);color:#fff;border-color:var(--gold)}
 .pager button:disabled{opacity:.4;cursor:not-allowed}
+.pager .pager-info{font-family:var(--ff-mono);font-size:13px;color:var(--t-mute);padding:0 10px;white-space:nowrap}
+.pager .pager-jump{display:inline-flex;align-items:center;gap:4px}
+.pager .pager-jump .input{width:60px;height:32px;min-height:0;padding:0 8px;text-align:center;font-size:13px}
+.pager .pager-jump button{min-width:0;padding:0 12px}
 .pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(220,20,60,.06)}

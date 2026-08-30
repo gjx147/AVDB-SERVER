@@ -4,6 +4,7 @@ import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
+import { Pager } from '../components/Pager'
 import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 30
@@ -731,11 +732,12 @@ export function ActorDetail() {
           })}
         </div>
         {/* 分页 */}
-        <div className="pagination-card" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 24, padding: '10px 16px', width: 'fit-content', margin: '24px auto 0' }}>
-          <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => loadMovies(page - 1, sort, inLib)}>上一页</button>
-          <span style={{ fontSize: 13, color: 'var(--t-mute)' }}>第 {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 {total} 部</span>
-          <button className="btn btn--ghost btn--sm" disabled={page * PAGE_SIZE >= total} onClick={() => loadMovies(page + 1, sort, inLib)}>下一页</button>
-        </div>
+        <Pager
+          page={page}
+          totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+          onPage={(p) => loadMovies(p, sort, inLib)}
+          info={`第 ${page} / ${Math.max(1, Math.ceil(total / PAGE_SIZE))} 页 · 共 ${total} 部`}
+        />
         </>
       )}
 
