@@ -2085,11 +2085,15 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                     logger.debug(f"{code}: top250_entries 联动更新跳过（旧表缺失，不影响入库）")
                 conn.commit()
             # 手动导入带磁力：Task 直接填充（跳过爬取，可立即推送）
+            # 旧版联动表 top250_entries 在新库不存在——缺失时跳过填充
             mrow = None
-            with scraper.store._conn() as conn:
-                mrow = conn.execute(
-                    "SELECT magnet FROM top250_entries WHERE kind=? AND number=?",
-                    (kind, code)).fetchone()
+            try:
+                with scraper.store._conn() as conn:
+                    mrow = conn.execute(
+                        "SELECT magnet FROM top250_entries WHERE kind=? AND number=?",
+                        (kind, code)).fetchone()
+            except Exception:
+                mrow = None
             if mrow and mrow[0] and not existed:
                 magnet = mrow[0]
                 payload = _json.dumps([{"magnet": magnet, "name": code}])
