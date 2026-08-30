@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from deps import CurrentUser
+from deps import CurrentUser, DbSession
 from services.drive115_client import (
     add_offline_task,
     exchange_token,
@@ -53,8 +53,38 @@ async def offline_tasks(_user: CurrentUser):
 
 
 @router.get("/quota")
-async def quota(_user: CurrentUser):
-    """115 离线配额/空间用量（F12）：规范化返回 total/used/remain（字节）。"""
+async def quota(db: DbSession, _user: CurrentUser):
+    """115 离线配额/空间用量（F12）：优先从 CD2 挂载盘查（配 CD2 用量口径），
+    无 CD2 配置时回退 115 开放平台。返回 total/used/remain（字节）。"""
+    # ── 优先 CD2：CloudDrive2 挂 115，配额即挂载盘用量 ──
+    try:
+        from database import SessionLocal
+        from models import Setting
+        _db = SessionLocal()
+        try:
+            def _cfg(k):
+                row = _db.get(Setting, k)
+                return (row.value or "").strip() if row and row.value else ""
+            cd2_url = _cfg("clouddrive_url")
+        finally:
+            _db.close()
+        if cd2_url:
+            from services.cd2_client import get_usage, get_token_or_login
+            cfg = {"clouddrive_url": cd2_url, "clouddrive_token": _cfg("clouddrive_token"),
+                   "clouddrive_username": _cfg("clouddrive_username"),
+                   "clouddrive_password": _cfg("clouddrive_password")}
+            token, err = await get_token_or_login(cfg)
+            if token:
+                usages, uerr = await get_usage(cd2_url.rstrip('/'), token)
+                if usages:
+                    # 汇总所有挂载盘（或取 115 相关盘）
+                    total = sum(u["total"] or 0 for u in usages)
+                    used = sum(u["used"] or 0 for u in usages)
+                    return {"ok": True, "total": total or None, "used": used or None,
+                            "remain": (total - used) if total else None,
+                            "source": "cd2", "drives": usages}
+    except Exception:
+        pass  # CD2 路径失败 → 回退 115 开放平台
     r = await get_quota()
     if "error" in r:
         return {"ok": False, "message": r["error"]}

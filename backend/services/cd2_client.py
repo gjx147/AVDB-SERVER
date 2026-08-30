@@ -405,6 +405,23 @@ async def delete_files(base: str, token: str, paths: list[str]) -> tuple[bool, s
         return False, f"DeleteFiles 异常: {e}"
 
 
+async def get_usage(base: str, token: str) -> tuple[list[dict], str]:
+    """查询 CD2 挂载盘用量（grpc GetUsage）：每盘 total/used（字节）+ 盘名。"""
+    # 请求体：空消息（proto GetUsageRequest 无必填字段）
+    payload = grpc_web_frame(b"")
+    data, gstatus, _ = await grpc_web_call(base, "GetUsage", payload, token)
+    if gstatus != "OK":
+        return [], f"grpc {gstatus}"
+    usages = []
+    # repeated 字段 1：DriveUsage 消息 {1: totalSpace(int64), 2: usedSpace(int64), 3: driveName(string)}
+    for msg in extract_nested_messages(data, 1):
+        total = extract_int_field(msg, 1)
+        used = extract_int_field(msg, 2)
+        name = extract_string_field(msg, 3) or "?"
+        usages.append({"total": total, "used": used, "drive_name": name})
+    return usages, ""
+
+
 async def add_offline_files(base: str, token: str, magnet: str, save_path: str) -> tuple[bool, str]:
     """AddOfflineFiles（CD2 磁力推送，从 downloaders._push_clouddrive 提取）。
 
