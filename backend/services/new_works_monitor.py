@@ -509,6 +509,13 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
             db.add(dl)
             db.commit()
             logger.info(f"[新作监控] 自动推送 {video_code} 成功")
+            # CD2 推送成功 → 延迟整理（开关/延迟在设置页；异常隔离不影响推送）
+            if downloader == "clouddrive":
+                try:
+                    from services.cd2_rename import schedule_rename
+                    schedule_rename(task_id, video_code)
+                except Exception as e:
+                    logger.warning(f"[CD2整理] 调度失败（不影响推送）: {e}")
         else:
             logger.warning(f"[新作监控] 自动推送 {video_code} 失败: {result.get('message')}")
     except Exception as e:

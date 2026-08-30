@@ -119,21 +119,21 @@ async def _do_rename(task_id: int | None, video_code: str | None, delay: int):
     folder = cfg.get("cd2_download_folder", "").strip()
     if not cd2_url or not folder:
         logger.warning(f"[CD2整理] 跳过：clouddrive_url / cd2_download_folder 未配置 ({label})")
-        return
+        return False, "[CD2整理] 跳过：clouddriv"
     if not video_code:
         logger.warning(f"[CD2整理] 跳过：无番号 ({label})")
-        return
+        return False, "[CD2整理] 跳过：无番号 ({lab"
 
     from services.cd2_client import get_token_or_login, list_folder
     token, err = await get_token_or_login(cfg)
     if err:
         logger.error(f"[CD2整理] CD2 登录失败 ({label}): {err}")
-        return
+        return False, "[CD2整理] CD2 登录失败 ({l"
 
     entries, list_err = await list_folder(cd2_url, token, folder)
     if list_err:
         logger.error(f"[CD2整理] 列下载文件夹失败 ({label}): {list_err}")
-        return
+        return False, "[CD2整理] 列下载文件夹失败 ({l"
 
     vc_lower = video_code.lower()
     # 优先：{番号} 子文件夹（CD2 离线下载通常建同名目录）
@@ -142,15 +142,15 @@ async def _do_rename(task_id: int | None, video_code: str | None, delay: int):
             sub_entries, sub_err = await list_folder(cd2_url, token, f["full_path"])
             if sub_err:
                 logger.error(f"[CD2整理] 列子文件夹 {f['full_path']} 失败 ({label}): {sub_err}")
-                return
+                return False, "[CD2整理] 列子文件夹 {f['fu"
             await _process_scope(cd2_url, token, sub_entries, video_code, f"(子文件夹 {f['full_path']})")
-            return
+            return False, "[CD2整理] 列子文件夹 {f['fu"
 
     # 其次：下载文件夹根下直接匹配番号的文件（无子文件夹的种子）
     matched = [f for f in entries if not f.get("is_directory") and vc_lower in (f.get("name") or "").lower()]
     if matched:
         await _process_scope(cd2_url, token, matched, video_code, "(根目录匹配文件)")
-        return
+        return False, "[CD2整理] 列子文件夹 {f['fu"
 
     logger.info(f"[CD2整理] 未找到匹配 {video_code} 的子文件夹/文件，可能 CD2 还在下载 ({label})")
 
@@ -163,10 +163,10 @@ def schedule_rename(task_id: int | None, video_code: str | None) -> None:
     try:
         cfg = _get_config()
         if not _to_bool(cfg.get("cd2_rename_enabled")):
-            return
+            return False, "[CD2整理] 未找到匹配 {video"
         if not task_id:
             logger.warning("[CD2整理] 无 task_id，跳过")
-            return
+            return False, "[CD2整理] 无 task_id，跳过"
         try:
             delay = int(cfg.get("cd2_rename_delay_seconds", "") or "300")
         except ValueError:
@@ -175,6 +175,20 @@ def schedule_rename(task_id: int | None, video_code: str | None) -> None:
         logger.info(f"[CD2整理] 已计划 {delay}s 后整理 (task_id={task_id} {video_code})")
     except Exception as e:
         logger.warning(f"[CD2整理] schedule_rename 异常（不影响推送）: {e}")
+
+
+def run_rename_now(task_id: int | None, video_code: str | None) -> tuple[bool, str]:
+    """立即整理（手动全部整理 / run_all 调用）：跳过延迟直接执行。"""
+    import asyncio as _aio
+    try:
+        return _aio.get_event_loop().run_until_complete(_do_rename(task_id, video_code, 0))
+    except RuntimeError:
+        # 已在事件循环内（async 上下文的 to_thread 里）——新循环执行
+        loop = _aio.new_event_loop()
+        try:
+            return loop.run_until_complete(_do_rename(task_id, video_code, 0))
+        finally:
+            loop.close()
 
 
 async def test_rename(config: dict) -> dict:

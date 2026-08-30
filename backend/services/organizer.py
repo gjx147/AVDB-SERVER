@@ -144,52 +144,6 @@ async def trigger_organize(dl_id: int, info_hash: str | None = None) -> dict:
         db.close()
 
 
-def _organize_one_clouddrive(db, dl: Download, cd_config: dict, target_dir: Path, template: str) -> tuple[bool, str]:
-    """整理单个 CD2（clouddrive）下载记录：在 clouddrive_save_path 下按番号找视频 → 同款命名入库。"""
-    save_root = cd_config.get("clouddrive_save_path", "")
-    if not save_root:
-        return False, "未配置 clouddrive_save_path"
-    root = Path(save_root)
-    if not root.exists():
-        return False, f"clouddrive_save_path 不可达（确认已在容器内挂载）: {root}"
-    code = dl.video_code or _extract_code(dl.magnet or "") or ""
-    if not code:
-        return False, "下载记录无番号"
-    # 递归扫描保存路径，找文件名含番号的视频文件（去 - 分隔比对）
-    norm_code = code.replace("-", "").upper()
-    video_files: list[Path] = []
-    VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".ts", ".iso"}
-    for dirpath, _dirs, files in os.walk(root):
-        for fname in files:
-            fpath = Path(dirpath) / fname
-            if fpath.suffix.lower() not in VIDEO_EXTS:
-                continue
-            if norm_code in re.sub(r"[\s-]", "", fname).upper():
-                video_files.append(fpath)
-        if video_files:
-            break  # 找到即停（浅层优先）
-    if not video_files:
-        return False, f"保存路径下未找到 {code} 的视频文件"
-    if not target_dir.exists():
-        return False, f"整理目录不存在: {target_dir}"
-    task = db.execute(select(Task).where(Task.video_code == code)).scalars().first()
-    title = task.title if task else ""
-    organized_paths: list[str] = []
-    for src in video_files:
-        dst = target_dir / _build_name(template, code, title, src.suffix)
-        if dst.exists():
-            organized_paths.append(str(dst))  # 幂等
-            continue
-        _link_or_copy(str(src), str(dst))
-        organized_paths.append(str(dst))
-    if not organized_paths:
-        return False, "无文件被整理"
-    dl.organized = True
-    dl.organized_paths = ",".join(organized_paths)
-    db.commit()
-    return True, f"已整理 {len(organized_paths)} 个文件"
-
-
 async def run_organize_all() -> dict:
     """手动全量整理：所有 completed 且未整理的 qB 记录。"""
     db = SessionLocal()
@@ -205,12 +159,14 @@ async def run_organize_all() -> dict:
         results = []
         cd_config = {k: _get_setting(db, k) for k in (
             "clouddrive_save_path",)}
-        target_dir = Path(_get_setting(db, "organize_target_dir") or "")
-        template = _get_setting(db, "organize_naming") or "{code} - {title}"
         for dl in rows:
             if dl.downloader == "clouddrive":
-                ok, msg2 = await asyncio.to_thread(
-                    _organize_one_clouddrive, db, dl, cd_config, target_dir, template)
+                # CD2 原地整理（≥200MB 重命名番号，杂文件删除）——统一走 cd2_rename 模块
+                try:
+                    from services.cd2_rename import run_rename_now
+                    ok, msg2 = await asyncio.to_thread(run_rename_now, dl.task_id, dl.video_code)
+                except Exception as e:
+                    ok, msg2 = False, f"CD2 整理异常: {e}"
                 if ok:
                     ok_count += 1
                 results.append({"dl_id": dl.id, "ok": ok, "message": msg2})
