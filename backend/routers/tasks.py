@@ -115,6 +115,52 @@ def batch_retry(task_ids: list[int], db: DbSession, _user: CurrentUser):
     return {"ok": True, "updated": updated}
 
 
+@router.post("/batch/retry-now")
+def batch_retry_now(db: DbSession, _user: CurrentUser):
+    """一键重试全部失败任务：failed→pending 并【立即】触发对应源的提取子进程。
+
+    与 /batch/retry（只翻状态等周期）的区别：此处点击后马上起 scraper，
+    TOP250 源走 top250 通道、其余走 main 通道；通道忙碌或 JavDB 登录中
+    时跳过立即启动——由 extract 周期（10 分钟内）兜底接管。
+    """
+    from routers.crawl import _start_scraper_guarded
+    from services.scraper_lock import is_running, CHANNEL_TOP250
+    from models import ListSource
+    rows = db.execute(
+        select(Task.id, Task.list_source_id).where(Task.status == "failed")
+    ).all()
+    if not rows:
+        return {"ok": True, "updated": 0, "started": [], "busy": []}
+    ids = [r[0] for r in rows]
+    updated = db.execute(
+        Task.__table__.update().where(Task.id.in_(ids), Task.status == "failed")
+        .values(status="pending")  # 同 /batch/retry：不重置 retry_count（防死循环）
+    ).rowcount
+    db.commit()
+    started: list[str] = []
+    busy: list[str] = []
+    for sid in sorted({r[1] for r in rows if r[1] is not None}):
+        src = db.get(ListSource, sid)
+        name = src.list_code if src else f"#{sid}"
+        ch = CHANNEL_TOP250 if (src and src.list_code == "TOP250") else "main"
+        if is_running(ch):
+            busy.append(name)
+            continue
+        try:
+            _start_scraper_guarded(
+                ["extract", "--list-source-id", str(sid)],
+                {"mode": "extract", "list_source_id": sid, "auto": "retry-now",
+                 "started_at": datetime.utcnow().isoformat()},
+                channel=ch,
+            )
+            started.append(name)
+        except HTTPException:
+            busy.append(name)  # 409：通道被占/登录中
+        except Exception:
+            busy.append(name)
+    return {"ok": True, "updated": updated, "started": started, "busy": busy}
+
+
 @router.post("/batch/favorite")
 def batch_favorite(task_ids: list[int], db: DbSession, _user: CurrentUser):
     """批量设为收藏。"""

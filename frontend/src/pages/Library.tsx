@@ -36,6 +36,7 @@ export function Library() {
   })
   const [total, setTotal] = useState(0)
   const [queueRunning, setQueueRunning] = useState(false)
+  const [retryingNow, setRetryingNow] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
@@ -209,6 +210,22 @@ export function Library() {
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
+  // 一键重试失败：failed→pending 并立即触发提取（爬虫忙时由提取周期接管）
+  const retryFailedNow = async () => {
+    const ok = await confirmBox('一键重试失败',
+      '将把全部失败任务重置为待处理并立即开始提取（爬虫忙碌时由提取周期 10 分钟内接管）。确定继续？')
+    if (!ok) return
+    setRetryingNow(true)
+    try {
+      const r = await api.tasks.retryNow()
+      if (r.updated === 0) toastOk('当前没有失败任务')
+      else if (r.started.length) toastOk(`已重置 ${r.updated} 个失败任务，正在提取（${r.started.join('、')}）`)
+      else toastErr(`已重置 ${r.updated} 个失败任务；爬虫正忙，将由提取周期自动接管`)
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally { setRetryingNow(false) }
+  }
+
   const batch = async (kind: 'delete' | 'retry' | 'favorite' | 'push' | 'view') => {
     const ids = [...selected]
     if (!ids.length) return
@@ -278,6 +295,10 @@ export function Library() {
           <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>画廊</button>
           <button className={view === 'row' ? 'on' : ''} onClick={() => setView('row')}>列表</button>
         </div>
+        <button className="btn btn--gold btn--sm" onClick={retryFailedNow} disabled={retryingNow}
+          title="把全部失败任务重置为待处理并立即提取">
+          {retryingNow ? '重试中…' : '一键重试失败'}
+        </button>
         {tasks && tasks.length > 0 && (
           <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
         )}
