@@ -113,6 +113,94 @@ def clean_failed(db: DbSession, _user: CurrentUser):
     return {"ok": True, "deleted": deleted}
 
 
+# ── 配置文件备份（data/config 持久卷，跨容器/换设备恢复） ──
+
+@router.post("/config-backup")
+def config_backup_create(db: DbSession, _user: CurrentAdmin):
+    """把 settings 全表（含下载器参数与凭据）写入 data/config/settings-<时间戳>.json。
+
+    文件落在数据卷持久目录（容器内 /app/data/config）：换设备或重建容器后
+    数据卷仍在，直接导入即可恢复。自动建目录，保留最近 10 份。
+    """
+    import json
+    from pathlib import Path
+    from config import get_settings
+    d = Path(get_settings().DATA_DIR) / "config"
+    d.mkdir(parents=True, exist_ok=True)
+    rows = db.execute(select(Setting)).scalars().all()
+    # 含敏感值（文件在本机数据卷、导入恢复需要真实凭据；不走 HTTP 脱敏）
+    data = {r.key: r.value for r in rows}
+    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    f = d / f"settings-{ts}.json"
+    f.write_text(
+        json.dumps({"settings": data, "exported_at": datetime.utcnow().isoformat()},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    kept = sorted(d.glob("settings-*.json"))
+    for old in kept[:-10]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+    return {"ok": True, "file": f.name, "count": len(data), "dir": str(d)}
+
+
+@router.get("/config-backup/list")
+def config_backup_list(_user: CurrentAdmin):
+    """列出 data/config 下的配置备份文件（新→旧）。"""
+    import json
+    from pathlib import Path
+    from config import get_settings
+    d = Path(get_settings().DATA_DIR) / "config"
+    if not d.exists():
+        return {"ok": True, "files": []}
+    files = []
+    for f in sorted(d.glob("settings-*.json"), reverse=True):
+        try:
+            meta = json.loads(f.read_text(encoding="utf-8"))
+            count = len(meta.get("settings") or {})
+        except Exception:
+            count = None
+        files.append({"file": f.name, "size": f.stat().st_size, "keys": count,
+                      "mtime": datetime.utcfromtimestamp(f.stat().st_mtime).isoformat()})
+    return {"ok": True, "files": files}
+
+
+@router.post("/config-backup/restore")
+def config_backup_restore(body: dict, db: DbSession, _user: CurrentAdmin):
+    """从 data/config 的指定备份文件恢复设置（合并写入；*** 哨兵跳过）。"""
+    import json
+    from pathlib import Path
+    from config import get_settings
+    name = str(body.get("file") or "")
+    # 防路径穿越：仅允许本目录列表返回的文件名
+    if (not name or "/" in name or "\\" in name
+            or not name.startswith("settings-") or not name.endswith(".json")):
+        raise HTTPException(status_code=400, detail="无效的备份文件名")
+    f = Path(get_settings().DATA_DIR) / "config" / name
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+    try:
+        meta = json.loads(f.read_text(encoding="utf-8"))
+        settings_data = meta.get("settings") or {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="备份文件损坏（非 JSON）")
+    if not isinstance(settings_data, dict) or not settings_data:
+        raise HTTPException(status_code=400, detail="备份文件为空")
+    updated = 0
+    for key, value in settings_data.items():
+        if _is_sensitive(key) and str(value) == "***":
+            continue  # 脱敏哨兵跳过，不覆盖真实凭据
+        row = db.get(Setting, key)
+        if row:
+            row.value = str(value) if value is not None else ""
+        else:
+            db.add(Setting(key=key, value=str(value) if value is not None else ""))
+        updated += 1
+    db.commit()
+    return {"ok": True, "restored": updated, "file": name}
+
+
 # ── 代理测试 ──
 
 class ProxyTestRequest(BaseModel):

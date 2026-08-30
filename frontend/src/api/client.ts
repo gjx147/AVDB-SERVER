@@ -436,6 +436,13 @@ export const api = {
     get: () => http.get<Settings>('/api/settings').then((r) => r.data),
     update: (body: SettingsUpdate) => http.put<ApiOk>('/api/settings', body).then((r) => r.data),
     backup: () => http.post<Blob>('/api/settings/backup', {}, { responseType: 'blob' }).then((r) => r.data),
+    configBackup: () =>
+      http.post<{ ok: boolean; file: string; count: number; dir: string }>('/api/settings/config-backup').then((r) => r.data),
+    configBackupList: () =>
+      http.get<{ ok: boolean; files: { file: string; size: number; keys: number | null; mtime: string }[] }>(
+        '/api/settings/config-backup/list').then((r) => r.data),
+    configBackupRestore: (file: string) =>
+      http.post<{ ok: boolean; restored: number; file: string }>('/api/settings/config-backup/restore', { file }).then((r) => r.data),
     restore: (file: File) => {
       const fd = new FormData()
       fd.append('file', file)

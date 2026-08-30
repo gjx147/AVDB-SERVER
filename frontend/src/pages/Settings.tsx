@@ -40,6 +40,11 @@ export function Settings() {
     api.s3Status().then(setS3Status).catch(() => {})
   }, [])
 
+  const [cfgBackups, setCfgBackups] = useState<{ file: string; size: number; keys: number | null; mtime: string }[]>([])
+  const loadCfgBackups = () => {
+    api.settings.configBackupList().then((r) => setCfgBackups(r.files)).catch(() => {})
+  }
+  useEffect(() => { loadCfgBackups() }, [])
   const [loginRunning, setLoginRunning] = useState(false)
   const [loginBusy, setLoginBusy] = useState(false)
   const [loginShot, setLoginShot] = useState<string | null>(null)
@@ -128,6 +133,21 @@ export function Settings() {
       a.href = url; a.download = `avdb-backup-${new Date().toISOString().slice(0, 10)}.db`
       a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)  // Firefox 下延迟回收，避免下载中断
       toastOk('备份已导出')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const cfgBackupNow = async () => {
+    try {
+      const r = await api.settings.configBackup()
+      toastOk(`已备份 ${r.count} 项配置到 data/config`)
+      loadCfgBackups()
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const cfgRestore = async (file: string) => {
+    if (!(await useStore.getState().confirm('导入配置', `将用「${file}」覆盖当前设置与下载器参数。确定继续？`))) return
+    try {
+      const r = await api.settings.configBackupRestore(file)
+      toastOk(`已导入 ${r.restored} 项配置，请刷新页面生效`)
+      loadCfgBackups()
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const restore = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -375,6 +395,28 @@ export function Settings() {
                 <label className="btn btn--ghost" style={{ width: 'fit-content', cursor: 'pointer' }}>
                   导入备份<input type="file" accept=".db,.sqlite,.json" onChange={restore} style={{ display: 'none' }} />
                 </label>
+                <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>配置备份（data/config 持久卷）</div>
+                  <div style={{ fontSize: 11, color: 'var(--t-mute)', marginBottom: 8 }}>
+                    把设置与下载器参数（含凭据）写入 data/config 目录——换设备或重建容器后数据卷仍在，直接导入即可恢复。
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn btn--gold btn--sm" onClick={cfgBackupNow}>备份配置到 data/config</button>
+                    <button className="btn btn--ghost btn--sm" onClick={loadCfgBackups}>刷新列表</button>
+                  </div>
+                  {cfgBackups.length > 0 && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {cfgBackups.map((b) => (
+                        <div key={b.file} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                          <span style={{ fontFamily: 'var(--ff-mono)', color: 'var(--t-body)' }}>{b.file}</span>
+                          <span style={{ color: 'var(--t-faint)', fontSize: 11 }}>{b.keys ?? '?'} 项</span>
+                          <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }}
+                            onClick={() => cfgRestore(b.file)}>导入</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button className="btn btn--danger btn--sm" onClick={cleanFailed} style={{ width: 'fit-content' }}>清理所有失败任务</button>
                 <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>数据导入导出</div>
