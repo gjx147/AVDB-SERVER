@@ -212,15 +212,15 @@ export function Library() {
 
   // 一键重试失败：failed→pending 并立即触发提取（爬虫忙时由提取周期接管）
   const retryFailedNow = async () => {
-    const ok = await confirmBox('一键重试失败',
-      '将把全部失败任务重置为待处理并立即开始提取（爬虫忙碌时由提取周期 10 分钟内接管）。确定继续？')
+    const ok = await confirmBox('一键重试',
+      '将把全部失败任务重置为待处理，并连同全部待处理任务立即开始提取（爬虫忙碌时由提取周期 10 分钟内接管）。确定继续？')
     if (!ok) return
     setRetryingNow(true)
     try {
       const r = await api.tasks.retryNow()
-      if (r.updated === 0) toastOk('当前没有失败任务')
-      else if (r.started.length) toastOk(`已重置 ${r.updated} 个失败任务，正在提取（${r.started.join('、')}）`)
-      else toastErr(`已重置 ${r.updated} 个失败任务；爬虫正忙，将由提取周期自动接管`)
+      if (r.total === 0) toastOk('当前没有待重试的任务')
+      else if (r.started.length) toastOk(`已开始重试 ${r.total} 个任务（含失败 ${r.updated} 个），正在提取（${r.started.join('、')}）`)
+      else toastErr(`已重试 ${r.total} 个任务；爬虫正忙，将由提取周期自动接管`)
     } catch (e) {
       toastErr(String((e as Error).message))
     } finally { setRetryingNow(false) }
@@ -296,8 +296,8 @@ export function Library() {
           <button className={view === 'row' ? 'on' : ''} onClick={() => setView('row')}>列表</button>
         </div>
         <button className="btn btn--gold btn--sm" onClick={retryFailedNow} disabled={retryingNow}
-          title="把全部失败任务重置为待处理并立即提取">
-          {retryingNow ? '重试中…' : '一键重试失败'}
+          title="把全部失败/待处理任务立即重爬入库">
+          {retryingNow ? '重试中…' : '一键重试'}
         </button>
         {tasks && tasks.length > 0 && (
           <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>

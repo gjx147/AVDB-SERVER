@@ -117,7 +117,7 @@ def batch_retry(task_ids: list[int], db: DbSession, _user: CurrentUser):
 
 @router.post("/batch/retry-now")
 def batch_retry_now(db: DbSession, _user: CurrentUser):
-    """一键重试全部失败任务：failed→pending 并【立即】触发对应源的提取子进程。
+    """一键重试全部失败+待处理任务：failed→pending 并【立即】触发对应源的提取子进程。
 
     与 /batch/retry（只翻状态等周期）的区别：此处点击后马上起 scraper，
     TOP250 源走 top250 通道、其余走 main 通道；通道忙碌或 JavDB 登录中
@@ -126,16 +126,20 @@ def batch_retry_now(db: DbSession, _user: CurrentUser):
     from routers.crawl import _start_scraper_guarded
     from services.scraper_lock import is_running, CHANNEL_TOP250
     from models import ListSource
+    # 失败 + 待处理 一并纳入（pending 无需翻状态，直接进入提取范围）
     rows = db.execute(
-        select(Task.id, Task.list_source_id).where(Task.status == "failed")
+        select(Task.id, Task.list_source_id, Task.status).where(
+            Task.status.in_(["failed", "pending"]))
     ).all()
     if not rows:
-        return {"ok": True, "updated": 0, "started": [], "busy": []}
-    ids = [r[0] for r in rows]
-    updated = db.execute(
-        Task.__table__.update().where(Task.id.in_(ids), Task.status == "failed")
-        .values(status="pending")  # 同 /batch/retry：不重置 retry_count（防死循环）
-    ).rowcount
+        return {"ok": True, "updated": 0, "total": 0, "started": [], "busy": []}
+    failed_ids = [r[0] for r in rows if r[2] == "failed"]
+    updated = 0
+    if failed_ids:
+        updated = db.execute(
+            Task.__table__.update().where(Task.id.in_(failed_ids), Task.status == "failed")
+            .values(status="pending")  # 同 /batch/retry：不重置 retry_count（防死循环）
+        ).rowcount
     db.commit()
     started: list[str] = []
     busy: list[str] = []
@@ -158,7 +162,8 @@ def batch_retry_now(db: DbSession, _user: CurrentUser):
             busy.append(name)  # 409：通道被占/登录中
         except Exception:
             busy.append(name)
-    return {"ok": True, "updated": updated, "started": started, "busy": busy}
+    return {"ok": True, "updated": updated, "total": len(rows),
+            "started": started, "busy": busy}
 
 
 @router.post("/batch/favorite")
