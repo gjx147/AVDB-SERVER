@@ -26,7 +26,8 @@ _pkg_lock = threading.Lock()
 
 
 def _db_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "data" / "jinjier_ranks.db"
+    # 项目根/data = Docker 挂载卷 /app/data（持久；旧 backend/data 位置自动迁移）
+    return Path(__file__).resolve().parents[2] / "data" / "jinjier_ranks.db"
 
 
 def _table_ensure() -> None:
@@ -62,7 +63,16 @@ def _table_ensure() -> None:
 
 
 def _ranks_db() -> Path:
-    return Path(__file__).resolve().parent.parent / "data" / "jinjier_ranks.db"
+    # 与 _db_path 一致：项目根/data（挂载卷持久），旧 backend/data 位置自动迁移
+    new = Path(__file__).resolve().parents[2] / "data" / "jinjier_ranks.db"
+    try:
+        legacy = Path(__file__).resolve().parent.parent / "data" / "jinjier_ranks.db"
+        if legacy.exists() and not new.exists():
+            new.parent.mkdir(parents=True, exist_ok=True)
+            legacy.replace(new)  # 原子迁移到持久卷
+    except Exception:
+        pass
+    return new
 
 
 def _pkg_valid(db: Path) -> bool:
@@ -113,6 +123,7 @@ def _ensure_pkg(force: bool = False) -> Path:
                     last = f"{url} -> HTTP {r.status_code}"
                     continue
                 tmp_zip = db.with_suffix(".downloading")
+                db.parent.mkdir(parents=True, exist_ok=True)
                 tmp_zip.write_bytes(r.content)
                 with zipfile.ZipFile(tmp_zip) as z:
                     name = [n for n in z.namelist() if n.endswith(".sqlite3")][0]

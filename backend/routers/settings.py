@@ -124,8 +124,8 @@ def config_backup_create(db: DbSession, _user: CurrentAdmin):
     """
     import json
     from pathlib import Path
-    from config import get_settings
-    d = Path(get_settings().DATA_DIR) / "config"
+    # 项目根/data = Docker 挂载卷 /app/data（与主库同卷，重建容器不丢）
+    d = Path(__file__).resolve().parents[2] / "data" / "config"
     d.mkdir(parents=True, exist_ok=True)
     rows = db.execute(select(Setting)).scalars().all()
     # 含敏感值（文件在本机数据卷、导入恢复需要真实凭据；不走 HTTP 脱敏）
@@ -150,8 +150,7 @@ def config_backup_list(_user: CurrentAdmin):
     """列出 data/config 下的配置备份文件（新→旧）。"""
     import json
     from pathlib import Path
-    from config import get_settings
-    d = Path(get_settings().DATA_DIR) / "config"
+    d = Path(__file__).resolve().parents[2] / "data" / "config"
     if not d.exists():
         return {"ok": True, "files": []}
     files = []
@@ -171,13 +170,12 @@ def config_backup_restore(body: dict, db: DbSession, _user: CurrentAdmin):
     """从 data/config 的指定备份文件恢复设置（合并写入；*** 哨兵跳过）。"""
     import json
     from pathlib import Path
-    from config import get_settings
     name = str(body.get("file") or "")
     # 防路径穿越：仅允许本目录列表返回的文件名
     if (not name or "/" in name or "\\" in name
             or not name.startswith("settings-") or not name.endswith(".json")):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
-    f = Path(get_settings().DATA_DIR) / "config" / name
+    f = Path(__file__).resolve().parents[2] / "data" / "config" / name
     if not f.exists():
         raise HTTPException(status_code=404, detail="备份文件不存在")
     try:
