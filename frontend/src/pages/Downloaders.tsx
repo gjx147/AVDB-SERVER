@@ -89,32 +89,6 @@ export function Downloaders() {
           <button className="btn btn--ghost btn--sm" onClick={() => test('clouddrive')} disabled={testing !== null}>
             {testing === 'clouddrive' ? '测试中…' : '测试连接'}
           </button>
-
-          <div style={{ borderTop: '1px solid var(--line, #eee)', paddingTop: 12, marginTop: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>CD2 下载整理（推送成功后自动执行）</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', marginBottom: 8 }}>
-              <input type="checkbox" checked={s.cd2_rename_enabled === true}
-                onChange={(e) => upd({ cd2_rename_enabled: e.target.checked } as never)} />
-              启用：≥200MB 视频原地重命名为番号（多文件加 -2/-3），其余文件（小视频/剧照/txt）删除
-            </label>
-            <div className="field" style={{ margin: 0, marginBottom: 8 }}>
-              <label htmlFor="cd2-folder">整理范围（CD2 离线下载文件夹）</label>
-              <input id="cd2-folder" className="input" placeholder="离线下载目录内的子文件夹（留空=整个下载目录）"
-                value={s.cd2_download_folder || ''}
-                onChange={(e) => upd({ cd2_download_folder: e.target.value } as never)} />
-            </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="cd2-delay">延迟整理（秒，等 CD2 下载完成）</label>
-              <input id="cd2-delay" type="number" min={0} className="input" style={{ width: 120 }}
-                value={s.cd2_rename_delay_seconds ?? 300}
-                onChange={(e) => upd({ cd2_rename_delay_seconds: Number(e.target.value) || 0 } as never)} />
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <button className="btn btn--gold btn--sm" onClick={renameAll} disabled={renaming}>
-                {renaming ? '整理中…' : '一键整理全部'}
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* qBittorrent */}
@@ -175,9 +149,14 @@ export function Downloaders() {
           />
           <div className="hint">CD2 离线下载大文件慢，建议 300-600 秒；超时未下完会跳过（下次推送另一番号不会误伤）</div>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={() => test('cd2_rename')} disabled={testing !== null}>
-          {testing === 'cd2_rename' ? '测试中…' : '测试（列下载文件夹）'}
-        </button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn btn--ghost btn--sm" onClick={() => test('cd2_rename')} disabled={testing !== null}>
+            {testing === 'cd2_rename' ? '测试中…' : '测试（列下载文件夹）'}
+          </button>
+          <button className="btn btn--gold btn--sm" onClick={renameAll} disabled={renaming}>
+            {renaming ? '整理中…' : '一键整理全部'}
+          </button>
+        </div>
       </div>
 
       <DownloaderLog />
