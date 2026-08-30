@@ -2075,9 +2075,14 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
                     task_id = cur.lastrowid
                     results["added"] += 1
                     logger.info(f"{code}: 已建任务 task {task_id} -> {detail_url}")
-                conn.execute(
-                    "UPDATE top250_entries SET task_id=? WHERE kind=? AND number=?",
-                    (task_id, kind, code))
+                try:
+                    conn.execute(
+                        "UPDATE top250_entries SET task_id=? WHERE kind=? AND number=?",
+                        (task_id, kind, code))
+                except Exception:
+                    # top250_entries 为旧版联动表（全新库不存在）。
+                    # 绝不能因它回滚任务入库（sqlite with-conn 异常即整体 rollback）
+                    logger.debug(f"{code}: top250_entries 联动更新跳过（旧表缺失，不影响入库）")
                 conn.commit()
             # 手动导入带磁力：Task 直接填充（跳过爬取，可立即推送）
             mrow = None
