@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import or_, select, update, func
 
 from database import SessionLocal
-from models import ListSource, Subscription, Task
+from models import ListSource, Subscription, Task, Setting
 
 logger = logging.getLogger("avdb.subscription_monitor")
 

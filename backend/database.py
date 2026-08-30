@@ -32,6 +32,9 @@ engine = create_engine(
     connect_args=connect_args,
     pool_pre_ping=True,
     future=True,
+    pool_size=10,       # 高并发推送/巡检期防 QueuePool 耗尽（默认 5+10 曾在推送风暴超时）
+    max_overflow=30,
+    pool_timeout=60,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, class_=Session, future=True)

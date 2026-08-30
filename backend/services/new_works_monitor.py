@@ -454,74 +454,79 @@ async def _wait_and_clear_lock(proc) -> None:
             scraper_lock.clear()
 
 
+_push_semaphore = asyncio.Semaphore(3)  # 推送并发削峰：同轮巡检的多个推送任务最多 3 个并发（防连接池风暴）
+
+
 async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180):
     """延迟 N 秒后检查 task 是否爬完拿到磁力，有则自动 push 下载。
 
     scraper extract-single 是异步 subprocess，需要等它爬完。180 秒后检查，
     如果还没磁力就跳过（auto_retry 会后续重试）。
+    并发削峰：信号量 3——等待延迟不占坑，实际推送阶段才受限。
     """
     await asyncio.sleep(delay)
-    db = SessionLocal()
-    try:
-        task = db.get(Task, task_id)
-        if not task or not task.best_magnet:
-            logger.info(
-                f"[新作监控] task {task_id} {video_code} 暂无磁力（scraper 可能未完成），跳过自动 push"
-            )
-            return
-
-        # 推送前复核 Emby：建任务到推送之间有 180s 窗口，作品可能刚进媒体库
+    async with _push_semaphore:
+        db = SessionLocal()
         try:
-            from services.media_server import check_in_library
-            in_lib = await check_in_library(video_code)
-            if in_lib is True:
-                logger.info(f"[新作监控] 推送前复核：{video_code} 已在 Emby 媒体库，跳过自动 push")
+            task = db.get(Task, task_id)
+            if not task or not task.best_magnet:
+                logger.info(
+                    f"[新作监控] task {task_id} {video_code} 暂无磁力（scraper 可能未完成），跳过自动 push"
+                )
                 return
-        except Exception as e:
-            logger.warning(f"[新作监控] 推送前 Emby 复核失败（继续推送）: {e}")
 
-        # 读下载器配置
-        from routers.downloaders import _get_setting, _push_clouddrive, _push_qbittorrent, _extract_hash
-        config_keys = [
-            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
-            "clouddrive_url", "clouddrive_token", "clouddrive_username",
-            "clouddrive_password", "clouddrive_save_path",
-        ]
-        config = {k: _get_setting(db, k) for k in config_keys}
-        downloader = _get_setting(db, "default_downloader") or "qbittorrent"
+            # 推送前复核 Emby：建任务到推送之间有 180s 窗口，作品可能刚进媒体库
+            try:
+                from services.media_server import check_in_library
+                in_lib = await check_in_library(video_code)
+                if in_lib is True:
+                    logger.info(f"[新作监控] 推送前复核：{video_code} 已在 Emby 媒体库，跳过自动 push")
+                    return
+            except Exception as e:
+                logger.warning(f"[新作监控] 推送前 Emby 复核失败（继续推送）: {e}")
 
-        logger.info(f"[新作监控] 自动推送 {video_code} 到 {downloader}")
-        if downloader == "clouddrive":
-            result = await _push_clouddrive(task.best_magnet, config)
-        else:
-            result = await _push_qbittorrent(task.best_magnet, config)
+            # 读下载器配置
+            from routers.downloaders import _get_setting, _push_clouddrive, _push_qbittorrent, _extract_hash
+            config_keys = [
+                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+                "clouddrive_url", "clouddrive_token", "clouddrive_username",
+                "clouddrive_password", "clouddrive_save_path",
+            ]
+            config = {k: _get_setting(db, k) for k in config_keys}
+            downloader = _get_setting(db, "default_downloader") or "qbittorrent"
 
-        if result.get("ok"):
-            # 记录 download
-            dl = Download(
-                task_id=task_id,
-                video_code=video_code,
-                magnet=task.best_magnet,
-                info_hash=_extract_hash(task.best_magnet),
-                downloader=downloader,
-                status="pushed",
-            )
-            db.add(dl)
-            db.commit()
-            logger.info(f"[新作监控] 自动推送 {video_code} 成功")
-            # CD2 推送成功 → 延迟整理（开关/延迟在设置页；异常隔离不影响推送）
+            logger.info(f"[新作监控] 自动推送 {video_code} 到 {downloader}")
             if downloader == "clouddrive":
-                try:
-                    from services.cd2_rename import schedule_rename
-                    schedule_rename(task_id, video_code)
-                except Exception as e:
-                    logger.warning(f"[CD2整理] 调度失败（不影响推送）: {e}")
-        else:
-            logger.warning(f"[新作监控] 自动推送 {video_code} 失败: {result.get('message')}")
-    except Exception as e:
-        logger.error(f"[新作监控] _delayed_push_if_ready 异常 ({video_code}): {e}")
-    finally:
-        db.close()
+                result = await _push_clouddrive(task.best_magnet, config)
+            else:
+                result = await _push_qbittorrent(task.best_magnet, config)
+
+            if result.get("ok"):
+                # 记录 download
+                dl = Download(
+                    task_id=task_id,
+                    video_code=video_code,
+                    magnet=task.best_magnet,
+                    info_hash=_extract_hash(task.best_magnet),
+                    downloader=downloader,
+                    status="pushed",
+                )
+                db.add(dl)
+                db.commit()
+                logger.info(f"[新作监控] 自动推送 {video_code} 成功")
+                # CD2 推送成功 → 延迟整理（开关/延迟在设置页；异常隔离不影响推送）
+                if downloader == "clouddrive":
+                    try:
+                        from services.cd2_rename import schedule_rename
+                        schedule_rename(task_id, video_code)
+                    except Exception as e:
+                        logger.warning(f"[CD2整理] 调度失败（不影响推送）: {e}")
+            else:
+                logger.warning(f"[新作监控] 自动推送 {video_code} 失败: {result.get('message')}")
+        except Exception as e:
+            logger.error(f"[新作监控] _delayed_push_if_ready 异常 ({video_code}): {e}")
+        finally:
+            db.close()
 
 
 async def run_check_all(auto_add: bool = False) -> dict:
