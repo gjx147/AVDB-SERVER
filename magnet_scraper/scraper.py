@@ -2110,6 +2110,16 @@ def run_search_movie(scraper, codes: list[str], kind: int) -> dict:
     if results["added"] > 0:
         logger.info("自动提取：扫描 pending 任务爬取磁力/元数据/图片…")
         try:
+            # search-movie 模式 list_source_id 为 None——get_pending_urls(None)
+            # 的 SQL（WHERE list_source_id=? 传 None）永远匹配 0 行，提取会静默空转。
+            # 显式解析 TOP250 列表源 id，让提取真正扫到本批任务。
+            if scraper.list_source_id is None and scraper.store is not None:
+                with scraper.store._conn() as conn:
+                    row = conn.execute(
+                        "SELECT id FROM list_sources WHERE list_code='TOP250'").fetchone()
+                if row:
+                    scraper.list_source_id = row[0]
+                    logger.info(f"自动提取使用 TOP250 列表源 id={row[0]}")
             scraper.extract_magnets(limit=None)
         except Exception as e:
             logger.error(f"提取流程异常（任务已建，可稍后手动提取）: {e}")
