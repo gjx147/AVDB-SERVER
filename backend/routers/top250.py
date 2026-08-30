@@ -23,6 +23,24 @@ KIND_LABELS = {6: "JavDB TOP250", 7: "JavDB 有码 TOP250", 8: "JavDB 无码 TOP
 VALID_KINDS = (*KIND_LABELS.keys(), *range(2008, 2026))
 RANKS_DB = Path("data/jinjier_ranks.db")
 _pkg_lock = threading.Lock()
+_pkg_download_kick = threading.Event()
+
+
+def _kick_pkg_download() -> None:
+    """后台线程预下载数据包（Event 防页面轮询重复拉起）。"""
+    if _pkg_download_kick.is_set():
+        return  # 已在下载
+    _pkg_download_kick.set()
+
+    def _run():
+        try:
+            _ensure_pkg(force=False)
+        except Exception:
+            pass
+        finally:
+            _pkg_download_kick.clear()
+
+    threading.Thread(target=_run, daemon=True, name="top250-pkg-download").start()
 
 
 def _db_path() -> Path:
@@ -200,9 +218,11 @@ def list_entries(db: DbSession, _user: CurrentUser, kind: int = 6, q: str = "",
     _table_ensure()
     dbf = _ranks_db()
     if not dbf.exists():
-        raise HTTPException(status_code=409, detail="TOP250 数据尚未加载——先点「查询数据源」")
+        _kick_pkg_download()
+        raise HTTPException(status_code=409, detail="TOP250 数据包缺失——已自动开始下载，几秒后刷新重试（或点「查询数据源」立即下载）")
     if not _pkg_valid(dbf):
-        raise HTTPException(status_code=409, detail="TOP250 数据文件损坏——点「查询数据源」自动重下")
+        _kick_pkg_download()
+        raise HTTPException(status_code=409, detail="TOP250 数据文件损坏——已自动重新下载，几秒后刷新重试")
     conn = sqlite3.connect(str(dbf))
     rows = conn.execute(
         "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
@@ -362,7 +382,8 @@ def crawl_missing(body: CrawlBody, db: DbSession, _user: CurrentUser):
     _table_ensure()
     dbf = _ranks_db()
     if not dbf.exists():
-        raise HTTPException(status_code=409, detail="TOP250 数据尚未加载——先点「查询数据源」")
+        _kick_pkg_download()
+        raise HTTPException(status_code=409, detail="TOP250 数据包缺失——已自动开始下载，几秒后刷新重试（或点「查询数据源」立即下载）")
     conn = sqlite3.connect(str(dbf))
     rows = conn.execute(
         "SELECT number, name, date, note, icon_url FROM ranks WHERE kind=? ORDER BY number",
