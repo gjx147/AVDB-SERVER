@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from deps import CurrentUser, DbSession
+from sqlalchemy import func, select
+
 from services.report_generator import aggregate, generate_report, get_report
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
@@ -45,7 +47,7 @@ def activity_heatmap(db: DbSession, _user: CurrentUser, days: int = Query(180, l
         select(task_collections.c.created_at).where(task_collections.c.created_at >= since)
     ).all()
     dl_rows = db.execute(
-        select(Download.created_at).where(Download.created_at >= since)
+        select(Download.pushed_at).where(Download.pushed_at >= since)
     ).all()
 
     days_map: dict[str, dict] = {}
