@@ -32,7 +32,7 @@
 
 .main{margin-left:var(--sidebar-w);flex:1;min-width:0}
 .page{padding:40px 48px 80px;animation:fade .4s ease;max-width:1600px}
-@media(min-width:1600px){.main{display:flex;justify-content:center}.page{width:1600px;max-width:1400px}}
+@media(min-width:1600px){.main{display:flex;justify-content:center}.page{width:1600px;max-width:1400px}.main>:not(.page){width:100%;flex:1 0 auto}}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* ══ 排版 ══ */

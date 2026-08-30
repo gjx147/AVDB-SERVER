@@ -2,7 +2,8 @@
 
 /* ════════ 首页 · 影视墙（单张大横图轮播 + 全屏氛围背景） ════════ */
 /* dvh：手机浏览器地址栏收展时保持满屏，底部控件不被遮挡 */
-.wall-page{position:relative;height:100vh;height:100dvh;overflow:hidden;background:var(--bg-ink)}
+/* width:100% —— ≥1600px 时 .main 变 flex 居中，无宽度声明会塌缩为 0（整页空白） */
+.wall-page{position:relative;width:100%;height:100vh;height:100dvh;overflow:hidden;background:var(--bg-ink)}
 /* 全屏模糊背景：当前封面 blur + 交叉淡入 */
 .wbg{position:absolute;inset:0;z-index:0;overflow:hidden}
 .wbg img{width:100%;height:100%;object-fit:cover;filter:blur(64px) saturate(1.5) brightness(.55);transform:scale(1.25);animation:wbgIn 1.1s ease}
