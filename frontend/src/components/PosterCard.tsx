@@ -34,6 +34,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
   const nav = useNavigate()
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
+  const hasCnSub = tags.includes('中文字幕')
 
   // 与详情页封面统一：优先 poster_url（横版 covers/，CSS 用 right center 裁剪主角），
   // 兜底 thumbnail_urls[0]（竖版 samples/，无裁剪也能显示）
@@ -138,6 +139,7 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
         </div>
         {/* 收藏红心：右下角（poster-info 上层） */}
         {task.is_favorite ? <div className="badge-fav">♥</div> : null}
+        {hasCnSub && <div className="badge-csub" title="中文字幕">中字</div>}
       </div>
       <div className="poster-caption">
         <div className="cap-code">{task.video_code || '—'}</div>

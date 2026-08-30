@@ -242,6 +242,7 @@ def actor_movies_list(
             "poster_url": t.poster_url, "thumbnail_urls": t.thumbnail_urls,
             "rating": t.rating, "is_favorite": int(t.is_favorite),
             "media_in_library": t.media_in_library,
+            "tags": t.tags,
         } for t in tasks],
         "total": total,
         "page": page,

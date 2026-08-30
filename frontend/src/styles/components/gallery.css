@@ -43,6 +43,13 @@
 .poster:hover .poster-frame::after{box-shadow:inset 0 0 0 1px rgba(255,122,156,.45)}
 .poster-grad-top{position:absolute;top:0;left:0;right:0;height:64px;background:linear-gradient(180deg,rgba(20,6,12,.55),transparent);display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px}
 .poster-code{font-family:var(--ff-mono);font-size:11px;font-weight:600;color:#ffeef4;letter-spacing:.03em;text-shadow:0 0 8px rgba(255,143,179,.65),0 1px 3px rgba(0,0,0,.8)}
+/* 中文字幕角标：左下角（数据源 JavDB "中文字幕" tag → Task.tags） */
+.badge-csub{position:absolute;left:10px;bottom:12px;z-index:3;display:inline-flex;align-items:center;
+  font-size:10px;font-weight:700;letter-spacing:.08em;padding:3px 9px;border-radius:999px;
+  background:rgba(13,148,136,.92);color:#fff;box-shadow:0 1px 6px rgba(0,0,0,.35)}
+/* 悬停信息层出现时避让角标（底部行右移） */
+.poster-frame:has(.badge-csub) .poster-meta{padding-left:46px}
+.poster-frame:has(.badge-csub) .poster-info>.poster-title:first-child{padding-left:46px}
 .badge-fav{width:24px;height:24px;border-radius:50%;background:rgba(255,20,147,.88);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;box-shadow:0 2px 8px rgba(255,20,147,.4);position:absolute;right:10px;bottom:12px;z-index:3}
 .badge-status{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:4px;backdrop-filter:blur(6px);margin-bottom:6px}
 .badge-status .ic{width:11px;height:11px;flex:none;stroke-width:2.5}

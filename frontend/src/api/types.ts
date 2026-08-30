@@ -152,6 +152,7 @@ export interface ActorMovie {
   is_favorite: 0 | 1
   detail_url: string | null
   media_in_library?: boolean | null
+  tags?: string | null
 }
 
 /** 详情页女主演关联（按 task.actors 名字查 actors 表） */

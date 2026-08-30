@@ -722,6 +722,9 @@ export function ActorDetail() {
                   <div className="poster-info">
                     <div className="poster-title">{m.title || '未命名'}</div>
                   </div>
+                  {(m.tags || '').split(',').map((t) => t.trim()).includes('中文字幕') && (
+                    <div className="badge-csub" title="中文字幕">中字</div>
+                  )}
                 </div>
               </div>
             )
