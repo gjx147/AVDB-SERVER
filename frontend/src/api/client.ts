@@ -115,8 +115,8 @@ export const api = {
       http.post<ApiOk>('/api/tasks/batch/favorite', task_ids).then((r) => r.data),
     batchView: (task_ids: number[], status = 'viewed') =>
       http.post<{ ok: boolean; updated: number }>('/api/tasks/batch-view', { task_ids, status }).then((r) => r.data),
-    batchPush: (task_ids: number[]) =>
-      http.post<{ ok: boolean; pushed: number; skipped: number }>('/api/tasks/batch-push', { task_ids }).then((r) => r.data),
+    batchPush: (task_ids: number[], downloader?: 'clouddrive' | 'qbittorrent') =>
+      http.post<{ ok: boolean; pushed: number; skipped: number }>('/api/tasks/batch-push', { task_ids, downloader }).then((r) => r.data),
 
     stats: (list_source_id?: number) =>
       http.get<TaskStats[]>('/api/tasks/stats', { params: { list_source_id } }).then((r) => r.data),

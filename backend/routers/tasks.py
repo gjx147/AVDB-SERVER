@@ -343,6 +343,7 @@ def update_note(task_id: int, db: DbSession, _user: CurrentUser, note: str = Que
 class BatchViewRequest(BaseModel):
     task_ids: list[int]
     status: str = "viewed"
+    downloader: str | None = None  # 强制指定下载器（clouddrive/qbittorrent）；None=智能策略路由
 
 
 @router.post("/batch-view")
@@ -361,7 +362,12 @@ def batch_set_view(payload: BatchViewRequest, db: DbSession, _user: CurrentUser)
 
 @router.post("/batch-push")
 async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUser):
-    """批量推送下载（F6）：把选中任务（需已有磁力）推送到默认下载器。"""
+    """批量推送下载（F6）：把选中任务（需已有磁力）推送到下载器。
+    payload.downloader 强制指定（clouddrive/qbittorrent，如演员页批量推送 CD2）；
+    不传则按智能策略路由（演员/厂牌优先，否则默认下载器）。"""
+    force_dl = (payload.downloader or "").strip().lower() or None
+    if force_dl and force_dl not in ("clouddrive", "qbittorrent"):
+        raise HTTPException(status_code=400, detail="downloader 仅支持 clouddrive / qbittorrent")
     from models import Download
     from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_qbittorrent
 
@@ -385,16 +391,16 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
         if not t.best_magnet:
             skipped += 1
             continue
-        downloader = pick_downloader(db, t, strategy, default_dl)
+        dl = force_dl or pick_downloader(db, t, strategy, default_dl)
         try:
-            if downloader == "clouddrive":
+            if dl == "clouddrive":
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
                 result = await _push_qbittorrent(t.best_magnet, config)
             if result.get("ok"):
                 db.add(Download(
                     task_id=t.id, video_code=t.video_code, magnet=t.best_magnet,
-                    info_hash=_extract_hash(t.best_magnet), downloader=downloader,
+                    info_hash=_extract_hash(t.best_magnet), downloader=dl,
                     status="pushed",
                 ))
                 pushed += 1
