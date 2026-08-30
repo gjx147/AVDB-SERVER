@@ -946,6 +946,7 @@ class MagnetScraper:
                 from store import _extract_magnet_hash
                 seen_hashes = set()
                 deduped = []
+                db_dups = []  # 库中已存在的磁力（哈希已在索引，可安全复用）
                 for m in magnets_info:
                     h = _extract_magnet_hash(m["magnet"])
                     if h and h in seen_hashes:
@@ -953,12 +954,18 @@ class MagnetScraper:
                         continue
                     if h and self.store.is_magnet_duplicate(m["magnet"]):
                         logger.debug(f"去重: 数据库已存在磁力 {h[:16]}...")
+                        db_dups.append(m)
                         continue
                     if h:
                         seen_hashes.add(h)
                     deduped.append(m)
                 # 全重复时也使用去重结果（deduped 为空 = 全部重复，不再回退到原始列表）
                 magnets_info = deduped
+                # 全部已入库 → 复用（任务行是 UPDATE 写入 best_magnet/magnets_json，
+                # 哈希索引已在库中，不会产生重复插入）
+                if not magnets_info and db_dups:
+                    magnets_info = db_dups
+                    logger.info(f"全部磁力已入库，复用 {len(db_dups)} 个已存在磁力")
                 logger.info(f"去重后剩余 {len(magnets_info)} 个磁力链接")
 
             logger.debug("按优先级排序磁力链接...")
@@ -984,6 +991,9 @@ class MagnetScraper:
                 return len(suffixes)
             magnets_info.sort(key=get_priority)
 
+            if not magnets_info:
+                logger.error("去重后无可用磁力链接（异常路径）")
+                return False, None, None, video_code, title, poster_url, json.dumps(thumbnails) if thumbnails else None, synopsis, actors, "去重后无可用磁力链接"
             best_magnet = magnets_info[0]["magnet"]
             magnets_json = json.dumps([{"magnet": x["magnet"], "name": x["name"]} for x in magnets_info], ensure_ascii=False)
 
