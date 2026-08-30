@@ -10,6 +10,7 @@ export function Downloaders() {
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [validation, setValidation] = useState<Record<string, string>>({})
+  const [renaming, setRenaming] = useState(false)
   const toastOk = useStore((st) => st.toastOk)
   const toastErr = useStore((st) => st.toastErr)
 
@@ -50,7 +51,6 @@ export function Downloaders() {
     } finally { setTesting(null) }
   }
 
-  const [renaming, setRenaming] = useState(false)
   const renameAll = async () => {
     setRenaming(true)
     try {
