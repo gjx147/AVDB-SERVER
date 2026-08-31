@@ -226,11 +226,16 @@ export function Library() {
     } finally { setRetryingNow(false) }
   }
 
-  const batch = async (kind: 'delete' | 'retry' | 'favorite' | 'push' | 'view') => {
+  const batch = async (kind: 'delete' | 'retry' | 'favorite' | 'push' | 'view' | 'visit') => {
     const ids = [...selected]
     if (!ids.length) return
     if (kind === 'delete') {
       const ok = await confirmBox('批量删除', `将删除 ${ids.length} 个任务及其关联图片缓存，不可恢复。确定继续？`)
+      if (!ok) return
+    }
+    if (kind === 'visit') {
+      const ok = await confirmBox('强制入库',
+        `将把所选中的失败任务（${ids.length} 个选中，仅失败状态生效）直接标记为已入库——不爬取元数据/磁力。确定继续？`)
       if (!ok) return
     }
     try {
@@ -240,6 +245,13 @@ export function Library() {
       if (kind === 'push') {
         const r = await api.tasks.batchPush(ids)
         toastOk(`已推送 ${r.pushed} 项${r.skipped ? `，跳过 ${r.skipped} 项（无磁力或失败）` : ''}`)
+        setSelected(new Set())
+        load(page)
+        return
+      }
+      if (kind === 'visit') {
+        const r = await api.tasks.batchForceVisit(ids)
+        toastOk(`已强制入库 ${r.updated} 项（仅失败任务会被标记）`)
         setSelected(new Set())
         load(page)
         return
@@ -354,6 +366,7 @@ export function Library() {
         </button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('favorite')}>批量收藏</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('retry')}>批量重试</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => batch('visit')}>强制入库</button>
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')}>批量删除</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('push')} disabled={selected.size === 0}>批量推送下载</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('view')} disabled={selected.size === 0}>标记已看</button>

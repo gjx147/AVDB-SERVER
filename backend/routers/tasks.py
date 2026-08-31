@@ -166,6 +166,22 @@ def batch_retry_now(db: DbSession, _user: CurrentUser):
             "started": started, "busy": busy}
 
 
+@router.post("/batch/force-visit")
+def batch_force_visit(task_ids: list[int], db: DbSession, _user: CurrentUser):
+    """把失败任务强制标记为已入库（手动确认，不爬取元数据/磁力）。
+
+    适用：确认无法再提取的任务（源站失效/永不重试），从失败队列清出。
+    仅作用于 status='failed' 的任务；retry_count 不动（历史留痕）。
+    """
+    updated = db.execute(
+        Task.__table__.update().where(
+            Task.id.in_(task_ids), Task.status == "failed"
+        ).values(status="visited")
+    ).rowcount
+    db.commit()
+    return {"ok": True, "updated": updated}
+
+
 @router.post("/batch/favorite")
 def batch_favorite(task_ids: list[int], db: DbSession, _user: CurrentUser):
     """批量设为收藏。"""

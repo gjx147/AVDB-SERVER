@@ -110,6 +110,8 @@ export const api = {
 
     batchRetry: (task_ids: number[]) =>
       http.post<ApiOk>('/api/tasks/batch/retry', task_ids).then((r) => r.data),
+    batchForceVisit: (task_ids: number[]) =>
+      http.post<{ ok: boolean; updated: number }>('/api/tasks/batch/force-visit', task_ids).then((r) => r.data),
     retryNow: () =>
       http.post<{ ok: boolean; updated: number; total: number; started: string[]; busy: string[] }>('/api/tasks/batch/retry-now').then((r) => r.data),
 
