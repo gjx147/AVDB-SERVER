@@ -59,6 +59,14 @@ export function Preview() {
     setRiverCols(v)
     localStorage.setItem('preview_river_cols', String(v))
   }
+  const [riverSpeed, setRiverSpeed] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('preview_river_speed') || '1')
+    return v > 0 ? v : 1
+  })
+  const setRiverSpeedPersist = (v: number) => {
+    setRiverSpeed(v)
+    localStorage.setItem('preview_river_speed', String(v))
+  }
   const hoverTimer = useRef<number | undefined>(undefined)
   const ratioRef = useRef<Record<number, number>>({})
   const busy = useRef(false)
@@ -198,6 +206,16 @@ export function Preview() {
           <option value="auto">列数·自动</option>
           {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>列数·{n}</option>)}
         </select>
+          {mode === 'river' && (
+            <select className="select" value={String(riverSpeed)} aria-label="漂移速度"
+              onChange={(e) => setRiverSpeedPersist(parseFloat(e.target.value))}
+              style={{ fontSize: 11, padding: '3px 8px', height: 'auto' }}>
+              <option value="0.5">速度·慢</option>
+              <option value="1">速度·正常</option>
+              <option value="2">速度·快</option>
+              <option value="3">速度·极快</option>
+            </select>
+          )}
         <div className="seg" role="group" aria-label="布局模式">
           <button className={mode === 'masonry' ? 'on' : ''} onClick={() => setModePersist('masonry')}>静态</button>
           <button className={mode === 'river' ? 'on' : ''} onClick={() => setModePersist('river')}>河流</button>
@@ -253,7 +271,7 @@ export function Preview() {
     <div className={stage}>
       {head}
       <RiverView items={items} colCount={riverCols === 'auto' ? colCountOf(containerW, 260, 5) : riverCols} nav={nav}
-        onPick={openItem} coarse={coarse}
+        onPick={openItem} coarse={coarse} speedMul={riverSpeed}
         onHover={(t, el) => openHover(t, el)} onLeave={scheduleClose} />
       {loading && items.length > 0 && <div className="preview-more"><Loading /></div>}
       {hover && createPortal(
@@ -297,7 +315,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
   items: Task[]; colCount: number; nav: (p: string) => void
   onPick: (t: Task) => void
   onHover: (t: Task, el: HTMLElement) => void; onLeave: () => void
-  coarse: boolean
+  coarse: boolean; speedMul: number
 }) {
   const buckets = useMemo(() => {
     const bs: Task[][] = Array.from({ length: colCount }, () => [])
@@ -320,7 +338,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
       last = now
       buckets.forEach((b, ci) => {
         if (paused.current[ci]) return
-        const dur = Math.max(32, Math.round(b.length * 4)) * (coarse ? 1.6 : 1)
+        const dur = Math.max(10, Math.max(32, Math.round(b.length * 4)) * (coarse ? 1.6 : 1) / speedMul)
         progress.current[ci] = (progress.current[ci] ?? 0) + dt / dur
         const p = ((progress.current[ci] % 1) + 1) % 1
         const el = trackRefs.current[ci]
@@ -334,7 +352,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [buckets, coarse])
+  }, [buckets, coarse, speedMul])
 
   const suppressClick = useRef(false)
   const startDrag = (ci: number, clientY: number) => {
