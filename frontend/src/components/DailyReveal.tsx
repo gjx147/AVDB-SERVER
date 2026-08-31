@@ -1,12 +1,13 @@
 /** 今夜情人 —— 盲盒揭幕仪式（Boudoir Phase 3）。
  *  丝绒红包囊 → 黑场烛息 → 剪影悬念 3s → 三级对焦揭晓（60→18→0px）→ 番号落款。
- *  候选池 = 评分 Top10；真随机（Math.random）——每次揭幕随机一位。 */
+ *  候选池 = 评分 Top20；真随机（共用随机工具）——每次揭幕随机一位。 */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { useWhisper } from '../i18n/whisper'
 import { audio } from '../audio/engine'
+import { pickOne } from '../utils/random'
 
 type Phase = 'idle' | 'silhouette' | 'f1' | 'f2' | 'f3' | 'done'
 
@@ -19,7 +20,7 @@ export function DailyReveal() {
   const timers = useRef<number[]>([])
 
   useEffect(() => {
-    api.v2.tasks({ sort: 'rating_desc', limit: 10 }).then((r) => setTasks(r.tasks)).catch(() => setTasks([]))
+    api.v2.tasks({ sort: 'rating_desc', limit: 20 }).then((r) => setTasks(r.tasks)).catch(() => setTasks([]))
     return () => { timers.current.forEach(clearTimeout) }
   }, [])
 
@@ -28,7 +29,7 @@ export function DailyReveal() {
 
   const start = () => {
     if (!tasks || tasks.length === 0) return
-    setPick(tasks[Math.floor(Math.random() * tasks.length)])
+    setPick(pickOne(tasks) ?? null)
     setPhase('silhouette')
     timers.current.forEach(clearTimeout)
     timers.current = []
@@ -40,7 +41,7 @@ export function DailyReveal() {
   }
   const reroll = () => {
     if (!tasks || tasks.length === 0) return
-    setPick(tasks[Math.floor(Math.random() * tasks.length)])
+    setPick(pickOne(tasks) ?? null)
     setPhase('f1')
     timers.current.forEach(clearTimeout)
     timers.current = []

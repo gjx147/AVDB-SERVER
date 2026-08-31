@@ -7,6 +7,7 @@ import { DailyReveal } from '../components/DailyReveal'
 import { useStore } from '../store/useStore'
 import { useWhisper, effectiveTier, isNight } from '../i18n/whisper'
 import { audio } from '../audio/engine'
+import { shuffle } from '../utils/random'
 
 /** 凝视运镜表：每张随机一种（12–18s），key=index 切换自动重播 */
 const MOVES = ['gz-zoomIn', 'gz-zoomOut', 'gz-panL', 'gz-panR'] as const
@@ -75,8 +76,20 @@ export function Wall() {
 
   const load = () => {
     setTasks(null); setError(null)
-    api.v2.tasks({ sort: 'date_desc', limit: 60 }).then((r) => setTasks(r.tasks))
-      .catch((e) => { setError(String((e as Error).message)); setTasks([]) })
+    // 全库随机轮播（与盲盒共用真随机机制）：拉全库已入库作品 → 共用 shuffle
+    ;(async () => {
+      try {
+        const all: Task[] = []
+        let offset = 0
+        for (;;) {
+          const r = await api.v2.tasks({ status: 'visited', sort: 'created_desc', limit: 200, offset })
+          all.push(...r.tasks)
+          offset += r.tasks.length
+          if (all.length >= r.total || r.tasks.length === 0) break
+        }
+        setTasks(shuffle(all))
+      } catch (e) { setError(String((e as Error).message)); setTasks([]) }
+    })()
   }
   useEffect(() => { load() }, [])
 
