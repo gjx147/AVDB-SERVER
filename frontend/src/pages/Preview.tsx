@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, coverFileUrl, withImageAuth } from '../api/client'
+import { api, backdropUrl, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { MasonryCard } from '../components/MasonryCard'
 import { useWhisper } from '../i18n/whisper'
 import { computeShortestColumnLayout, colCountOf } from '../utils/masonry'
+import { createPortal } from 'react-dom'
 
 const PAGE = 60
 type Mode = 'masonry' | 'river'
@@ -37,6 +38,8 @@ export function Preview() {
     return () => window.removeEventListener('resize', onR)
   }, [])
   const [layoutV, setLayoutV] = useState(0)
+  const [hover, setHover] = useState<{ task: Task; x: number; y: number } | null>(null)
+  const hoverTimer = useRef<number | undefined>(undefined)
   const ratioRef = useRef<Record<number, number>>({})
   const seen = useRef<Set<number>>(new Set())
   const offset = useRef(0)
@@ -100,6 +103,22 @@ export function Preview() {
     return () => ob.disconnect()
   }, [mode, loading, items.length, total, loadMore])
 
+  // 悬停详情卡：优先条目右侧，空间不足翻左侧；垂直钳制在视口内
+  const openHover = (t: Task, el: HTMLElement) => {
+    clearTimeout(hoverTimer.current)
+    const r = el.getBoundingClientRect()
+    const W = 340
+    let x = r.right + 12
+    if (x + W > window.innerWidth - 8) x = Math.max(8, r.left - W - 12)
+    const y = Math.max(66, Math.min(r.top - 30, window.innerHeight - 440))
+    setHover({ task: t, x, y })
+  }
+  const scheduleClose = () => {
+    clearTimeout(hoverTimer.current)
+    hoverTimer.current = window.setTimeout(() => setHover(null), 150)
+  }
+  const cancelClose = () => clearTimeout(hoverTimer.current)
+
   // 图片 onload：测原始宽高比 → 更新 ratio → 重排
   const onImgLoad = (t: Task) => (e: React.SyntheticEvent<HTMLImageElement>) => {
     const nh = e.currentTarget.naturalHeight
@@ -162,6 +181,7 @@ export function Preview() {
                   title={t.title || t.video_code || '未命名'} code={t.video_code}
                   year={t.release_date?.slice(0, 4)} rating={t.rating}
                   onLoad={onImgLoad(t)} onClick={() => nav(`/task/${t.id}`)}
+                  onMouseEnter={(el) => openHover(t, el)} onMouseLeave={scheduleClose}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
                   ariaLabel={`查看 ${t.video_code || '作品'} 详情`} />
               )
@@ -189,14 +209,48 @@ export function Preview() {
   return (
     <div className={stage}>
       {head}
-      <RiverView items={items} colCount={colCountOf(containerW, 300, 5)} nav={nav} />
+      <RiverView items={items} colCount={colCountOf(containerW, 300, 5)} nav={nav}
+        onHover={(t, el) => openHover(t, el)} onLeave={scheduleClose} />
       {loading && items.length > 0 && <div className="preview-more"><Loading /></div>}
+      {hover && createPortal(
+        <div className="pv-hover" style={{ left: hover.x, top: hover.y }}
+          onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
+          <img className="pv-hover-cover" alt=""
+            src={withImageAuth(`${backdropUrl(hover.task.id)}?v=${hover.task.updated_at || '0'}`)}
+            onError={(e) => {
+              const fb = remoteOf(hover.task)
+              if (fb && e.currentTarget.src !== fb) e.currentTarget.src = fb
+            }} />
+          <div className="pv-hover-body">
+            <div className="pv-hover-code">{hover.task.video_code || '—'}</div>
+            <div className="pv-hover-title" title={hover.task.title || ''}>{hover.task.title || '未命名'}</div>
+            <div className="pv-hover-meta">
+              {hover.task.rating ? <span>★ {hover.task.rating}</span> : null}
+              {hover.task.release_date ? <span>{hover.task.release_date.slice(0, 10)}</span> : null}
+              {hover.task.duration ? <span>{hover.task.duration}</span> : null}
+            </div>
+            {hover.task.actors ? (
+              <div className="pv-hover-row">主演：{hover.task.actors.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3).join(' / ')}</div>
+            ) : null}
+            {hover.task.maker ? (
+              <div className="pv-hover-row">厂牌：{hover.task.maker}{hover.task.series ? ` · ${hover.task.series}` : ''}</div>
+            ) : null}
+            {(hover.task.synopsis || hover.task.tags) ? (
+              <div className="pv-hover-syn">
+                {(hover.task.synopsis || '').trim() || (hover.task.tags || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6).join(' · ')}
+              </div>
+            ) : null}
+          </div>
+        </div>, document.body)}
     </div>
   )
 }
 
 /** 漂移海报河（river 形态渲染体） */
-function RiverView({ items, colCount, nav }: { items: Task[]; colCount: number; nav: (p: string) => void }) {
+function RiverView({ items, colCount, nav, onHover, onLeave }: {
+  items: Task[]; colCount: number; nav: (p: string) => void
+  onHover: (t: Task, el: HTMLElement) => void; onLeave: () => void
+}) {
   const buckets = useMemo(() => {
     const bs: Task[][] = Array.from({ length: colCount }, () => [])
     items.forEach((t, i) => bs[i % colCount].push(t))
@@ -215,6 +269,7 @@ function RiverView({ items, colCount, nav }: { items: Task[]; colCount: number; 
                 return (
                   <div key={`${ci}-${i}`} className="preview-item" role="button" tabIndex={0}
                     onClick={() => nav(`/task/${t.id}`)}
+                    onMouseEnter={(e) => onHover(t, e.currentTarget)} onMouseLeave={onLeave}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
                     aria-label={`查看 ${t.video_code || '作品'} 详情`}>
                     <img loading="lazy" decoding="async" referrerPolicy="no-referrer"

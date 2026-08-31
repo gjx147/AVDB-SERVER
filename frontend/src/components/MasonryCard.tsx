@@ -12,6 +12,8 @@ interface Props {
   onClick: () => void
   onKeyDown: (e: React.KeyboardEvent) => void
   ariaLabel: string
+  onMouseEnter?: (el: HTMLElement) => void
+  onMouseLeave?: () => void
 }
 
 /** 海报卡（JS masonry 定位）：图片 + 标题 + 附加信息行，hover 上浮 */
@@ -19,7 +21,8 @@ export function MasonryCard(p: Props) {
   return (
     <div className="mcard" role="button" tabIndex={0} aria-label={p.ariaLabel}
       style={{ left: p.x, top: p.y, width: p.w }}
-      onClick={p.onClick} onKeyDown={p.onKeyDown}>
+      onClick={p.onClick} onKeyDown={p.onKeyDown}
+      onMouseEnter={(e) => p.onMouseEnter?.(e.currentTarget)} onMouseLeave={() => p.onMouseLeave?.()}>
       <img src={p.src} alt={p.code || ''} loading="lazy" decoding="async" referrerPolicy="no-referrer"
         onLoad={p.onLoad}
         onError={(e) => { if (p.remote && e.currentTarget.src !== p.remote) e.currentTarget.src = p.remote; else e.currentTarget.style.opacity = '0.2' }} />

@@ -189,3 +189,16 @@
 .mcard-skel{position:absolute;border-radius:var(--r-md);
   background:linear-gradient(90deg,var(--bg-surface) 25%,var(--bg-raised,#f1e4ea) 50%,var(--bg-surface) 75%);
   background-size:240px 100%;animation:mskel 1.3s linear infinite}
+
+/* ══ 预览悬停详情卡（Portal 固定定位） ══ */
+.pv-hover{position:fixed;z-index:150;width:340px;background:var(--bg-surface);border-radius:12px;overflow:hidden;
+  border:1px solid var(--line-hair);box-shadow:0 18px 60px rgba(0,0,0,.5);cursor:default}
+.pv-hover-cover{display:block;width:100%;height:auto}
+.pv-hover-body{padding:10px 14px 12px}
+.pv-hover-code{font-family:var(--ff-mono);font-size:12px;font-weight:700;color:var(--gold-bright)}
+.pv-hover-title{font-size:13px;color:var(--t-body);margin:3px 0 6px;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pv-hover-meta{display:flex;gap:10px;font-family:var(--ff-mono);font-size:11px;color:var(--gold);margin-bottom:6px}
+.pv-hover-row{font-size:11px;color:var(--t-body);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-hover-syn{font-size:11px;color:var(--t-mute);line-height:1.6;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
