@@ -51,6 +51,14 @@ export function Preview() {
   const [hover, setHover] = useState<{ task: Task; x: number; y: number } | null>(null)
   const isMobile = useIsMobile()
   const coarse = useCoarsePointer()
+  const [riverCols, setRiverCols] = useState<'auto' | number>(() => {
+    const v = localStorage.getItem('preview_river_cols')
+    return v && v !== 'auto' ? Math.max(2, Math.min(6, parseInt(v, 10))) : 'auto'
+  })
+  const setRiverColsPersist = (v: 'auto' | number) => {
+    setRiverCols(v)
+    localStorage.setItem('preview_river_cols', String(v))
+  }
   const hoverTimer = useRef<number | undefined>(undefined)
   const ratioRef = useRef<Record<number, number>>({})
   const busy = useRef(false)
