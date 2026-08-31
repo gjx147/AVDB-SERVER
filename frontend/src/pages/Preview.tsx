@@ -18,19 +18,16 @@ export function Preview() {
   const seen = useRef<Set<number>>(new Set())
   const offset = useRef(0)
   const busy = useRef(false)
+  const seed = useRef(Math.floor(Math.random() * 2147483647))  // 会话种子：本次浏览顺序稳定
   const sentinel = useRef<HTMLDivElement | null>(null)
 
   const loadMore = useCallback(async () => {
     if (busy.current) return
     busy.current = true
     try {
-      const r = await api.v2.tasks({ sort: 'date_desc', limit: PAGE, offset: offset.current })
-      // 批内 Fisher-Yates 洗牌 → 随机填充；跨批 id 去重
+      const r = await api.v2.tasks({ sort: 'random', seed: seed.current, limit: PAGE, offset: offset.current })
+      // 后端会话种子随机排序（全库级真随机，翻页不重不漏）；跨批 id 去重
       const batch = r.tasks.filter((t) => !seen.current.has(t.id))
-      for (let i = batch.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[batch[i], batch[j]] = [batch[j], batch[i]]
-      }
       batch.forEach((t) => seen.current.add(t.id))
       offset.current += r.tasks.length
       setTotal(r.total)

@@ -320,7 +320,7 @@ export const api = {
   v2: {
     tasks: (params: {
       status?: string; list_source_id?: number; actor?: string; tag?: string; date_from?: string; date_to?: string;
-      min_rating?: number; in_library?: boolean; sort?: string; limit?: number; offset?: number;
+      min_rating?: number; in_library?: boolean; sort?: string; limit?: number; offset?: number; seed?: number;
     }) => http.get<{ tasks: Task[]; total: number }>('/api/v2/tasks', { params }).then((r) => r.data),
     searchFts: (q: string, limit = 48, offset = 0) =>
       http.get<{ tasks: Task[]; total: number; engine: string }>('/api/v2/tasks/search-fts', { params: { q, limit, offset } }).then((r) => r.data),

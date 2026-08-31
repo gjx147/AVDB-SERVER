@@ -9,7 +9,7 @@ import time
 from collections import Counter
 
 from fastapi import APIRouter, Query
-from sqlalchemy import and_, func, or_, select, case
+from sqlalchemy import and_, func, or_, select, case, text
 
 from deps import CurrentUser, DbSession
 from models import Task
@@ -32,6 +32,7 @@ def list_tasks_v2(
     list_source_id: int | None = Query(None),
     min_rating: float | None = Query(None),
     in_library: bool | None = Query(None, description="按 Emby 在库状态筛选（null 不同值，不参与筛选）"),
+    seed: int = Query(0, ge=0, description="sort=random 时的会话种子（同 seed 同序）"),
     sort: str = Query("created_desc", description="created_desc/rating_desc/title_asc/date_desc/favorite_desc/priority"),
     limit: int = Query(48, le=200),
     offset: int = Query(0, ge=0),
@@ -77,6 +78,19 @@ def list_tasks_v2(
         # N12: 派生优先级（想看>高分>新作）
         "priority": (case((Task.view_status == "want", 3), (Task.rating >= 8, 2), (Task.rating >= 6, 1), else_=0).desc(), Task.rating.desc().nullslast()),
     }
+    if sort == "random":
+        # 会话种子随机：全部 id 经 seeded PRNG 洗牌后分页——
+        # 同 seed 同序（offset 翻页不重不漏），换 seed 全新顺序。
+        # 千行级数据整表取 id 零压力；避免 SQL 算术散列的等差结构。
+        import random as _random
+        ids_all = db.execute(stmt.with_only_columns(Task.id)).scalars().all()
+        _random.Random(seed).shuffle(ids_all)
+        total = len(ids_all)
+        page_ids = ids_all[offset:offset + limit]
+        rows = db.execute(select(Task).where(Task.id.in_(page_ids))).scalars().all()
+        by_id = {t.id: t for t in rows}
+        tasks = [by_id[i] for i in page_ids]
+        return {"tasks": tasks, "total": total}
     stmt = stmt.order_by(sort_map.get(sort, Task.created_at.desc()))
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
