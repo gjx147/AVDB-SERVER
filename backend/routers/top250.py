@@ -107,9 +107,29 @@ def _pkg_valid(db: Path) -> bool:
         return False
 
 
+def _download_proxy() -> str | None:
+    """下载数据包用的代理：读 DB settings http_proxy（与爬虫子进程同源）。
+
+    jinjier.art 直连在部分网络环境超时；设置里配了代理则下载走代理。
+    """
+    try:
+        from database import SessionLocal
+        from models import Setting
+        db = SessionLocal()
+        try:
+            row = db.get(Setting, "http_proxy")
+            val = (row.value or "").strip() if row and row.value else ""
+            return val or None
+        finally:
+            db.close()
+    except Exception:
+        return None
+
+
 def _latest_pkg_url() -> str | None:
     try:
-        r = httpx.get("https://jinjier.art/sql", timeout=20, follow_redirects=True)
+        r = httpx.get("https://jinjier.art/sql", timeout=20, follow_redirects=True,
+                      proxy=_download_proxy())
         hits = re.findall(r'["\']([^"\']*?(\d{8})\.gif)["\']', r.text)
         if hits:
             best = max(hits, key=lambda h: int(h[1]))
@@ -136,7 +156,8 @@ def _ensure_pkg(force: bool = False) -> Path:
         last = None
         for url in candidates:
             try:
-                r = httpx.get(url, timeout=90, follow_redirects=True)
+                r = httpx.get(url, timeout=90, follow_redirects=True,
+                              proxy=_download_proxy())
                 if r.status_code != 200 or len(r.content) < 100000:
                     last = f"{url} -> HTTP {r.status_code}"
                     continue
