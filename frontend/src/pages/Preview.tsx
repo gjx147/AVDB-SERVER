@@ -29,6 +29,13 @@ export function Preview() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem('preview_mode') === 'river' ? 'river' : 'masonry'))
   const [containerW, setContainerW] = useState(() => Math.max(320, window.innerWidth - 300))
+
+  // 窗口尺寸联动（双模式共用）：masonry/河流的列数都随窗口宽度走
+  useEffect(() => {
+    const onR = () => setContainerW(Math.max(320, window.innerWidth - 300))
+    window.addEventListener('resize', onR)
+    return () => window.removeEventListener('resize', onR)
+  }, [])
   const [layoutV, setLayoutV] = useState(0)
   const ratioRef = useRef<Record<number, number>>({})
   const seen = useRef<Set<number>>(new Set())
@@ -67,19 +74,6 @@ export function Preview() {
     const t = setTimeout(() => { loadMore() }, 1200)
     return () => clearTimeout(t)
   }, [items.length, total, error, loadMore])
-
-  // 容器尺寸变化（ResizeObserver + 150ms 防抖）——masonry 重排
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el || mode !== 'masonry') return
-    const ro = new ResizeObserver(() => {
-      clearTimeout(roTimer.current)
-      roTimer.current = window.setTimeout(() => setContainerW(el.clientWidth), 150)
-    })
-    ro.observe(el)
-    setContainerW(el.clientWidth)
-    return () => { ro.disconnect(); clearTimeout(roTimer.current) }
-  }, [mode])
 
   const colCount = colCountOf(containerW, 240, 5)
   const gap = 14
@@ -120,7 +114,7 @@ export function Preview() {
   }
 
   const setModePersist = (m: Mode) => { setMode(m); localStorage.setItem('preview_mode', m) }
-  const stage = 'preview-stage'
+  const stage = mode === 'river' ? 'preview-stage' : 'preview-stage preview-stage--scroll'
 
   // ── 状态分支（全部 hooks 之后）──
   if (error && items.length === 0) {

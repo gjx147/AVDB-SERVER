@@ -146,6 +146,9 @@
 
 /* ══ 预览 · 漂移海报河（五列异速异向无缝漂移） ══ */
 .preview-stage{position:relative;height:100dvh;overflow:hidden;background:var(--bg-ink)}
+/* masonry 静态形态：正常文档流，页面滚动 */
+.preview-stage--scroll{height:auto;min-height:100dvh;overflow:visible;padding-bottom:80px}
+.preview-stage--scroll .preview-head{position:static;margin-bottom:14px;padding:0 4px}
 .preview-cols{display:flex;gap:14px;height:100%;padding:64px 20px 20px;box-sizing:border-box}
 .preview-col{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
 .preview-track{display:flex;flex-direction:column;gap:14px;animation:pcol-drift linear infinite;
