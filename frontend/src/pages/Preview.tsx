@@ -104,7 +104,7 @@ export function Preview() {
     return () => clearTimeout(t)
   }, [items.length, total, error, loadMore])
 
-  const colCount = colCountOf(containerW, 240, 5)
+  const colCount = riverCols === 'auto' ? colCountOf(containerW, 240, 5) : riverCols
   const gap = 14
 
   // JS masonry 布局计算（onload 更新 ratio → layoutV 触发增量重排）
@@ -192,6 +192,12 @@ export function Preview() {
       <span className="preview-title">预览<em> · {mode === 'river' ? '漂移海报河' : '随机瀑布流'}</em></span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span className="preview-sub">{total > 0 ? `已加载 ${items.length} / ${total}` : ''}</span>
+        <select className="select" value={String(riverCols)} aria-label="列数"
+          onChange={(e) => setRiverColsPersist(e.target.value === 'auto' ? 'auto' : +e.target.value)}
+          style={{ fontSize: 11, padding: '3px 8px', height: 'auto' }}>
+          <option value="auto">列数·自动</option>
+          {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>列数·{n}</option>)}
+        </select>
         <div className="seg" role="group" aria-label="布局模式">
           <button className={mode === 'masonry' ? 'on' : ''} onClick={() => setModePersist('masonry')}>静态</button>
           <button className={mode === 'river' ? 'on' : ''} onClick={() => setModePersist('river')}>河流</button>
