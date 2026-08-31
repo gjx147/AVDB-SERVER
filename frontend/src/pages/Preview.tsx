@@ -8,7 +8,7 @@ import { useWhisper } from '../i18n/whisper'
 const PAGE = 60
 
 function colCountOf(w: number): number {
-  return Math.max(2, Math.min(6, Math.floor(w / 300)))
+  return Math.max(2, Math.min(5, Math.floor(w / 300)))
 }
 
 /** 预览 · 漂移海报河 —— 五列异速异向无缝漂移，hover 暂停，点击进详情 */
@@ -29,7 +29,7 @@ export function Preview() {
     if (busy.current) return
     busy.current = true
     try {
-      const r = await api.v2.tasks({ sort: 'random', seed: seed.current, limit: PAGE, offset: offset.current })
+      const r = await api.v2.tasks({ status: 'visited', sort: 'random', seed: seed.current, limit: PAGE, offset: offset.current })
       const batch = r.tasks.filter((t) => !seen.current.has(t.id))
       batch.forEach((t) => seen.current.add(t.id))
       offset.current += r.tasks.length
@@ -105,7 +105,7 @@ export function Preview() {
     <div className={stage}>
       <div className="preview-cols">
         {buckets.map((b, ci) => {
-          const dur = Math.max(46, Math.round(b.length * 5.2))
+          const dur = Math.max(32, Math.round(b.length * 4))
           return (
             <div key={ci} className={`preview-col${ci % 2 ? ' reverse' : ''}`}>
               <div className="preview-track" style={{ animationDuration: `${dur}s` }}>
