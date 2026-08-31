@@ -17,7 +17,8 @@ interface NavSection {
 
 const nav: NavSection[] = [
   { section: '浏览', items: [
-    { to: '/wall', label: '首页', icon: <Icon.home /> },
+    { to: '/preview', label: '预览', icon: <Icon.eye /> },
+  { to: '/wall', label: '首页', icon: <Icon.home /> },
     { to: '/new-releases', label: '订阅上新', icon: <Icon.bell /> },
     { to: '/', label: '仪表盘', icon: <Icon.dashboard /> },
     { to: '/library', label: '影片库', icon: <Icon.library />, statKey: 'total' },

@@ -12,6 +12,7 @@ import { playVeil } from './effects/transition'
 // P1: 代码拆分 —— 按需懒加载
 const Login       = lazy(() => import('./pages/Login'))
 const Wall        = lazy(() => import('./pages/Wall').then(m => ({ default: m.Wall })))
+const Preview     = lazy(() => import('./pages/Preview').then(m => ({ default: m.Preview })))
 const Dashboard   = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
 const Library     = lazy(() => import('./pages/Library').then(m => ({ default: m.Library })))
 const Favorites   = lazy(() => import('./pages/Favorites').then(m => ({ default: m.Favorites })))
@@ -124,7 +125,8 @@ export default function App() {
           </Routes>
           <RequireAuth>
           <Routes>
-            <Route path="/wall" element={<Wall />} />
+            <Route path="/preview" element={<Preview />} />
+        <Route path="/wall" element={<Wall />} />
             <Route path="/" element={<Dashboard />} />
             <Route path="/library" element={<Library />} />
             <Route path="/favorites" element={<Favorites />} />

@@ -21,6 +21,13 @@ export const Icon = {
       <polyline points="9 22 9 12 15 12 15 22" />
     </Svg>
   ),
+  // 预览：眼睛
+  eye: () => (
+    <Svg>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  ),
   // 仪表盘：四宫格
   dashboard: () => (
     <Svg>

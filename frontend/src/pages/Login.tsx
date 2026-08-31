@@ -46,7 +46,7 @@ export default function Login() {
       localStorage.setItem('apiToken', data.access_token)
       // 仪式感退场：登录卡上浮消散 + 海报墙提亮，再进入主界面
       setLeaving(true)
-      setTimeout(() => navigate('/'), 480)
+      setTimeout(() => navigate('/preview'), 480)
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
