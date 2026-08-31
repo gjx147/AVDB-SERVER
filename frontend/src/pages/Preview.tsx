@@ -5,6 +5,7 @@ import type { Task } from '../api/types'
 import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { MasonryCard } from '../components/MasonryCard'
 import { useWhisper } from '../i18n/whisper'
+import { useIsMobile, useCoarsePointer } from '../hooks/useResponsive'
 import { computeShortestColumnLayout, colCountOf } from '../utils/masonry'
 import { createPortal } from 'react-dom'
 
@@ -48,6 +49,8 @@ export function Preview() {
   }, [])
   const [layoutV, setLayoutV] = useState(0)
   const [hover, setHover] = useState<{ task: Task; x: number; y: number } | null>(null)
+  const isMobile = useIsMobile()
+  const coarse = useCoarsePointer()
   const hoverTimer = useRef<number | undefined>(undefined)
   const ratioRef = useRef<Record<number, number>>({})
   const busy = useRef(false)
@@ -119,14 +122,25 @@ export function Preview() {
   }, [mode, loading, items.length, total, loadMore])
 
   // 悬停详情卡：优先条目右侧，空间不足翻左侧；垂直钳制在视口内
-  const openHover = (t: Task, el: HTMLElement) => {
+  const openHover = (t: Task, el?: HTMLElement) => {
     clearTimeout(hoverTimer.current)
-    const r = el.getBoundingClientRect()
-    const W = 340
-    let x = r.right + 12
-    if (x + W > window.innerWidth - 8) x = Math.max(8, r.left - W - 12)
-    const y = Math.max(66, Math.min(r.top - 30, window.innerHeight - 440))
+    const W = Math.min(340, window.innerWidth - 16)
+    let x: number, y: number
+    if (el) {
+      const r = el.getBoundingClientRect()
+      x = r.right + 12
+      if (x + W > window.innerWidth - 8) x = Math.max(8, r.left - W - 12)
+      y = Math.max(66, Math.min(r.top - 30, window.innerHeight - 440))
+    } else {
+      x = Math.max(8, (window.innerWidth - W) / 2)
+      y = 90
+    }
     setHover({ task: t, x, y })
+  }
+  // 触屏：点海报弹详情卡；桌面：直接进详情页
+  const openItem = (t: Task) => {
+    if (isMobile) openHover(t)
+    else nav(`/task/${t.id}`)
   }
   const scheduleClose = () => {
     clearTimeout(hoverTimer.current)
@@ -195,7 +209,7 @@ export function Preview() {
                   src={withImageAuth(`${coverFileUrl(t.id)}?v=${t.updated_at || '0'}`)} remote={remote}
                   title={t.title || t.video_code || '未命名'} code={t.video_code}
                   year={t.release_date?.slice(0, 4)} rating={t.rating}
-                  onLoad={onImgLoad(t)} onClick={() => nav(`/task/${t.id}`)}
+                  onLoad={onImgLoad(t)} onClick={() => openItem(t)}
                   onMouseEnter={(el) => openHover(t, el)} onMouseLeave={scheduleClose}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
                   ariaLabel={`查看 ${t.video_code || '作品'} 详情`} />
@@ -225,6 +239,7 @@ export function Preview() {
     <div className={stage}>
       {head}
       <RiverView items={items} colCount={colCountOf(containerW, 300, 5)} nav={nav}
+        onPick={openItem} coarse={coarse}
         onHover={(t, el) => openHover(t, el)} onLeave={scheduleClose} />
       {loading && items.length > 0 && <div className="preview-more"><Loading /></div>}
       {hover && createPortal(
@@ -236,6 +251,7 @@ export function Preview() {
               const fb = remoteOf(hover.task)
               if (fb && e.currentTarget.src !== fb) e.currentTarget.src = fb
             }} />
+          <button className="pv-hover-close" aria-label="关闭" onClick={() => setHover(null)}>×</button>
           <div className="pv-hover-body">
             <div className="pv-hover-code">{hover.task.video_code || '—'}</div>
             <div className="pv-hover-title" title={hover.task.title || ''}>{hover.task.title || '未命名'}</div>
@@ -255,6 +271,7 @@ export function Preview() {
                 {(hover.task.synopsis || '').trim() || (hover.task.tags || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6).join(' · ')}
               </div>
             ) : null}
+            <button className="pv-hover-detail" onClick={() => { setHover(null); nav(`/task/${hover.task.id}`) }}>查看详情 →</button>
           </div>
         </div>, document.body)}
     </div>
@@ -262,9 +279,11 @@ export function Preview() {
 }
 
 /** 漂移海报河（river 形态渲染体） */
-function RiverView({ items, colCount, nav, onHover, onLeave }: {
+function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
   items: Task[]; colCount: number; nav: (p: string) => void
+  onPick: (t: Task) => void
   onHover: (t: Task, el: HTMLElement) => void; onLeave: () => void
+  coarse: boolean
 }) {
   const buckets = useMemo(() => {
     const bs: Task[][] = Array.from({ length: colCount }, () => [])
@@ -275,7 +294,7 @@ function RiverView({ items, colCount, nav, onHover, onLeave }: {
   return (
     <div className="preview-cols">
       {buckets.map((b, ci) => {
-        const dur = Math.max(32, Math.round(b.length * 4))
+        const dur = Math.max(32, Math.round(b.length * 4)) * (coarse ? 1.6 : 1)
         return (
           <div key={ci} className={`preview-col${ci % 2 ? ' reverse' : ''}`}>
             <div className="preview-track" style={{ animationDuration: `${dur}s` }}>
@@ -283,7 +302,7 @@ function RiverView({ items, colCount, nav, onHover, onLeave }: {
                 const remote = remoteOf(t)
                 return (
                   <div key={`${ci}-${i}`} className="preview-item" role="button" tabIndex={0}
-                    onClick={() => nav(`/task/${t.id}`)}
+                    onClick={() => onPick(t)}
                     onMouseEnter={(e) => onHover(t, e.currentTarget)} onMouseLeave={onLeave}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
                     aria-label={`查看 ${t.video_code || '作品'} 详情`}>

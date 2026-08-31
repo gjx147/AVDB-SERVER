@@ -200,5 +200,5 @@ function MonthGrid({ month, days, selDay, onPick }: {
       </div>
     )
   }
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 4, justifyContent: 'center' }}>{cells}</div>
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 4, overflowX: 'auto', justifyContent: 'center' }}>{cells}</div>
 }

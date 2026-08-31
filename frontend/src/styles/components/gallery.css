@@ -202,3 +202,11 @@
 .pv-hover-row{font-size:11px;color:var(--t-body);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pv-hover-syn{font-size:11px;color:var(--t-mute);line-height:1.6;display:-webkit-box;
   -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* ══ 悬停卡按钮 + 触屏漂移暂停 ══ */
+.pv-hover-close{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;border:none;
+  background:rgba(0,0,0,.45);color:#fff;cursor:pointer;font-size:14px;line-height:1}
+.pv-hover-detail{display:block;width:100%;margin-top:8px;padding:7px 0;text-align:center;border:none;
+  border-radius:8px;background:rgba(255,20,147,.12);color:var(--gold-bright,#daa520);font-size:12px;cursor:pointer}
+.pv-hover-detail:hover{background:rgba(255,20,147,.22)}
+@media(pointer:coarse){.preview-col.touch-paused .preview-track{animation-play-state:paused}}

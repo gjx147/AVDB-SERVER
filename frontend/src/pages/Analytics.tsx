@@ -63,7 +63,7 @@ function ProfilePanel() {
   )
   return (
     <Panel title={`观看偏好 · ${d.total} 条标记${d.avg_rating != null ? ` · 均分 ${d.avg_rating}` : ''}`}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
         <div><div style={{ fontSize: 11, color: 'var(--t-mute)' }}>Top 演员</div>{list(d.top_actors)}</div>
         <div><div style={{ fontSize: 11, color: 'var(--t-mute)' }}>Top 标签</div>{list(d.top_tags)}</div>
         <div><div style={{ fontSize: 11, color: 'var(--t-mute)' }}>Top 厂牌</div>{list(d.top_makers)}</div>

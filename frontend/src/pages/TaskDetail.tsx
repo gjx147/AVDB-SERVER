@@ -8,6 +8,7 @@ import { MetaItem } from '../components/MetaItem'
 import { Heartburst } from '../components/Heartburst'
 import { Lightbox } from '../components/Lightbox'
 import { useStore } from '../store/useStore'
+import { useIsMobile } from '../hooks/useResponsive'
 import { useWhisper, useNavMode } from '../i18n/whisper'
 import { audio } from '../audio/engine'
 
@@ -77,6 +78,7 @@ export function TaskDetail() {
     api.images.hasLocalThumbs(tid).then((r) => { if (reqId === reqSeqRef.current) setHasLocal(r.has_local) }).catch(() => { if (reqId === reqSeqRef.current) setHasLocal(false) })
   }
   useEffect(load, [id])
+  const isMobile = useIsMobile()
   // 悬浮看图：idx=null=海报单图；idx=预览图浏览（可 ‹› 切换）
   const [lb, setLb] = useState<{ src: string; alt: string; idx: number | null } | null>(null)
 
@@ -237,7 +239,7 @@ export function TaskDetail() {
     <div className="page detail-enter" key={id}>
       {/* emby 风格背景：gallery-1（index 0）全屏模糊（暗主题换黑纱+玫紫调色） */}
       <div className="detail-bg">
-        <img src={withImageAuth(`${backdropUrl(task.id)}?v=${imgVersion}`)} alt="" referrerPolicy="no-referrer"
+        <img src={isMobile && thumbs[0] ? thumbs[0] : withImageAuth(`${backdropUrl(task.id)}?v=${imgVersion}`)} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remoteBackdrop) e.currentTarget.src = remoteBackdrop; else e.currentTarget.style.opacity = '0' }} />
       </div>
 

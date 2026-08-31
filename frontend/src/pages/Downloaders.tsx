@@ -71,7 +71,7 @@ export function Downloaders() {
 
       {validation.general && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>⚠ {validation.general}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 22 }}>
         {/* CloudDrive2 */}
         <div className="card">
           <div className="card-head"><div className="card-title"><Icon.download /> CloudDrive2</div></div>
@@ -80,7 +80,7 @@ export function Downloaders() {
             <input id="cd-url" className="input" value={s.clouddrive_url} onChange={(e) => upd({ clouddrive_url: e.target.value })} placeholder="host:port" />
             {validation.cdUrl && <span style={{ color: 'var(--red)', fontSize: 11 }}>{validation.cdUrl}</span>}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
             <div className="field"><label htmlFor="cd-username">用户名</label><input id="cd-username" className="input" value={s.clouddrive_username} onChange={(e) => upd({ clouddrive_username: e.target.value })} /></div>
             <div className="field"><label htmlFor="cd-password">密码</label><input id="cd-password" className="input" type="password" value={s.clouddrive_password} onChange={(e) => upd({ clouddrive_password: e.target.value })} /></div>
           </div>
@@ -99,7 +99,7 @@ export function Downloaders() {
             <input id="qb-url" className="input" value={s.qbittorrent_url} onChange={(e) => upd({ qbittorrent_url: e.target.value })} placeholder="http://host:8080" />
             {validation.qbUrl && <span style={{ color: 'var(--red)', fontSize: 11 }}>{validation.qbUrl}</span>}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
             <div className="field"><label htmlFor="qb-username">用户名</label><input id="qb-username" className="input" value={s.qbittorrent_username} onChange={(e) => upd({ qbittorrent_username: e.target.value })} /></div>
             <div className="field"><label htmlFor="qb-password">密码</label><input id="qb-password" className="input" type="password" value={s.qbittorrent_password} onChange={(e) => upd({ qbittorrent_password: e.target.value })} /></div>
           </div>

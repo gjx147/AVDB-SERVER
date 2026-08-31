@@ -274,7 +274,7 @@ export function Settings() {
                 <input id="site-url" className="input" value={s.javdb_url} onChange={(e) => upd({ javdb_url: e.target.value })} />
                 <div className="hint">如部署镜像站可填写自定义地址</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div className="field">
                   <label htmlFor="javdb-username">JavDB 账号（可选）</label>
                   <input id="javdb-username" className="input" placeholder="用于单体作品过滤"
@@ -301,11 +301,11 @@ export function Settings() {
                 </div>
                 <div className="hint">用于访问 JavDB（格式：http://host:port 或 http://user:pass@host:port）。留空则不走代理。保存后爬取自动生效。</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div className="field"><label htmlFor="crawl-delay-min">爬取延迟下限 (秒)</label><input id="crawl-delay-min" className="input" type="number" value={s.crawl_delay_min} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_delay_min: +v }) }} /></div>
                 <div className="field"><label htmlFor="crawl-delay-max">爬取延迟上限 (秒)</label><input id="crawl-delay-max" className="input" type="number" value={s.crawl_delay_max} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_delay_max: +v }) }} /></div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div className="field"><label htmlFor="crawl-detail-delay-min">详情页延迟下限 (秒)</label><input id="crawl-detail-delay-min" className="input" type="number" min={0} value={s.crawl_detail_delay_min ?? 20} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_detail_delay_min: +v }) }} /></div>
                 <div className="field"><label htmlFor="crawl-detail-delay-max">详情页延迟上限 (秒)</label><input id="crawl-detail-delay-max" className="input" type="number" min={0} value={s.crawl_detail_delay_max ?? 40} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ crawl_detail_delay_max: +v }) }} /></div>
               </div>
@@ -313,7 +313,7 @@ export function Settings() {
                 详情页延迟 = 提取每个任务的元数据/磁力前的随机等待（反爬保护，默认 20-40 秒）。调小爬得更
                 快但更容易触发 Cloudflare 风控；每个任务实际耗时 ≈ 详情页延迟 + 页面处理时间。
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div className="field"><label htmlFor="max-pages">默认最大页数</label><input id="max-pages" className="input" type="number" value={s.max_pages_default} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ max_pages_default: +v }) }} /></div>
                 <div className="field"><label htmlFor="preferred-suffixes">磁力后缀优先级</label>
                   <select id="preferred-suffixes" className="input" value={s.preferred_suffixes} onChange={(e) => upd({ preferred_suffixes: e.target.value })}>
@@ -347,7 +347,7 @@ export function Settings() {
                     ) : (
                       <div className="hint">等待登录页截图…</div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
                       <input className="input" placeholder="账号" value={loginForm.username}
                         onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} />
                       <input className="input" type="password" placeholder="密码" value={loginForm.password}
@@ -375,7 +375,7 @@ export function Settings() {
                   <button className={!s.auto_retry_enabled ? 'on' : ''} onClick={() => upd({ auto_retry_enabled: false })}>关闭</button>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div className="field"><label htmlFor="retry-interval">重试间隔 (秒)</label><input id="retry-interval" className="input" type="number" value={s.auto_retry_interval} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ auto_retry_interval: +v }) }} /></div>
                 <div className="field"><label htmlFor="retry-max-count">最大重试次数</label><input id="retry-max-count" className="input" type="number" value={s.auto_retry_max_count} onChange={(e) => { const v = e.target.value; if (v !== '') upd({ auto_retry_max_count: +v }) }} /></div>
               </div>

@@ -8,6 +8,7 @@ import { useStore } from '../store/useStore'
 import { useWhisper, effectiveTier, isNight } from '../i18n/whisper'
 import { audio } from '../audio/engine'
 import { shuffle } from '../utils/random'
+import { useIsMobile, taskCoverSources } from '../hooks/useResponsive'
 
 /** 凝视运镜表：每张随机一种（12–18s），key=index 切换自动重播 */
 const MOVES = ['gz-zoomIn', 'gz-zoomOut', 'gz-panL', 'gz-panR'] as const
@@ -21,6 +22,7 @@ export function Wall() {
   const w = useWhisper()
   const moodMode = useStore((s) => s.moodMode)
   const [tasks, setTasks] = useState<Task[] | null>(null)
+  const isMobile = useIsMobile()
   const [error, setError] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -121,6 +123,8 @@ export function Wall() {
   const t = tasks[index]
   const move = MOVES[index % MOVES.length]
   const remote = t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] } catch { return null } })()
+  // 手机=竖版海报（远程 samples），桌面=横版封面
+  const cover = taskCoverSources(t, isMobile)
   // 简介：synopsis 优先，无则标签兜底
   const synopsis = (t.synopsis || t.description || '').trim() ||
     (t.tags ? t.tags.split(',').map((x) => x.trim()).filter(Boolean).join(' · ') : '')
@@ -136,7 +140,7 @@ export function Wall() {
       }}>
       {/* 全屏模糊背景（图片加载期/失败时的氛围兜底） */}
       <div className="wbg" aria-hidden="true">
-        <img key={index} src={withImageAuth(coverFileUrl(t.id))} alt="" referrerPolicy="no-referrer"
+        <img key={index} src={isMobile && cover.vertical ? cover.vertical : cover.src} alt="" referrerPolicy="no-referrer"
           onError={(e) => { if (remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0' }} />
       </div>
 
@@ -156,8 +160,8 @@ export function Wall() {
         style={tallGeom ? ({ '--tall-left': `${tallGeom.left}px`, '--tall-w': `${tallGeom.w}px` } as React.CSSProperties) : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}>
         <div className={`wfull ${move}`}>
-          <img src={withImageAuth(coverFileUrl(t.id))} alt={t.video_code || ''} referrerPolicy="no-referrer"
-            style={{ objectFit: tall ? 'contain' : 'cover' }}
+          <img src={isMobile && cover.vertical ? cover.vertical : cover.src} alt={t.video_code || ''} referrerPolicy="no-referrer"
+            style={{ objectFit: isMobile ? 'contain' : (tall ? 'contain' : 'cover') }}
             onLoad={(e) => { const im = e.currentTarget; const isTall = im.naturalHeight > im.naturalWidth; setTall(isTall); setTallRatio(isTall ? im.naturalWidth / im.naturalHeight : null) }}
             onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.15' }} />
           {t.is_favorite ? <span className="wslide-fav">♥</span> : null}
