@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { PageHead, Empty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
+import { Lightbox } from '../components/Lightbox'
 import { Icon } from '../components/Icons'
 import { useStore } from '../store/useStore'
 
@@ -33,6 +34,9 @@ interface Entry {
   prev_date: string | null
 }
 
+const zoomOf = (e: Entry): string | null =>
+  e.task_id ? withImageAuth(`${coverFileUrl(e.task_id)}?v=0`) : (e.poster_url ?? null)
+
 function asTask(e: Entry): Task {
   return {
     id: e.task_id ?? -(e.id),
@@ -52,6 +56,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   const [kind, setKind] = useState(mode === 'cat' ? 6 : 2025)
   const [list, setList] = useState<Entry[] | null>(null)
   const [view, setView] = useState<'grid' | 'row'>('grid')
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [searchQ, setSearchQ] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>('all')
   const [busy, setBusy] = useState('')
@@ -247,7 +252,8 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
                 <PosterCard key={e.id} task={asTask(e)} rank={e.rank}
                   posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
                   extraBadge={deltaBadge(e)}
-                  onClick={() => entryClick(e)} />
+                  onClick={() => entryClick(e)}
+                  onZoom={zoomOf(e) ? () => setZoomSrc(zoomOf(e)) : undefined} />
               ))}
             </div>
           )}
@@ -256,9 +262,11 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
               <PosterCard key={e.id} task={asTask(e)} rank={e.rank <= 10 ? e.rank : undefined}
                 posterSrc={e.task_id ? undefined : (e.poster_url ?? undefined)}
                 extraBadge={deltaBadge(e)}
-                onClick={() => entryClick(e)} />
+                onClick={() => entryClick(e)}
+                  onZoom={zoomOf(e) ? () => setZoomSrc(zoomOf(e)) : undefined} />
             ))}
           </div>
+          {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
         </>
       ) : (
         <div className="card">

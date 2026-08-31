@@ -154,11 +154,10 @@
 .preview-stage--scroll .preview-head{position:static;margin-bottom:14px;padding:0 4px}
 .preview-cols{display:flex;gap:14px;height:100%;padding:64px 20px 20px;box-sizing:border-box}
 .preview-col{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
-.preview-track{display:flex;flex-direction:column;gap:14px;animation:pcol-drift linear infinite;
+.preview-track{display:flex;flex-direction:column;gap:14px;
   will-change:transform}
 .preview-col.reverse .preview-track{animation-direction:reverse}
 @keyframes pcol-drift{from{transform:translateY(0)}to{transform:translateY(-50%)}}
-.preview-col:hover .preview-track{animation-play-state:paused}
 .preview-stage .preview-item{break-inside:auto;margin-bottom:0;border-radius:var(--r-md);position:relative;
   overflow:hidden;cursor:pointer;background:var(--bg-surface)}
 .preview-stage .preview-item:hover{transform:scale(1.035);box-shadow:0 10px 34px rgba(255,20,147,.28);z-index:2}
@@ -213,3 +212,8 @@
   border-radius:8px;background:rgba(255,20,147,.12);color:var(--gold-bright,#daa520);font-size:12px;cursor:pointer}
 .pv-hover-detail:hover{background:rgba(255,20,147,.22)}
 @media(pointer:coarse){.preview-col.touch-paused .preview-track{animation-play-state:paused}}
+
+/* ══ 演员库头像悬浮看图 ══ */
+.actor-zoom{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;font-size:12px;
+  cursor:zoom-in;border:1px solid rgba(255,255,255,.3);z-index:2}

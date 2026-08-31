@@ -291,33 +291,85 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
     return bs
   }, [items, colCount])
   const remoteOf = (t: Task) => t.poster_url || (() => { try { return JSON.parse(t.thumbnail_urls || '[]')[0] as string } catch { return null } })()
+  const trackRefs = useRef<(HTMLDivElement | null)[]>([])
+  const progress = useRef<number[]>([])
+  const paused = useRef<boolean[]>([])
+  const drag = useRef<{ col: number; startY: number; startP: number } | null>(null)
+
+  // rAF 驱动漂移：每帧推进各列 progress 并写 transform（取代 CSS 动画，支持触屏拖拽无缝续播）
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000)
+      last = now
+      buckets.forEach((b, ci) => {
+        if (paused.current[ci]) return
+        const dur = Math.max(32, Math.round(b.length * 4)) * (coarse ? 1.6 : 1)
+        progress.current[ci] = (progress.current[ci] ?? 0) + dt / dur
+        const p = ((progress.current[ci] % 1) + 1) % 1
+        const el = trackRefs.current[ci]
+        if (el) {
+          const half = el.scrollHeight / 2
+          const ty = ci % 2 ? (p - 1) * half : -p * half
+          el.style.transform = `translateY(${ty}px)`
+        }
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [buckets, coarse])
+
+  const onTouchStart = (ci: number) => (e: React.TouchEvent) => {
+    paused.current[ci] = true
+    drag.current = { col: ci, startY: e.touches[0].clientY, startP: ((progress.current[ci] ?? 0) % 1 + 1) % 1 }
+  }
+  const onTouchMove = (ci: number) => (e: React.TouchEvent) => {
+    const d = drag.current
+    const el = trackRefs.current[ci]
+    if (!d || d.col !== ci || !el) return
+    const half = el.scrollHeight / 2
+    const dy = e.touches[0].clientY - d.startY
+    const dir = ci % 2 ? 1 : -1
+    const p = ((d.startP + dir * (dy / half)) % 1 + 1) % 1
+    progress.current[ci] = p
+    const ty = dir === 1 ? (p - 1) * half : -p * half
+    el.style.transform = `translateY(${ty}px)`
+  }
+  const onTouchEnd = (ci: number) => () => {
+    paused.current[ci] = false
+    drag.current = null
+  }
+
   return (
     <div className="preview-cols">
-      {buckets.map((b, ci) => {
-        const dur = Math.max(32, Math.round(b.length * 4)) * (coarse ? 1.6 : 1)
-        return (
-          <div key={ci} className={`preview-col${ci % 2 ? ' reverse' : ''}`}>
-            <div className="preview-track" style={{ animationDuration: `${dur}s` }}>
-              {[...b, ...b].map((t, i) => {
-                const remote = remoteOf(t)
-                return (
-                  <div key={`${ci}-${i}`} className="preview-item" role="button" tabIndex={0}
-                    onClick={() => onPick(t)}
-                    onMouseEnter={(e) => onHover(t, e.currentTarget)} onMouseLeave={onLeave}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
-                    aria-label={`查看 ${t.video_code || '作品'} 详情`}>
-                    <img loading="lazy" decoding="async" referrerPolicy="no-referrer"
-                      src={withImageAuth(`${coverFileUrl(t.id)}?v=${t.updated_at || '0'}`)}
-                      alt={t.video_code || ''}
-                      onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.2' }} />
-                    {t.video_code && <span className="preview-code">{t.video_code}</span>}
-                  </div>
-                )
-              })}
-            </div>
+      {buckets.map((b, ci) => (
+        <div key={ci} className={`preview-col${ci % 2 ? ' reverse' : ''}`}
+          onMouseEnter={() => { paused.current[ci] = true }}
+          onMouseLeave={() => { paused.current[ci] = false }}
+          onTouchStart={onTouchStart(ci)} onTouchMove={onTouchMove(ci)} onTouchEnd={onTouchEnd(ci)}>
+          <div ref={(el) => { trackRefs.current[ci] = el }} className="preview-track">
+            {[...b, ...b].map((t, i) => {
+              const remote = remoteOf(t)
+              return (
+                <div key={`${ci}-${i}`} className="preview-item" role="button" tabIndex={0}
+                  onClick={() => onPick(t)}
+                  onMouseEnter={(e) => onHover(t, e.currentTarget)} onMouseLeave={onLeave}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav(`/task/${t.id}`) } }}
+                  aria-label={`查看 ${t.video_code || '作品'} 详情`}>
+                  <img loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                    src={withImageAuth(`${coverFileUrl(t.id)}?v=${t.updated_at || '0'}`)}
+                    alt={t.video_code || ''}
+                    onError={(e) => { if (remote && e.currentTarget.src !== remote) e.currentTarget.src = remote; else e.currentTarget.style.opacity = '0.2' }} />
+                  {t.video_code && <span className="preview-code">{t.video_code}</span>}
+                </div>
+              )
+            })}
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
