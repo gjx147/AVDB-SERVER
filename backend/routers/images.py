@@ -31,6 +31,22 @@ def _task_dir(task_id: int) -> Path:
     return _images_dir() / str(task_id)
 
 
+AVATAR_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                ".webp": "image/webp", ".gif": "image/gif"}
+
+
+@router.get("/avatars/{filename}")
+def get_avatar(filename: str, _user: CurrentUserHeaderOrQuery):
+    """手动上传的演员头像（data/images/avatars/actor-{id}.{ext}）。"""
+    import re as _re
+    if not _re.fullmatch(r"actor-\d+\.(jpg|jpeg|png|webp|gif)", filename):
+        raise HTTPException(status_code=400, detail="无效的头像文件名")
+    p = Path(__file__).resolve().parents[2] / "data" / "images" / "avatars" / filename
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="头像文件不存在")
+    return FileResponse(str(p), media_type=AVATAR_TYPES[p.suffix.lower()])
+
+
 @router.get("/poster/{task_id}")
 def get_poster(task_id: int, _user: CurrentUserHeaderOrQuery):
     """获取海报。"""

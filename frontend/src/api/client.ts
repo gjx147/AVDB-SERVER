@@ -233,6 +233,11 @@ export const api = {
       http.get<{ current: string | null; options: { key: string; label: string; url: string }[] }>(
         `/api/actors/${actorId}/avatar-options`
       ).then((r) => r.data),
+    uploadAvatar: (id: number, file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post<{ ok: boolean; avatar_url: string }>(`/api/actors/${id}/avatar-upload`, fd).then((r) => r.data)
+    },
   },
 
   // ════════ Rankings ════════

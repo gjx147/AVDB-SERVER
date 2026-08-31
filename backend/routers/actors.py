@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import re
 
-from fastapi import APIRouter, HTTPException, Query
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 
@@ -276,6 +278,37 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
+
+@router.post("/{actor_id}/avatar-upload")
+async def avatar_upload(actor_id: int, db: DbSession, _user: CurrentUser,
+                        file: UploadFile = File(...)):
+    """手动上传头像：存 data/images/avatars/，avatar_url 指向本地鉴权端点。"""
+    import os
+    from config import get_settings
+    ext = (os.path.splitext(file.filename or "")[1] or ".jpg").lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        raise HTTPException(status_code=400, detail="仅支持 jpg / png / webp / gif 图片")
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片过大（>5MB）")
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    # 项目根/data = Docker 挂载卷 /app/data（持久）
+    d = Path(__file__).resolve().parents[2] / "data" / "images" / "avatars"
+    d.mkdir(parents=True, exist_ok=True)
+    for old_f in d.glob(f"actor-{actor_id}.*"):
+        try:
+            old_f.unlink()
+        except Exception:
+            pass
+    f = d / f"actor-{actor_id}{ext}"
+    f.write_bytes(raw)
+    url = f"/api/images/avatars/actor-{actor_id}{ext}?v={int(datetime.utcnow().timestamp())}"
+    actor.avatar_url = url
+    db.commit()
+    return {"ok": True, "avatar_url": url}
+
 
 @router.get("/{actor_id}/avatar-options")
 def avatar_options(actor_id: int, db: DbSession, _user: CurrentUser):

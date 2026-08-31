@@ -129,7 +129,7 @@ export function Wall() {
 
       {/* 顶部浮动标识 */}
       <div className="wall-head">
-        <span className="wall-title">首页<em> · 今夜影视墙</em></span>
+        <span className="wall-title">首页推荐<em> · 今夜影视墙</em></span>
         <span className="wall-sub">{n} 部作品 · {moodMode ? '密室慢舞' : '自动轮播'}</span>
       </div>
 

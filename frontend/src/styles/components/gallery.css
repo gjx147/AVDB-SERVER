@@ -155,7 +155,7 @@
   overflow:hidden;cursor:pointer;background:var(--bg-surface);
   transition:transform .2s ease, box-shadow .2s ease}
 .preview-item:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(255,20,147,.18)}
-.preview-item img{display:block;width:100%;height:auto}
+.preview-item img{display:block;width:100%;aspect-ratio:7/10;object-fit:cover;object-position:right center}
 .preview-item .preview-code{position:absolute;left:8px;bottom:6px;opacity:0;transition:opacity .25s;
   font-family:var(--ff-mono);font-size:11px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7)}
 .preview-item:hover .preview-code{opacity:1}

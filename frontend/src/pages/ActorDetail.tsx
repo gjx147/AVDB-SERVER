@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
@@ -213,6 +213,17 @@ export function ActorDetail() {
         .finally(() => setAvOptsLoading(false))
     }
   }
+  const avatarFileRef = useRef<HTMLInputElement | null>(null)
+  const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f || !actor) return
+    try {
+      await api.actors.uploadAvatar(actor.id, f)
+      toastOk('头像已上传')
+      setActor(await api.actors.get(actor.id))
+    } catch (e2) { toastErr(String((e2 as Error).message)) }
+  }
   const setAvatar = async (url: string) => {
     if (!actor) return
     try {
@@ -374,7 +385,8 @@ export function ActorDetail() {
             background: 'var(--bg-page)', border: '1px solid var(--line-hair)',
           }}>
             {actor.avatar_url ? (
-              <img src={actor.avatar_url} alt={actor.name} referrerPolicy="no-referrer"
+              <img src={actor.avatar_url.startsWith('/api/') ? withImageAuth(actor.avatar_url) : actor.avatar_url}
+                alt={actor.name} referrerPolicy="no-referrer"
                 onError={(e) => { e.currentTarget.style.display = 'none' }}
                 style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }} />
             ) : (
@@ -387,6 +399,11 @@ export function ActorDetail() {
             title="在老师图鉴（高清）/ minnano-av / JavDB 三个来源中选择头像">
             更换头像
           </button>
+          <button className="btn btn--ghost btn--sm" onClick={() => avatarFileRef.current?.click()}>
+            上传头像
+          </button>
+          <input ref={avatarFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.gif"
+            onChange={uploadAvatar} style={{ display: 'none' }} />
           {avPanelOpen && (
             <div className="card" style={{ padding: 12 }}>
               {avOptsLoading ? (
