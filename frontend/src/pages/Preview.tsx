@@ -9,6 +9,15 @@ import { computeShortestColumnLayout, colCountOf } from '../utils/masonry'
 import { createPortal } from 'react-dom'
 
 const PAGE = 60
+
+// 模块级缓存：跨挂载保留（切走再回来秒开；补池进度断点续传）
+const cache: {
+  items: Task[]; total: number; offset: number; seen: Set<number>
+  seed: number; complete: boolean
+} = {
+  items: [], total: 0, offset: 0, seen: new Set(),
+  seed: Math.floor(Math.random() * 2147483647), complete: false,
+}
 type Mode = 'masonry' | 'river'
 
 function remoteOf(t: Task): string | null {
@@ -41,24 +50,24 @@ export function Preview() {
   const [hover, setHover] = useState<{ task: Task; x: number; y: number } | null>(null)
   const hoverTimer = useRef<number | undefined>(undefined)
   const ratioRef = useRef<Record<number, number>>({})
-  const seen = useRef<Set<number>>(new Set())
-  const offset = useRef(0)
   const busy = useRef(false)
-  const seed = useRef(Math.floor(Math.random() * 2147483647))
   const sentinel = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const roTimer = useRef<number | undefined>(undefined)
 
   const loadMore = useCallback(async () => {
-    if (busy.current) return
+    if (busy.current || cache.complete) return
     busy.current = true
     try {
-      const r = await api.v2.tasks({ status: 'visited', sort: 'random', seed: seed.current, limit: PAGE, offset: offset.current })
-      const batch = r.tasks.filter((t) => !seen.current.has(t.id))
-      batch.forEach((t) => seen.current.add(t.id))
-      offset.current += r.tasks.length
-      setTotal(r.total)
-      setItems((prev) => [...prev, ...batch])
+      const r = await api.v2.tasks({ status: 'visited', sort: 'random', seed: cache.seed, limit: PAGE, offset: cache.offset })
+      const batch = r.tasks.filter((t) => !cache.seen.has(t.id))
+      batch.forEach((t) => cache.seen.add(t.id))
+      cache.offset += r.tasks.length
+      cache.total = r.total
+      cache.items = [...cache.items, ...batch]
+      if (cache.offset >= r.total) cache.complete = true
+      setTotal(cache.total)
+      setItems([...cache.items])
       setError(null)
     } catch (e) {
       setError(String((e as Error).message))
@@ -68,13 +77,19 @@ export function Preview() {
     }
   }, [])
 
-  useEffect(() => { loadMore() }, [loadMore])
+  // 缓存秒开：切走再回来直接渲染已加载内容（图片走浏览器缓存）；未完成继续补池
+  useEffect(() => {
+    if (cache.items.length > 0) {
+      setItems([...cache.items]); setTotal(cache.total); setLoading(false)
+    }
+    if (!cache.complete) loadMore()
+  }, [loadMore])
 
   // 后台持续补池：分批拉到全库，新海报随补随入列
   useEffect(() => {
     if (error) return
     if (total > 0 && items.length >= total) return
-    const t = setTimeout(() => { loadMore() }, 1200)
+    const t = setTimeout(() => { loadMore() }, 300)
     return () => clearTimeout(t)
   }, [items.length, total, error, loadMore])
 
