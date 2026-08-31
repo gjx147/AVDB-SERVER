@@ -153,7 +153,8 @@
 .preview-stage--scroll{height:auto;min-height:100dvh;overflow:visible;padding-bottom:80px}
 .preview-stage--scroll .preview-head{position:static;margin-bottom:14px;padding:0 4px}
 .preview-cols{display:flex;gap:14px;height:100%;padding:64px 20px 20px;box-sizing:border-box}
-.preview-col{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
+.preview-col{flex:1 1 0;min-width:0;height:100%;overflow:hidden;cursor:grab}
+.preview-stage .preview-item{cursor:pointer}
 .preview-track{display:flex;flex-direction:column;gap:14px;
   will-change:transform}
 .preview-col.reverse .preview-track{animation-direction:reverse}
@@ -217,3 +218,8 @@
 .actor-zoom{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;display:flex;
   align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;font-size:12px;
   cursor:zoom-in;border:1px solid rgba(255,255,255,.3);z-index:2}
+
+/* ══ Top250 行视图悬浮看图 ══ */
+.row-zoom{flex:none;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.4);color:#fff;cursor:zoom-in;border:1px solid rgba(255,255,255,.25);font-size:12px}
+.row-zoom:hover{background:var(--gold);border-color:var(--gold)}

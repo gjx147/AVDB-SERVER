@@ -266,7 +266,6 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
                   onZoom={zoomOf(e) ? () => setZoomSrc(zoomOf(e)) : undefined} />
             ))}
           </div>
-          {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
         </>
       ) : (
         <div className="card">
@@ -286,6 +285,12 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
                 </div>
                 <div className="row-title">{e.name}</div>
               </div>
+              {zoomOf(e) ? (
+                <button className="row-zoom" aria-label="悬浮查看大图"
+                  onClick={(ev) => { ev.stopPropagation(); setZoomSrc(zoomOf(e)) }}
+                  onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); setZoomSrc(zoomOf(e)) } }}
+                  title="悬浮查看大图">⤢</button>
+              ) : null}
               <div className="row-tags">
                 {e.task_id ? <span className="inlib">已在影片库</span> : <span className="miss">待入库</span>}
                 {e.magnet_version ? <span className="ver">{e.magnet_version}</span> : null}
@@ -294,6 +299,7 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
           ))}
         </div>
       )}
+      {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
     </div>
   )
 }

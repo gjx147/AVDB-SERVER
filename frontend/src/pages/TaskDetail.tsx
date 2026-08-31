@@ -282,7 +282,10 @@ export function TaskDetail() {
                         title={c.id ? `查看 ${c.name} 的详情` : `在影片库搜索 ${c.name}（暂无演员档案）`}>
                         <div className="cast-avatar">
                           {c.avatar_url ? (
-                            <img src={c.avatar_url} alt={c.name} referrerPolicy="no-referrer"
+                            <img src={c.avatar_url.startsWith('/api/') ? withImageAuth(c.avatar_url) : c.avatar_url}
+                              alt={c.name} referrerPolicy="no-referrer"
+                              onClick={(e) => { e.stopPropagation(); setLb({ src: c.avatar_url!.startsWith('/api/') ? withImageAuth(c.avatar_url!) : c.avatar_url!, alt: c.name, idx: null }) }}
+                              style={{ cursor: 'zoom-in' }}
                               onError={(e) => { e.currentTarget.style.display = 'none' }} />
                           ) : (c.name[0] || '?')}
                         </div>

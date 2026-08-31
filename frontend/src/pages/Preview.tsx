@@ -294,7 +294,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
   const trackRefs = useRef<(HTMLDivElement | null)[]>([])
   const progress = useRef<number[]>([])
   const paused = useRef<boolean[]>([])
-  const drag = useRef<{ col: number; startY: number; startP: number } | null>(null)
+  const drag = useRef<{ col: number; startY: number; startP: number; moved?: boolean } | null>(null)
 
   // rAF 驱动漂移：每帧推进各列 progress 并写 transform（取代 CSS 动画，支持触屏拖拽无缝续播）
   useEffect(() => {
@@ -322,6 +322,33 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
     return () => cancelAnimationFrame(raf)
   }, [buckets, coarse])
 
+  const suppressClick = useRef(false)
+  const startDrag = (ci: number, clientY: number) => {
+    paused.current[ci] = true
+    const startY = clientY
+    const startP = ((progress.current[ci] ?? 0) % 1 + 1) % 1
+    let moved = false
+    const move = (ev: MouseEvent) => {
+      const el = trackRefs.current[ci]
+      if (!el) return
+      const half = el.scrollHeight / 2
+      const dy = ev.clientY - startY
+      if (Math.abs(dy) > 5) { moved = true; suppressClick.current = true }
+      const dir = ci % 2 ? 1 : -1
+      const p = ((startP + dir * (dy / half)) % 1 + 1) % 1
+      progress.current[ci] = p
+      const ty = dir === 1 ? (p - 1) * half : -p * half
+      el.style.transform = `translateY(${ty}px)`
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      suppressClick.current = moved
+      setTimeout(() => { paused.current[ci] = false }, 60)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
   const onTouchStart = (ci: number) => (e: React.TouchEvent) => {
     paused.current[ci] = true
     drag.current = { col: ci, startY: e.touches[0].clientY, startP: ((progress.current[ci] ?? 0) % 1 + 1) % 1 }
@@ -332,6 +359,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
     if (!d || d.col !== ci || !el) return
     const half = el.scrollHeight / 2
     const dy = e.touches[0].clientY - d.startY
+    if (Math.abs(dy) > 5) d.moved = true
     const dir = ci % 2 ? 1 : -1
     const p = ((d.startP + dir * (dy / half)) % 1 + 1) % 1
     progress.current[ci] = p
@@ -339,6 +367,7 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
     el.style.transform = `translateY(${ty}px)`
   }
   const onTouchEnd = (ci: number) => () => {
+    suppressClick.current = !!drag.current?.moved
     paused.current[ci] = false
     drag.current = null
   }
@@ -349,6 +378,8 @@ function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
         <div key={ci} className={`preview-col${ci % 2 ? ' reverse' : ''}`}
           onMouseEnter={() => { paused.current[ci] = true }}
           onMouseLeave={() => { paused.current[ci] = false }}
+          onMouseDown={(e) => { if (e.button === 0) startDrag(ci, e.clientY) }}
+          onClickCapture={(e) => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); suppressClick.current = false } }}
           onTouchStart={onTouchStart(ci)} onTouchMove={onTouchMove(ci)} onTouchEnd={onTouchEnd(ci)}>
           <div ref={(el) => { trackRefs.current[ci] = el }} className="preview-track">
             {[...b, ...b].map((t, i) => {
