@@ -4,6 +4,7 @@ import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task, ListSourceWithStats } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { Pager } from '../components/Pager'
+import { Lightbox } from '../components/Lightbox'
 import { QueueOverlay } from '../components/QueueOverlay'
 import { PageHead, Empty, ErrorEmpty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
@@ -37,6 +38,7 @@ export function Library() {
   const [total, setTotal] = useState(0)
   const [queueRunning, setQueueRunning] = useState(false)
   const [retryingNow, setRetryingNow] = useState(false)
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
@@ -321,7 +323,7 @@ export function Library() {
         <Empty icon="♡" title={w('empty_lib_title')} sub={w('empty_lib_sub')} />
       ) : view === 'grid' ? (
         <div className="gallery">
-          {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)} />)}
+          {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)}  onZoom={() => setZoomSrc(withImageAuth(`${coverFileUrl(t.id)}?v=${t.updated_at || "0"}`))} />)}
         </div>
       ) : (
         <div className="card">
@@ -359,6 +361,7 @@ export function Library() {
         />
       )}
 
+      {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
       <div className={`batchbar${selected.size ? ' show' : ''}`}>
         <span className="sel-count">已选 {selected.size} 项</span>
         <button className="btn btn--gold btn--sm" onClick={() => queueProcess()} disabled={queueRunning}>

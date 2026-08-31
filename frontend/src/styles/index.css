@@ -17,7 +17,7 @@
 
 
 /* ── F9 移动端适配 ── */
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .gallery-toolbar { flex-wrap: wrap; gap: 8px; }
   .gallery-toolbar .search { flex: 1 1 100%; }
   .stat-row { grid-template-columns: repeat(2, 1fr); }

@@ -27,10 +27,11 @@ interface Props {
   rank?: number  // 可选：排行榜名次（≤3 金银铜角标并放大，≤10 白玻璃角标）
   posterSrc?: string  // 可选：外部初始图源（未入库条目直连远程海报，跳过本地 cover 404）
   extraBadge?: React.ReactNode  // 可选：叠加在 rank 角标旁的额外徽章（如 Top250 涨跌 ↑↓）
+  onZoom?: () => void  // 可选：悬浮看图（放大角标按钮，Lightbox 由父级渲染）
 }
 
 /** 影片库海报卡 —— 点击整卡进入详情页；左上角复选框用于批量选择 */
-export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank, posterSrc, extraBadge }: Props) {
+export function PosterCard({ task, selected, selectable, onToggle, onClick, centerImage, rank, posterSrc, extraBadge, onZoom }: Props) {
   const nav = useNavigate()
   const [bs, label] = statusMap[task.status] || statusMap.pending
   const tags = task.tags ? task.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
@@ -115,6 +116,12 @@ export function PosterCard({ task, selected, selectable, onToggle, onClick, cent
           <span className="poster-code">{task.video_code || '—'}</span>
           {/* marginLeft:auto 始终贴右——排名海报番号被角标隐藏时，勾选框不会落回左侧盖住皇冠 */}
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+            {onZoom && (
+              <div className="poster-zoom" role="button" tabIndex={0} aria-label="悬浮查看大图"
+                onClick={(e) => { e.stopPropagation(); onZoom() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onZoom() } }}
+                title="悬浮查看大图">⤢</div>
+            )}
             {selectable && (
               <div className={`poster-check${selected ? ' on' : ''}`} onClick={toggle} role="checkbox" aria-checked={selected} tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggle(e as unknown as React.MouseEvent) } }}>

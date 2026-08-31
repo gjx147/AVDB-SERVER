@@ -238,7 +238,7 @@ export function Preview() {
   return (
     <div className={stage}>
       {head}
-      <RiverView items={items} colCount={colCountOf(containerW, 300, 5)} nav={nav}
+      <RiverView items={items} colCount={colCountOf(containerW, 260, 5)} nav={nav}
         onPick={openItem} coarse={coarse}
         onHover={(t, el) => openHover(t, el)} onLeave={scheduleClose} />
       {loading && items.length > 0 && <div className="preview-more"><Loading /></div>}

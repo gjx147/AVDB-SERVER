@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, withImageAuth, coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
+import { Lightbox } from '../components/Lightbox'
 import { PageHead, Empty, ErrorEmpty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
 import { useStore } from '../store/useStore'
@@ -9,6 +10,7 @@ import { useStore } from '../store/useStore'
 interface Collection { id: number; name: string; icon: string; task_count: number }
 
 export function Favorites() {
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [collections, setCollections] = useState<Collection[]>([])
   const [activeCol, setActiveCol] = useState<number | null>(null)  // null = 全部收藏
@@ -169,7 +171,7 @@ export function Favorites() {
           sub={activeCol !== null ? '在详情页将影片加入此分组' : '在影片库点击海报卡片上的收藏按钮即可加入。'} />
       ) : (
         <div className="gallery">
-          {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)} />)}
+          {tasks.map((t) => <PosterCard key={t.id} task={t} selected={selected.has(t.id)} selectable onToggle={() => toggleSel(t.id)}  onZoom={() => setZoomSrc(withImageAuth(`${coverFileUrl(t.id)}?v=0`))} />)}
         </div>
       )}
 
@@ -180,6 +182,7 @@ export function Favorites() {
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
         <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
       </div>
-    </div>
+
+      {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}    </div>
   )
 }
