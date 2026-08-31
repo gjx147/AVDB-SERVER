@@ -172,3 +172,17 @@
 .preview-sub{font-family:var(--ff-mono);font-size:11px;color:var(--t-faint)}
 .preview-more{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;z-index:3}
 @media (prefers-reduced-motion: reduce){.preview-track{animation:none}}
+
+/* ══ 预览 · JS masonry 静态形态 + 骨架屏 ══ */
+.preview-masonry{position:relative;margin-top:6px}
+.mcard{position:absolute;border-radius:var(--r-md);overflow:hidden;background:var(--bg-surface);
+  cursor:pointer;transition:transform .2s ease, box-shadow .2s ease}
+.mcard:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 10px 30px rgba(255,20,147,.2);z-index:2}
+.mcard img{display:block;width:100%;height:auto}
+.mcard-info{padding:9px 12px 10px}
+.mcard-title{font-size:12px;color:var(--t-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard-sub{display:flex;gap:6px;font-family:var(--ff-mono);font-size:10px;color:var(--t-faint);margin-top:3px}
+@keyframes mskel{0%{background-position:-240px 0}100%{background-position:240px 0}}
+.mcard-skel{position:absolute;border-radius:var(--r-md);
+  background:linear-gradient(90deg,var(--bg-surface) 25%,var(--bg-raised,#f1e4ea) 50%,var(--bg-surface) 75%);
+  background-size:240px 100%;animation:mskel 1.3s linear infinite}
