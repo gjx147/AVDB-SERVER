@@ -10,7 +10,10 @@ interface Props {
 }
 
 /** 全屏悬浮看图：点击遮罩/ESC 关闭，‹ › 或 ←/→ 切换（预览图模式） */
+import { useRef } from 'react'
+
 export function Lightbox({ src, alt, onClose, onPrev, onNext, counter }: Props) {
+  const touchX = useRef<number | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -27,12 +30,28 @@ export function Lightbox({ src, alt, onClose, onPrev, onNext, counter }: Props) 
   }
   return (
     <div onClick={onClose} role="dialog" aria-modal="true" aria-label="图片查看"
+      onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
+      onTouchEnd={(e) => {
+        if (touchX.current == null) return
+        const dx = e.changedTouches[0].clientX - touchX.current
+        if (dx < -50 && onNext) onNext()
+        if (dx > 50 && onPrev) onPrev()
+        touchX.current = null
+      }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(10,4,8,.92)',
         backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'zoom-out' }}>
       <img src={src} alt={alt} onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: '94vw', maxHeight: '92vh', objectFit: 'contain', borderRadius: 8,
           boxShadow: '0 10px 60px rgba(0,0,0,.65)', cursor: 'default' }} />
+      {onPrev && (
+        <div aria-hidden="true" onClick={(e) => { e.stopPropagation(); onPrev() }}
+          style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: '30%', zIndex: 201, cursor: 'w-resize' }} />
+      )}
+      {onNext && (
+        <div aria-hidden="true" onClick={(e) => { e.stopPropagation(); onNext() }}
+          style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '30%', zIndex: 201, cursor: 'e-resize' }} />
+      )}
       {counter && (
         <span onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', bottom: 18, left: '50%', transform: 'translateX(-50%)',
