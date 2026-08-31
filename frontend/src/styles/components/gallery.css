@@ -144,20 +144,31 @@
 .pager .pager-jump button{min-width:0;padding:0 12px}
 .pagination-card{background:var(--bg-surface);border:1px solid var(--line-hair);border-radius:var(--r-md);box-shadow:0 1px 4px rgba(220,20,60,.06)}
 
-/* ══ 预览 · 随机海报瀑布流（全幅布满侧边栏右侧区域） ══ */
-.preview-page{padding:22px 28px 80px}
-.preview-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}
-.preview-title{font-family:var(--ff-serif);font-size:21px;font-weight:700;color:var(--t-display)}
-.preview-title em{font-style:italic;color:var(--gold-deep);font-weight:400;font-size:14px}
-.preview-sub{font-family:var(--ff-mono);font-size:11px;color:var(--t-faint)}
-.preview-wall{columns:4 240px;column-gap:14px}
-.preview-item{break-inside:avoid;margin-bottom:14px;position:relative;border-radius:var(--r-md);
-  overflow:hidden;cursor:pointer;background:var(--bg-surface);
-  transition:transform .2s ease, box-shadow .2s ease}
-.preview-item:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(255,20,147,.18)}
-.preview-item img{display:block;width:100%;aspect-ratio:7/10;object-fit:cover;object-position:right center}
+/* ══ 预览 · 漂移海报河（五列异速异向无缝漂移） ══ */
+.preview-stage{position:relative;height:100dvh;overflow:hidden;background:var(--bg-ink)}
+.preview-cols{display:flex;gap:14px;height:100%;padding:64px 20px 20px;box-sizing:border-box}
+.preview-col{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
+.preview-track{display:flex;flex-direction:column;gap:14px;animation:pcol-drift linear infinite;
+  will-change:transform}
+.preview-col.reverse .preview-track{animation-direction:reverse}
+@keyframes pcol-drift{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+.preview-col:hover .preview-track{animation-play-state:paused}
+.preview-stage .preview-item{break-inside:auto;margin-bottom:0;border-radius:var(--r-md);position:relative;
+  overflow:hidden;cursor:pointer;background:var(--bg-surface)}
+.preview-stage .preview-item:hover{transform:scale(1.035);box-shadow:0 10px 34px rgba(255,20,147,.28);z-index:2}
+.preview-stage .preview-item img{display:block;width:100%;aspect-ratio:7/10;object-fit:cover;
+  object-position:right center}
 .preview-item .preview-code{position:absolute;left:8px;bottom:6px;opacity:0;transition:opacity .25s;
   font-family:var(--ff-mono);font-size:11px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7)}
 .preview-item:hover .preview-code{opacity:1}
-.preview-end{text-align:center;font-family:var(--ff-mono);font-size:11px;color:var(--t-faint);padding:18px 0}
-.preview-more{display:flex;justify-content:center;padding:12px 0}
+.preview-fade{position:absolute;left:0;right:0;height:110px;pointer-events:none;z-index:2}
+.preview-fade.top{top:0;background:linear-gradient(180deg,var(--bg-ink) 8%,transparent)}
+.preview-fade.bottom{bottom:0;background:linear-gradient(0deg,var(--bg-ink) 8%,transparent)}
+.preview-head{position:absolute;top:16px;left:24px;right:24px;display:flex;align-items:baseline;
+  justify-content:space-between;gap:12px;z-index:3}
+.preview-title{font-family:var(--ff-serif);font-size:21px;font-weight:700;color:var(--t-display);
+  text-shadow:0 1px 6px rgba(0,0,0,.5)}
+.preview-title em{font-style:italic;color:var(--gold-bright);font-weight:400;font-size:14px}
+.preview-sub{font-family:var(--ff-mono);font-size:11px;color:var(--t-faint)}
+.preview-more{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;z-index:3}
+@media (prefers-reduced-motion: reduce){.preview-track{animation:none}}
