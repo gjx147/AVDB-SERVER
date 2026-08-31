@@ -4,6 +4,7 @@ import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
+import { Lightbox } from '../components/Lightbox'
 import { Pager } from '../components/Pager'
 import { useStore } from '../store/useStore'
 
@@ -214,6 +215,7 @@ export function ActorDetail() {
     }
   }
   const avatarFileRef = useRef<HTMLInputElement | null>(null)
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     e.target.value = ''
@@ -404,6 +406,7 @@ export function ActorDetail() {
           </button>
           <input ref={avatarFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.gif"
             onChange={uploadAvatar} style={{ display: 'none' }} />
+          {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
           {avPanelOpen && (
             <div className="card" style={{ padding: 12 }}>
               {avOptsLoading ? (
@@ -728,6 +731,10 @@ export function ActorDetail() {
                       <span className="badge-lib" title="已在 Emby 媒体库">库</span>
                     )}
                     <span className="poster-code">{m.video_code || '—'}</span>
+                    <button className="poster-zoom" role="button" aria-label="悬浮查看大图"
+                      title="悬浮查看大图"
+                      onClick={(e) => { e.stopPropagation(); setZoomSrc(withImageAuth(`${coverFileUrl(m.id)}?v=0`)) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setZoomSrc(withImageAuth(`${coverFileUrl(m.id)}?v=0`)) } }}>⤢</button>
                     <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
                       <div className={`poster-check${selected.has(m.id) ? ' on' : ''}`} role="checkbox"
                         aria-checked={selected.has(m.id)} tabIndex={0}
