@@ -6,6 +6,7 @@ import { Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
 import { MetaItem } from '../components/MetaItem'
 import { Heartburst } from '../components/Heartburst'
+import { Lightbox } from '../components/Lightbox'
 import { useStore } from '../store/useStore'
 import { useWhisper, useNavMode } from '../i18n/whisper'
 import { audio } from '../audio/engine'
@@ -76,6 +77,8 @@ export function TaskDetail() {
     api.images.hasLocalThumbs(tid).then((r) => { if (reqId === reqSeqRef.current) setHasLocal(r.has_local) }).catch(() => { if (reqId === reqSeqRef.current) setHasLocal(false) })
   }
   useEffect(load, [id])
+  // 悬浮看图：idx=null=海报单图；idx=预览图浏览（可 ‹› 切换）
+  const [lb, setLb] = useState<{ src: string; alt: string; idx: number | null } | null>(null)
 
   // 磁力优先级后缀：从 settings 读取，fallback 到默认 -UC,-C,-U
   const [preferredSuffixes, setPreferredSuffixes] = useState<string[]>(['-uc', '-c', '-u'])
@@ -252,6 +255,8 @@ export function TaskDetail() {
                 src={withImageAuth(`${coverFileUrl(task.id)}?v=${imgVersion}`)}
                 alt={`${task.video_code || '作品'} 海报`}
                 referrerPolicy="no-referrer"
+                onClick={(e) => { e.stopPropagation(); setLb({ src: withImageAuth(`${coverFileUrl(task.id)}?v=${imgVersion}`), alt: `${task.video_code || '作品'} 海报`, idx: null }) }}
+                style={{ cursor: 'zoom-in' }}
                 onError={(e) => { if (remoteCover) e.currentTarget.src = remoteCover; else e.currentTarget.style.opacity = '0' }}
                 onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
               />
@@ -349,6 +354,7 @@ export function TaskDetail() {
                 marginBottom: 10, background: 'var(--bg-surface)',
               }}>
                 <img
+                  onClick={(e) => { e.stopPropagation(); setLb({ src: hasLocal ? withImageAuth(`${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}`) : thumbs[activeThumb], alt: `${task.video_code || '作品'} 预览图 ${activeThumb + 1}`, idx: activeThumb }) }}
                   src={hasLocal ? withImageAuth(`${thumbFileUrl(task.id, activeThumb)}?v=${imgVersion}`) : thumbs[activeThumb]}
                   alt={`${task.video_code || '作品'} 预览图 ${activeThumb + 1}`}
                   referrerPolicy="no-referrer"
@@ -514,6 +520,15 @@ export function TaskDetail() {
             })}
           </div>
         </div>
+      )}
+      {lb && (
+        <Lightbox
+          src={lb.src} alt={lb.alt}
+          onClose={() => setLb(null)}
+          counter={lb.idx != null ? `${lb.idx + 1} / ${thumbs.length}` : undefined}
+          onPrev={lb.idx != null ? () => setLb({ src: hasLocal ? withImageAuth(`${thumbFileUrl(task.id, (lb.idx! - 1 + thumbs.length) % thumbs.length)}?v=${imgVersion}`) : thumbs[(lb.idx! - 1 + thumbs.length) % thumbs.length], alt: `${task.video_code || "作品"} 预览图`, idx: (lb.idx! - 1 + thumbs.length) % thumbs.length }) : undefined}
+          onNext={lb.idx != null ? () => setLb({ src: hasLocal ? withImageAuth(`${thumbFileUrl(task.id, (lb.idx! + 1) % thumbs.length)}?v=${imgVersion}`) : thumbs[(lb.idx! + 1) % thumbs.length], alt: `${task.video_code || "作品"} 预览图`, idx: (lb.idx! + 1) % thumbs.length }) : undefined}
+        />
       )}
     </div>
   )
