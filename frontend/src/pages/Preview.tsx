@@ -311,7 +311,7 @@ export function Preview() {
 }
 
 /** 漂移海报河（river 形态渲染体） */
-function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse }: {
+function RiverView({ items, colCount, nav, onPick, onHover, onLeave, coarse, speedMul }: {
   items: Task[]; colCount: number; nav: (p: string) => void
   onPick: (t: Task) => void
   onHover: (t: Task, el: HTMLElement) => void; onLeave: () => void
