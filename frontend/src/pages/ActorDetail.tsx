@@ -114,18 +114,17 @@ export function ActorDetail() {
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
-  const crawlMagnetWorks = async () => {
+  const crawlFiltered = async () => {
     if (!actor) return
+    const fs: string[] = []
+    if (filterSolo) fs.push('solo')
+    if (filterMagnet) fs.push('magnet')
+    if (filterSubtitle) fs.push('subtitle')
+    if (fs.length === 0) { await crawlWorks(); return }
     try {
-      await api.actors.crawlWorks(actor.id, maxCoStar, false, 'magnet', excludeVr)
-      toastOk(`已开始补齐 ${actor.name} 的含磁链作品（t=d 过滤${excludeVr ? '，排除VR' : ''}）`)
-    } catch (e) { toastErr(String((e as Error).message)) }
-  }
-  const crawlSubtitleWorks = async () => {
-    if (!actor) return
-    try {
-      await api.actors.crawlWorks(actor.id, maxCoStar, false, 'subtitle', excludeVr)
-      toastOk(`已开始补齐 ${actor.name} 的含字幕作品（t=c 过滤${excludeVr ? '，排除VR' : ''}）`)
+      await api.actors.crawlWorks(actor.id, maxCoStar, false, fs.join(','), excludeVr)
+      const names = fs.map((f) => f === 'solo' ? '单体' : f === 'magnet' ? '含磁链' : '含字幕').join('+')
+      toastOk(`已开始补齐 ${actor.name} 的作品（${names}${excludeVr ? '，排除VR' : ''}）`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   // 关注 = 创建 actor 订阅（自动入库默认开启，关注后立即后台爬取 javdb 作品）
@@ -203,7 +202,10 @@ export function ActorDetail() {
   const [metaEditing, setMetaEditing] = useState(false)
   const [metaDraft, setMetaDraft] = useState<Record<string, string>>({})
   const [metaSaving, setMetaSaving] = useState(false)
-  // 补齐作品选项：排除 VR 作品（演员页 VR 标签集合差，需 javdb 登录）
+  // 补齐作品过滤（多选取交集）+ 排除 VR（演员页 VR 标签集合差，均需 javdb 登录）
+  const [filterSolo, setFilterSolo] = useState(false)
+  const [filterMagnet, setFilterMagnet] = useState(false)
+  const [filterSubtitle, setFilterSubtitle] = useState(false)
   const [excludeVr, setExcludeVr] = useState(false)
   // 最大共演人数限制（补齐作品时作品女演员数超过则跳过；0=不限）
   const [maxCoStar, setMaxCoStar] = useState<number>(() => {
@@ -469,24 +471,28 @@ export function ActorDetail() {
               title={actorUrl ? '爬取该演员作品列表并入库——已入库的作品自动跳过，只补新作（与「全部补齐」的跳过标记无关）' : '该演员无来源 URL：将按演员名搜索源站后爬取'}>
               <Icon.download />补齐作品
             </button>
-            <button className="btn btn--ghost" onClick={crawlSoloWorks} disabled={false}
-              title={actorUrl ? '只爬取单体作品（javdb 演员页 t=s 过滤）——已入库的作品自动跳过，只补新作' : '该演员无来源 URL：将按演员名搜索源站后爬取单体'}>
-              <Icon.download />补齐单体作品
+            <button className={`btn ${filterSolo ? 'btn--gold' : 'btn--ghost'}`} onClick={() => setFilterSolo(!filterSolo)}
+              title="过滤：单体作品（javdb 演员页 t=s，需登录）——可与其他过滤多选，取交集">
+              单体{filterSolo ? ' ✓' : ''}
             </button>
-            <button className="btn btn--ghost" onClick={crawlMagnetWorks} disabled={false}
-              title={actorUrl ? '只爬取含磁链作品（javdb 演员页 t=d 过滤，需登录）——跳过无磁链作品，效率更高' : '该演员无来源 URL：将按演员名搜索源站后爬取含磁链作品'}>
-              <Icon.download />补齐含磁链作品
+            <button className={`btn ${filterMagnet ? 'btn--gold' : 'btn--ghost'}`} onClick={() => setFilterMagnet(!filterMagnet)}
+              title="过滤：含磁链作品（javdb 演员页 t=d，需登录）——可与其他过滤多选，取交集">
+              含磁链{filterMagnet ? ' ✓' : ''}
             </button>
-            <button className="btn btn--ghost" onClick={crawlSubtitleWorks} disabled={false}
-              title={actorUrl ? '只爬取含字幕作品（javdb 演员页 t=c 过滤，需登录）——只入库有字幕的作品' : '该演员无来源 URL：将按演员名搜索源站后爬取含字幕作品'}>
-              <Icon.download />补齐含字幕作品
+            <button className={`btn ${filterSubtitle ? 'btn--gold' : 'btn--ghost'}`} onClick={() => setFilterSubtitle(!filterSubtitle)}
+              title="过滤：含字幕作品（javdb 演员页 t=c，需登录）——可与其他过滤多选，取交集">
+              含字幕{filterSubtitle ? ' ✓' : ''}
             </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
-              title="爬取时排除 VR 作品（演员页 VR 标签集合差，需 javdb 登录；作用于含磁链/含字幕爬取）">
+              title="爬取时排除 VR 作品（演员页 VR 标签集合差，需 javdb 登录）">
               <input type="checkbox" checked={excludeVr} onChange={(e) => setExcludeVr(e.target.checked)}
                 style={{ accentColor: 'var(--brand)' }} />
               排除VR
             </label>
+            <button className={`btn ${filterSolo || filterMagnet || filterSubtitle ? 'btn--gold' : 'btn--ghost'}`} onClick={crawlFiltered} disabled={false}
+              title={actorUrl ? '按所选过滤补齐作品——多选过滤取交集；全部不选 = 补齐全部作品' : '该演员无来源 URL：将按演员名搜索源站后爬取'}>
+              <Icon.download />按筛选补齐
+            </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
               title="最大共演人数：作品女演员数超过此值则跳过，0=不限（共演人数=1部作品的女演员数量，仅保存在本机浏览器）">
               最大共演

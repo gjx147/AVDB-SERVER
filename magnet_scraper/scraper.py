@@ -2175,8 +2175,7 @@ def main():
     actor_parser.add_argument("--max-co-star", type=int, default=0, help="最大共演人数限制（作品女演员数超过则跳过；0=不限）")
     actor_parser.add_argument("--solo-only", action="store_true", help="只爬单体作品（javdb 演员页 t=s 过滤；等价 --video-filter solo）")
     actor_parser.add_argument("--video-filter", type=str, default="none",
-                              choices=["none", "solo", "magnet", "subtitle"],
-                              help="作品列表过滤（需 javdb 登录）: solo=单体t=s / magnet=含磁链t=d / subtitle=含字幕t=c / none=不过滤")
+                              help="作品列表过滤（需 javdb 登录，多选逗号分隔取交集）: solo=单体t=s / magnet=含磁链t=d / subtitle=含字幕t=c / none=不过滤，如 solo,magnet")
     actor_parser.add_argument("--exclude-vr", action="store_true", help="排除 VR 作品（演员页 VR 标签集合差；需登录）")
     actor_parser.add_argument("--no-extract", action="store_true", help="只入库作品列表，不提取详情（磁力/元数据/图片）；巡检用")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
@@ -2393,8 +2392,9 @@ def main():
                     _solo = bool(getattr(args, "solo_only", False))
                     _vf = getattr(args, "video_filter", "none") or "none"
                     _evr = bool(getattr(args, "exclude_vr", False))
-                    _vf_desc = {"solo": "仅单体作品", "magnet": "仅含磁链作品",
-                                "subtitle": "仅含字幕作品", "none": ""}.get(_vf, "")
+                    _vf_map = {"solo": "单体", "magnet": "含磁链", "subtitle": "含字幕"}
+                    _vf_desc = ("仅" + "+".join(_vf_map.get(f.strip(), f.strip())
+                                               for f in _vf.split(",") if f.strip() and f.strip() != "none")) if _vf != "none" else ""
                     logger.info(f"执行演员爬取: {actor_url}" + (f"（actor_id={_actor_id}）" if _actor_id else "")
                                 + (f"（最大共演 {_max_co} 人）" if _max_co > 0 else "")
                                 + (f"（{_vf_desc}）" if _vf_desc else "")

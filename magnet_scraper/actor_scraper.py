@@ -354,9 +354,9 @@ class ActorScraper:
         2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过）
         3. 入库演员 + 创建 pending task
 
-        video_filter 列表过滤（需 javdb 登录，未登录自动降级）：
+        video_filter 列表过滤（需 javdb 登录，未登录自动降级），可逗号分隔多选（取交集）：
           "solo"=单体作品(t=s，同 solo_only，向后兼容) / "magnet"=含磁链(t=d) /
-          "subtitle"=含字幕(t=c) / "none"=不过滤
+          "subtitle"=含字幕(t=c) / "none"=不过滤，如 "solo,magnet"
         exclude_vr：排除 VR 作品（演员页 VR 标签列表集合差；需登录，
         未登录降级为无排除并警告）。
 
@@ -371,25 +371,29 @@ class ActorScraper:
         # 向后兼容：solo_only=True 等价 video_filter="solo"
         if solo_only and video_filter == "none":
             video_filter = "solo"
+        # 多选过滤解析（逗号分隔）: solo/magnet/subtitle
+        _filters = [f.strip() for f in (video_filter or "none").split(",") if f.strip() in ("solo", "magnet", "subtitle")]
 
-        _vf_desc = {"solo": "仅单体作品t=s", "magnet": "仅含磁链作品t=d",
-                    "subtitle": "仅含字幕作品t=c", "none": ""}.get(video_filter, "")
+        _vf_desc = {"solo": "单体t=s", "magnet": "含磁链t=d", "subtitle": "含字幕t=c"}
+        _desc = "+".join(_vf_desc.get(f, f) for f in _filters)
         logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else "")
                     + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else "")
-                    + (f"（{_vf_desc}）" if _vf_desc else "")
+                    + (f"（仅{_desc}）" if _desc else "")
                     + ("（排除VR作品）" if exclude_vr else ""))
-        if video_filter != "none":
+        if _filters:
             # t= 列表过滤需登录；登录成功用 URL 过滤（省一半详情页访问）
             if self.ensure_logged_in():
-                logger.info(f"已登录：列表过滤生效（{video_filter}）")
-            elif video_filter == "solo":
+                logger.info(f"已登录：列表过滤生效（{_desc}）" + ("，多选维度取交集" if len(_filters) > 1 else ""))
+            elif _filters == ["solo"]:
                 # 失败/未配置账号：solo 降级为详情页数女演员过滤（慢但可用）
                 logger.warning("未登录：单体过滤降级为详情页女演员数过滤（较慢）")
                 video_filter = "none"
+                _filters = []
                 max_co_star = 1
             else:
-                logger.warning(f"未登录：{video_filter} 过滤不可用，降级为无过滤继续")
+                logger.warning("未登录：列表过滤不可用，降级为无过滤继续")
                 video_filter = "none"
+                _filters = []
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
@@ -399,9 +403,29 @@ class ActorScraper:
 
         # 1. 爬取演员信息 + 2. 作品列表
         info = self.crawl_actor_info(actor_url)
-        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star,
-                                        solo_only=solo_only, video_filter=video_filter,
-                                        exclude_vr=exclude_vr)
+        if len(_filters) > 1:
+            # 多选过滤：JavDB t= 参数单值——分别爬各维度列表后取交集
+            sets = []
+            for f in _filters:
+                sub = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=0,
+                                              solo_only=False, video_filter=f, exclude_vr=False)
+                sets.append(set(sub))
+                logger.info(f"过滤维度 {f}: {len(sub)} 部")
+            movies = sorted(set.intersection(*sets)) if sets else []
+            logger.info(f"多选过滤交集: {len(movies)} 部（{'+'.join(_filters)}）")
+            if exclude_vr and movies:
+                vr_urls = self._fetch_actor_tag_urls(actor_url.rstrip("/"), "VR")
+                if vr_urls is None:
+                    logger.warning("VR 标签列表不可用（未登录/被拦截）：本次不排除 VR")
+                else:
+                    before = len(movies)
+                    movies = [u for u in movies if u not in vr_urls]
+                    logger.info(f"VR 排除（标签集合差）: {before} -> {len(movies)}（排除 {before - len(movies)} 部）")
+            # 多选过滤交集已足够精准，跳过共演人数核对
+        else:
+            movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star,
+                                            solo_only=solo_only, video_filter=video_filter,
+                                            exclude_vr=exclude_vr)
         logger.info(f"演员作品列表: {len(movies)} 部")
 
         # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
@@ -639,6 +663,9 @@ class ActorScraper:
         # 向后兼容
         if solo_only and video_filter == "none":
             video_filter = "solo"
+        if "," in (video_filter or ""):
+            logger.warning("crawl_actor_movies 仅支持单一过滤维度，多选交集请在 crawl_actor_full 层处理")
+            video_filter = "none"
         _t = {"solo": "s", "magnet": "d", "subtitle": "c"}.get(video_filter)
 
         all_urls = []
@@ -709,7 +736,7 @@ class ActorScraper:
 
         # 共演人数限制：逐部访问详情页统计女演员数，超过上限跳过
         # （单体作品模式下全部为 1 人，无需核对，直接跳过该环节省时间）
-        if max_co_star > 0 and not solo_only and all_urls:
+        if max_co_star > 0 and not solo_only and _t != "s" and all_urls:
             logger.info(f"开始共演人数核对（上限 {max_co_star} 人），共 {len(all_urls)} 部")
             kept: list[str] = []
             skipped = 0

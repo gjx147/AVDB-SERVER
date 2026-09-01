@@ -278,8 +278,9 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
     solo_only = bool(body.solo_only) if body else False
     video_filter = (getattr(body, "video_filter", "none") or "none") if body else "none"
     exclude_vr = bool(getattr(body, "exclude_vr", False)) if body else False
-    if video_filter not in ("none", "solo", "magnet", "subtitle"):
-        video_filter = "none"
+    if video_filter != "none":
+        _parts = [p.strip() for p in video_filter.split(",") if p.strip() in ("solo", "magnet", "subtitle")]
+        video_filter = ",".join(_parts) if _parts else "none"
     # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
     # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
