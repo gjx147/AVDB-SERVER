@@ -403,6 +403,34 @@ class ActorScraper:
 
         # 3. 入库/更新演员
         if actor_id:
+            # 安全闸：爬取到的演员名与库内该 id 的名字必须一致（相等或互含）。
+            # 防止上游选错演员后污染库内记录（案例: 桜木凛 的订阅爬了 桜庭ひかり 的
+            # 页面，头像/元数据/142 部作品关联全部写错）。
+            try:
+                with self.store._conn() as conn:
+                    _row = conn.execute(
+                        "SELECT name FROM actors WHERE id=?", (actor_id,)
+                    ).fetchone()
+                db_name = (_row["name"] if _row else "") or ""
+            except Exception as e:
+                logger.debug(f"读取库内演员名失败（跳过安全闸）: {e}")
+                db_name = ""
+            crawled_name = (info.get("name") or "").strip()
+            if db_name and crawled_name and not (
+                db_name == crawled_name
+                or db_name in crawled_name
+                or crawled_name in db_name
+            ):
+                logger.error(
+                    f"演员名不一致，中止入库: 库内 id={actor_id} 是 '{db_name}'，"
+                    f"页面爬取到 '{crawled_name}'（URL: {actor_url}）。"
+                    f"请检查该演员的 source_url 是否指向错误页面。"
+                )
+                return {
+                    "actor": db_name, "actor_id": actor_id,
+                    "movie_count": 0, "tasks_added": 0,
+                    "error": "actor_name_mismatch",
+                }
             # 指定 id：直接更新该演员元数据，按 id 关联作品（不依赖名字匹配，杜绝重复演员）
             self.store.update_actor_meta(actor_id, **meta)
             name = info.get("name") or f"actor_{actor_id}"

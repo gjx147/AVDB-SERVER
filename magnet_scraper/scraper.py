@@ -2345,8 +2345,32 @@ def main():
                         logger.info(f"通过名字搜索演员: {actor_name}")
                         results = a.search_actor(actor_name)
                         if results:
-                            actor_url = results[0]["detail_url"]
-                            logger.info(f"找到演员: {results[0]['name']} -> {actor_url}")
+                            # 精确名匹配优先，杜绝搜索结果按相关度排序导致的误配
+                            # （案例: 搜 桜木凛 第一名是 桜庭ひかり）
+                            exact = next((r for r in results if r["name"] == actor_name), None)
+                            if exact:
+                                chosen = exact
+                            else:
+                                # 无精确匹配时用单向包含匹配（别名场景），打警告留痕
+                                chosen = next(
+                                    (r for r in results
+                                     if actor_name in r["name"] or r["name"] in actor_name),
+                                    None,
+                                )
+                            if chosen:
+                                if chosen is not exact:
+                                    logger.warning(
+                                        f"演员搜索无精确匹配，使用模糊匹配: {actor_name} -> {chosen['name']}"
+                                        f"（全部候选: {[r['name'] for r in results]}）"
+                                    )
+                                actor_url = chosen["detail_url"]
+                                logger.info(f"找到演员: {chosen['name']} -> {actor_url}")
+                            else:
+                                logger.error(
+                                    f"搜索到 {len(results)} 位演员但无一匹配 '{actor_name}': "
+                                    f"{[r['name'] for r in results]}，中止（不爬取错误演员）"
+                                )
+                                break
                         else:
                             # 搜索页被 Cloudflare 拦截的兜底：从已关联作品详情页提取演员 URL
                             # （详情页审查宽松，作品页面板块有 /actors/ 链接）
