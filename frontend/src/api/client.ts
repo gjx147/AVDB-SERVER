@@ -211,8 +211,8 @@ export const api = {
       ).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),
-    crawlWorks: (actorId: number, maxCoStar = 0, soloOnly = false) =>
-      http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`, { max_co_star: maxCoStar, solo_only: soloOnly }).then((r) => r.data),
+    crawlWorks: (actorId: number, maxCoStar = 0, soloOnly = false, videoFilter: 'none' | 'solo' | 'magnet' | 'subtitle' = 'none', excludeVr = false) =>
+      http.post<{ ok: boolean; pid: number; mode: string; actor_url: string }>(`/api/actors/${actorId}/crawl-works`, { max_co_star: maxCoStar, solo_only: soloOnly, video_filter: videoFilter, exclude_vr: excludeVr }).then((r) => r.data),
     refreshProfile: (actorId: number) =>
       http.post<{ ok: boolean; source: string | null; fields?: Record<string, string | null>; message?: string; locked_skipped?: string[] }>(`/api/actors/${actorId}/refresh-profile`).then((r) => r.data),
     profileQueueStatus: () =>

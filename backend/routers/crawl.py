@@ -608,13 +608,16 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
 
 def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: int | None = None,
-                      solo_only: bool = False, actor_name: str | None = None) -> dict:
+                      solo_only: bool = False, actor_name: str | None = None,
+                      video_filter: str = "none", exclude_vr: bool = False) -> dict:
     """公共函数：触发演员作品爬取子进程（供 /api/crawl/actor 和 /api/actors/{id}/crawl-works 复用）。
 
     检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
     actor_id：已知目标演员时传入，scraper 会按 id 关联作品，杜绝因名字匹配建重复演员。
     max_co_star：最大共演人数限制（作品女演员数超过则跳过；None/0 = 不限）。
-    solo_only：只爬单体作品（javdb 演员页 t=s 过滤）。
+    solo_only：只爬单体作品（javdb 演员页 t=s 过滤）——向后兼容，等价 video_filter="solo"。
+    video_filter：作品列表过滤（需登录）solo/magnet/subtitle/none。
+    exclude_vr：排除 VR 作品（演员页 VR 标签集合差；需登录）。
     """
     if actor_name and not actor_url:
         # 无 URL：按演员名搜索源站（搜索到自动回写 source_url）
@@ -625,8 +628,12 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
         cmd += ["--actor-id", str(actor_id)]
     if max_co_star and max_co_star > 0:
         cmd += ["--max-co-star", str(max_co_star)]
-    if solo_only:
-        cmd += ["--solo-only"]
+    if solo_only and video_filter == "none":
+        video_filter = "solo"
+    if video_filter and video_filter != "none":
+        cmd += ["--video-filter", video_filter]
+    if exclude_vr:
+        cmd += ["--exclude-vr"]
     proc = _start_scraper_guarded(cmd, {
         "mode": "actor", "actor_url": actor_url or f"search:{actor_name}",
         "started_at": _now_iso(),

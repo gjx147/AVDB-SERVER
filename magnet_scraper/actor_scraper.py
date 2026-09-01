@@ -345,13 +345,20 @@ class ActorScraper:
         """
         return ""
 
-    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0, solo_only: bool = False) -> dict:
+    def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0,
+                         solo_only: bool = False, video_filter: str = "none",
+                         exclude_vr: bool = False) -> dict:
         """完整爬取演员信息 + 作品列表。
 
         1. 爬取演员详情页（姓名/头像/身高/罩杯等）
-        2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过；
-           solo_only=True 只爬单体作品：javdb 演员页 t=s 过滤，如 ?sort_type=0&t=s）
+        2. 翻页爬取演员作品列表（max_co_star>0 时逐部核对共演人数，超过上限跳过）
         3. 入库演员 + 创建 pending task
+
+        video_filter 列表过滤（需 javdb 登录，未登录自动降级）：
+          "solo"=单体作品(t=s，同 solo_only，向后兼容) / "magnet"=含磁链(t=d) /
+          "subtitle"=含字幕(t=c) / "none"=不过滤
+        exclude_vr：排除 VR 作品（演员页 VR 标签列表集合差；需登录，
+        未登录降级为无排除并警告）。
 
         actor_id：若调用方已知目标演员（如演员库"补齐作品"），直接按 id 更新
         元数据并关联作品，不依赖名字匹配——杜绝因名字差异/污染而新建重复演员。
@@ -361,18 +368,28 @@ class ActorScraper:
         """
         self._ensure_browser()
 
+        # 向后兼容：solo_only=True 等价 video_filter="solo"
+        if solo_only and video_filter == "none":
+            video_filter = "solo"
+
+        _vf_desc = {"solo": "仅单体作品t=s", "magnet": "仅含磁链作品t=d",
+                    "subtitle": "仅含字幕作品t=c", "none": ""}.get(video_filter, "")
         logger.info(f"开始完整爬取演员: {actor_url}" + (f"（指定 actor_id={actor_id}）" if actor_id else "")
                     + (f"（最大共演 {max_co_star} 人）" if max_co_star > 0 else "")
-                    + ("（仅单体作品）" if solo_only else ""))
-        if solo_only:
-            # t=s 单体过滤需登录；登录成功用 URL 过滤（省一半详情页访问），
-            # 失败/未配置账号则降级为详情页数女演员过滤（max_co_star=1，慢但可用）
+                    + (f"（{_vf_desc}）" if _vf_desc else "")
+                    + ("（排除VR作品）" if exclude_vr else ""))
+        if video_filter != "none":
+            # t= 列表过滤需登录；登录成功用 URL 过滤（省一半详情页访问）
             if self.ensure_logged_in():
-                logger.info("已登录：单体过滤使用 t=s 列表过滤")
-            else:
+                logger.info(f"已登录：列表过滤生效（{video_filter}）")
+            elif video_filter == "solo":
+                # 失败/未配置账号：solo 降级为详情页数女演员过滤（慢但可用）
                 logger.warning("未登录：单体过滤降级为详情页女演员数过滤（较慢）")
-                solo_only = False
+                video_filter = "none"
                 max_co_star = 1
+            else:
+                logger.warning(f"未登录：{video_filter} 过滤不可用，降级为无过滤继续")
+                video_filter = "none"
         self.scraper._write_crawl_status(
             phase="actor", crawl_type="actor", actor_url=actor_url,
         )
@@ -382,7 +399,9 @@ class ActorScraper:
 
         # 1. 爬取演员信息 + 2. 作品列表
         info = self.crawl_actor_info(actor_url)
-        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star, solo_only=solo_only)
+        movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star,
+                                        solo_only=solo_only, video_filter=video_filter,
+                                        exclude_vr=exclude_vr)
         logger.info(f"演员作品列表: {len(movies)} 部")
 
         # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
@@ -555,21 +574,80 @@ class ActorScraper:
 
         return info
 
-    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0, solo_only: bool = False) -> list:
+    def _fetch_actor_tag_urls(self, actor_base: str, tag_name: str, max_pages: int = 20) -> set | None:
+        """抓演员页某标签（如 VR）的作品 URL 集合，用于集合差排除 VR。
+
+        标签数字 ID 从演员页 DOM 动态解析（每个演员不同）。
+        登录限定：被登录墙拦截时返回 None 表示不可用（调用方降级）。
+        """
+        import re as _re
+        try:
+            self._goto_with_retry(actor_base)
+            tag_id = None
+            for a in self.page.locator("a[href*='t=']").all():
+                text = (a.inner_text() or "").strip()
+                href = a.get_attribute("href") or ""
+                if tag_name.lower() in text.lower():
+                    m = _re.search(r"[?&]t=(\d+)", href)
+                    if m:
+                        tag_id = m.group(1)
+                        break
+            if not tag_id:
+                logger.info(f"演员页无 {tag_name} 标签 tab（该演员无此类作品）")
+                return set()
+            logger.info(f"解析到 {tag_name} 标签: t={tag_id}")
+
+            urls = set()
+            page_num = 1
+            while page_num <= max_pages:
+                q = f"sort_type=0&t={tag_id}"
+                url = f"{actor_base}?{q}" if page_num == 1 else f"{actor_base}?page={page_num}&{q}"
+                if not self._goto_with_retry(url):
+                    break
+                if "/login" in self.page.url:
+                    logger.warning(f"{tag_name} 标签列表被登录墙拦截")
+                    return None
+                links = self.page.locator("a[href^='/v/']").all()
+                got = 0
+                for link in links:
+                    href = link.get_attribute("href") or ""
+                    if href:
+                        urls.add(urljoin(self.BASE_URL, href))
+                        got += 1
+                if not got:
+                    break
+                logger.info(f"{tag_name} 标签第 {page_num} 页: {got} 部，累计 {len(urls)}")
+                page_num += 1
+                time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
+            return urls
+        except Exception as e:
+            logger.warning(f"抓取 {tag_name} 标签列表失败: {e}")
+            return None
+
+    def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0,
+                           solo_only: bool = False, video_filter: str = "none",
+                           exclude_vr: bool = False) -> list:
         """翻页爬取演员作品列表，返回详情页 URL 列表。
 
         max_co_star > 0 时开启共演人数限制：逐部访问作品详情页统计女演员数，
         超过上限的作品跳过（大共演/総集編不拉进库）。
-        solo_only=True 只爬单体作品：javdb 演员页 t=s 过滤
-        （第 1 页 ?sort_type=0&t=s，第 N 页 ?page=N&sort_type=0&t=s）。
+        video_filter 列表过滤（需登录）："solo"=t=s 单体 / "magnet"=t=d 含磁链 /
+        "subtitle"=t=c 含字幕 / "none"=不过滤；solo_only=True 为向后兼容别名。
+        exclude_vr：爬完主列表后另抓演员页 VR 标签列表做集合差排除（需登录，
+        未登录时打警告跳过）。
         """
+        # 向后兼容
+        if solo_only and video_filter == "none":
+            video_filter = "solo"
+        _t = {"solo": "s", "magnet": "d", "subtitle": "c"}.get(video_filter)
+
         all_urls = []
         page_num = 1
         base_url = actor_url.rstrip("/")
 
         def page_url(n: int) -> str:
-            if solo_only:
-                q = "sort_type=0&t=s"
+            if _t:
+                q = f"sort_type=0&t={_t}"
                 return f"{base_url}?{q}" if n == 1 else f"{base_url}?page={n}&{q}"
             return base_url if n == 1 else f"{base_url}?page={n}"
 
@@ -618,6 +696,16 @@ class ActorScraper:
 
         # 全局去重
         all_urls = list(dict.fromkeys(all_urls))
+
+        # VR 排除：主列表 - 演员页 VR 标签列表 集合差（权威方式）
+        if exclude_vr and all_urls:
+            vr_urls = self._fetch_actor_tag_urls(base_url, "VR")
+            if vr_urls is None:
+                logger.warning("VR 标签列表不可用（未登录/被拦截）：本次不排除 VR，继续爬取")
+            else:
+                before = len(all_urls)
+                all_urls = [u for u in all_urls if u not in vr_urls]
+                logger.info(f"VR 排除（标签集合差）: {before} -> {len(all_urls)}（排除 {before - len(all_urls)} 部）")
 
         # 共演人数限制：逐部访问详情页统计女演员数，超过上限跳过
         # （单体作品模式下全部为 1 人，无需核对，直接跳过该环节省时间）

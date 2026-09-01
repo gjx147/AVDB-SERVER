@@ -253,9 +253,15 @@ def actor_movies_list(
 
 
 class CrawlWorksRequest(BaseModel):
-    """补齐作品请求：最大共演人数限制（作品女演员数超过则跳过；None/0 = 不限）＋单体作品模式。"""
+    """补齐作品请求：最大共演人数限制＋作品过滤模式。
+
+    video_filter: solo=单体(t=s) / magnet=含磁链(t=d) / subtitle=含字幕(t=c) / none=不过滤（需 javdb 登录）
+    exclude_vr: 排除 VR 作品（演员页 VR 标签集合差；需登录）
+    """
     max_co_star: int | None = None
     solo_only: bool = False
+    video_filter: str = "none"
+    exclude_vr: bool = False
 
 
 @router.post("/{actor_id}/crawl-works")
@@ -270,11 +276,16 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
         url = actor.note[len("source_url: "):]
     max_co_star = (body.max_co_star if body else None)
     solo_only = bool(body.solo_only) if body else False
+    video_filter = (getattr(body, "video_filter", "none") or "none") if body else "none"
+    exclude_vr = bool(getattr(body, "exclude_vr", False)) if body else False
+    if video_filter not in ("none", "solo", "magnet", "subtitle"):
+        video_filter = "none"
     # 复用 crawl 模块的子进程启动逻辑（含全局进程锁）
     # 传入 actor_id：让 scraper 按 id 关联作品，避免名字匹配建重复演员
     from routers.crawl import start_actor_crawl
     return start_actor_crawl(url, actor_id=actor.id, max_co_star=max_co_star,
-                             solo_only=solo_only, actor_name=actor.name)
+                             solo_only=solo_only, actor_name=actor.name,
+                             video_filter=video_filter, exclude_vr=exclude_vr)
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──
