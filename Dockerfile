@@ -65,6 +65,7 @@ RUN python -m playwright install chromium || \
 # 复制应用代码
 COPY backend/ ./backend/
 COPY magnet_scraper/ ./magnet_scraper/
+COPY scripts/cleanup_sakuragi_rin.py ./scripts/cleanup_sakuragi_rin.py
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
