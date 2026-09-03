@@ -204,6 +204,7 @@ def actor_movies_list(
     page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
     sort: str = Query("added", description="排序：added=加入日期 / release=发行日期"),
     in_library: bool | None = Query(None, description="按 Emby 在库状态筛选"),
+    q: str = Query("", max_length=100, description="关键字搜索：番号/标题模糊匹配"),
 ):
     """演员的关联作品列表（分页，只含有磁力链接的作品）。"""
     actor = db.get(Actor, actor_id)
@@ -217,6 +218,10 @@ def actor_movies_list(
     ]
     if in_library is not None:
         conds.append(Task.media_in_library == in_library)
+    if q.strip():
+        kw = q.strip().replace("%", r"\%").replace("_", r"\_")
+        pat = f"%{kw}%"
+        conds.append(or_(Task.video_code.ilike(pat, escape="\\"), Task.title.ilike(pat, escape="\\")))
     total = db.execute(
         select(func.count(Task.id))
         .select_from(Task)

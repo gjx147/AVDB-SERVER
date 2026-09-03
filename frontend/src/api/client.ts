@@ -205,9 +205,9 @@ export const api = {
     // 切换自动入库（auto_add）
     toggleAutoAdd: (actorId: number) =>
       http.post<ApiOk & { actor_id: number; auto_add: boolean }>(`/api/actors/${actorId}/auto-add`).then((r) => r.data),
-    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added', inLibrary?: boolean) =>
+    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added', inLibrary?: boolean, q?: string) =>
       http.get<{ items: ActorMovie[]; total: number; page: number; page_size: number }>(
-        `/api/actors/${id}/movies`, { params: { page, page_size, sort, in_library: inLibrary } }
+        `/api/actors/${id}/movies`, { params: { page, page_size, sort, in_library: inLibrary, q: q || undefined } }
       ).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),

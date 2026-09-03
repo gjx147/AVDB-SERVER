@@ -42,6 +42,9 @@ export function ActorDetail() {
   const [total, setTotal] = useState(0)
   const [sort, setSort] = useState<'added' | 'release' | 'rating'>('added')
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  // 作品列表关键字搜索（番号/标题模糊匹配；q=当前生效值，qInput=输入框草稿）
+  const [q, setQ] = useState('')
+  const [qInput, setQInput] = useState('')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -61,20 +64,21 @@ export function ActorDetail() {
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
 
-  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all') => {
+  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all', qv: string = q) => {
     if (!id) return
     try {
-      const r = await api.actors.movies(+id, p, PAGE_SIZE, s, lib === 'all' ? undefined : lib === 'in')
+      const r = await api.actors.movies(+id, p, PAGE_SIZE, s, lib === 'all' ? undefined : lib === 'in', (qv || '').trim() || undefined)
       setMovies(r.items)
       setTotal(r.total)
       setPage(p)
       setSort(s)
       setInLib(lib)
+      setQ((qv || '').trim())
       setSelected(new Set())
     } catch {
       setMovies([]); setTotal(0)
     }
-  }, [id])
+  }, [id, q])
 
   useEffect(() => {
     if (!id) return
@@ -739,6 +743,16 @@ export function ActorDetail() {
             <option value="in">✓ 在媒体库</option>
             <option value="out">✗ 不在媒体库</option>
           </select>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input className="input" type="search" placeholder="搜番号 / 标题" value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') loadMovies(1, sort, inLib, qInput) }}
+              style={{ width: 170, padding: '6px 10px' }} />
+            <button className="btn btn--ghost btn--sm" onClick={() => loadMovies(1, sort, inLib, qInput)}>搜索</button>
+            {q && (
+              <button className="btn btn--ghost btn--sm" onClick={() => { setQInput(''); loadMovies(1, sort, inLib, '') }}>清除</button>
+            )}
+          </div>
           {actor && <ActorProfileInsights actorId={actor.id} />}
       {movies.length > 0 && (
             <button className="btn btn--ghost btn--sm" onClick={toggleAll}>{allSelected ? '取消全选' : '全选本页'}</button>
@@ -747,7 +761,7 @@ export function ActorDetail() {
       </div>
       {total === 0 ? (
         <Empty icon="○" title="暂无关联作品"
-          sub={inLib !== 'all' ? '没有匹配的在库状态——若从未同步过 Emby，请到 设置→媒体→立即同步' : '点击「补齐作品」爬取该演员的作品列表。'} />
+          sub={q ? `没有匹配「${q}」的作品——换个关键字试试` : inLib !== 'all' ? '没有匹配的在库状态——若从未同步过 Emby，请到 设置→媒体→立即同步' : '点击「补齐作品」爬取该演员的作品列表。'} />
       ) : (
         <>
         <div className="gallery">
