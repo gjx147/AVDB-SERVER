@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { DownloadRecord } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
@@ -14,6 +14,7 @@ const statusCls: Record<string, string> = {
 
 export function Downloads() {
   const nav = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<{ downloads: DownloadRecord[]; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   // N26: 字幕上传
@@ -42,7 +43,7 @@ export function Downloads() {
     }).catch(() => {})
     return () => { alive = false }
   }, [])
-  const [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState(() => searchParams.get('status') || '')
   const toastErr = useStore((s) => s.toastErr)
   const toastOk = useStore((s) => s.toastOk)
 
@@ -52,6 +53,12 @@ export function Downloads() {
   }, [filter])
 
   useEffect(() => { load() }, [load])
+
+  // URL 同步：状态筛选（返回/刷新恢复）
+  useEffect(() => {
+    setSearchParams(filter ? { status: filter } : {}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter])
   // 自动刷新：仅页面可见且存在下载中任务时轮询（空闲/后台不请求）
   useEffect(() => {
     const t = setInterval(() => {

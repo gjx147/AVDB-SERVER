@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Ranking, RankType, Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
@@ -88,16 +88,20 @@ const toTask = (r: Ranking, isActor = false): RankingTask => {
 
 export function Rankings() {
   const nav = useNavigate()
-  const [tab, setTab] = useState<RankType>('daily')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab] = useState<RankType>(() => {
+    const t = searchParams.get('tab')
+    return t === 'weekly' || t === 'monthly' || t === 'actor' ? t : 'daily'
+  })
   const [list, setList] = useState<Ranking[] | null>(null)
   const [latest, setLatest] = useState<Record<string, string[]>>({})
-  const [view, setView] = useState<'grid' | 'row'>('grid')
+  const [view, setView] = useState<'grid' | 'row'>(searchParams.get('view') === 'row' ? 'row' : 'grid')
   const [searchQ, setSearchQ] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>('all')
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(searchParams.get('inlib') === 'in' ? 'in' : searchParams.get('inlib') === 'out' ? 'out' : 'all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [refreshing, setRefreshing] = useState<RankType | null>(null)  // 正在按序刷新的榜单
   const [batchBusy, setBatchBusy] = useState(false)
@@ -148,13 +152,23 @@ export function Rankings() {
   // load 含 inLib 依赖会重建：挂载/切筛选都用 ref 取最新 load，避免 effect 把 tab 弹回 daily
   const loadRef = useRef(load)
   useEffect(() => { loadRef.current = load }, [load])
-  useEffect(() => { loadRef.current('daily') }, [])
+  useEffect(() => { loadRef.current(tab) }, [])  // tab 初值来自 URL（返回/刷新恢复）
   const inLibTouched = useRef(false)
   useEffect(() => {
     if (!inLibTouched.current) { inLibTouched.current = true; return }  // 跳过首渲染
     loadRef.current(tab)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inLib])
+
+  // URL 同步：tab/视图/在库（返回/刷新恢复）；搜索与状态筛选为 tab 内临时态（切榜即清，按页面设计不持久化）
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    if (tab !== 'daily') next.tab = tab
+    if (view !== 'grid') next.view = view
+    if (inLib !== 'all') next.inlib = inLib
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, view, inLib])
 
   /** 等待 scraper 全局锁空闲（后端同一时刻只允许一个爬取进程）。
    *  每次触发后都要等它爬完再触发下一个，保证日→周→月→演员严格按序。

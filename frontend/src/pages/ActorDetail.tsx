@@ -123,7 +123,7 @@ export function ActorDetail() {
     // 该演员的新作发现列表
     setActorReleases(null)
     api.newReleases.list({ actor_id: +id, limit: 50 }).then((r) => setActorReleases(r.items || [])).catch(() => setActorReleases([]))
-  }, [id, loadMovies])
+  }, [id])
 
   const crawlWorks = async () => {
     if (!actor) return

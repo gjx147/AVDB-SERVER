@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, withImageAuth, coverFileUrl } from '../api/client'
 import type { Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
@@ -10,10 +11,14 @@ import { useStore } from '../store/useStore'
 interface Collection { id: number; name: string; icon: string; task_count: number }
 
 export function Favorites() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [collections, setCollections] = useState<Collection[]>([])
-  const [activeCol, setActiveCol] = useState<number | null>(null)  // null = 全部收藏
+  const [activeCol, setActiveCol] = useState<number | null>(() => {
+    const v = Number(searchParams.get('col'))
+    return Number.isFinite(v) && v > 0 ? v : null  // null = 全部收藏
+  })
   const [error, setError] = useState<string | null>(null)
   // N21: 收藏夹分享
   const shareColl = async (id: number, name: string) => {
@@ -26,12 +31,21 @@ export function Favorites() {
   }
   const [addingCol, setAddingCol] = useState(false)
   const [newColName, setNewColName] = useState('')
-  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(searchParams.get('inlib') === 'in' ? 'in' : searchParams.get('inlib') === 'out' ? 'out' : 'all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
+
+  // URL 同步：分组/在库（返回/刷新恢复）
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    if (activeCol !== null) next.col = String(activeCol)
+    if (inLib !== 'all') next.inlib = inLib
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCol, inLib])
 
   const load = (lib: 'all' | 'in' | 'out' = inLib) => {
     setTasks(null); setError(null); setSelected(new Set())

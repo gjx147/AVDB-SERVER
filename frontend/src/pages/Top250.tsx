@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Task } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
@@ -51,14 +51,19 @@ function asTask(e: Entry): Task {
 
 export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   const nav = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
-  const [kind, setKind] = useState(mode === 'cat' ? 6 : 2025)
+  const [kind, setKind] = useState(() => {
+    const v = Number(searchParams.get('kind'))
+    return Number.isFinite(v) && v > 0 ? v : (mode === 'cat' ? 6 : 2025)
+  })
   const [list, setList] = useState<Entry[] | null>(null)
-  const [view, setView] = useState<'grid' | 'row'>('grid')
+  const [view, setView] = useState<'grid' | 'row'>(searchParams.get('view') === 'row' ? 'row' : 'grid')
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
-  const [searchQ, setSearchQ] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>('all')
+  const [searchQ, setSearchQ] = useState(() => searchParams.get('q') || '')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'visited' | 'pending'>(
+    searchParams.get('status') === 'visited' ? 'visited' : searchParams.get('status') === 'pending' ? 'pending' : 'all')
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState('')
   const [snapshot, setSnapshot] = useState<string | null>(null)
@@ -77,6 +82,18 @@ export function Top250View({ mode }: { mode: 'cat' | 'year' }) {
   }, [toastErr])
 
   useEffect(() => { load(kind) }, [kind, load])
+
+  // URL 同步：榜单/视图/搜索/状态（返回/刷新恢复）
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    const defKind = mode === 'cat' ? 6 : 2025
+    if (kind !== defKind) next.kind = String(kind)
+    if (view !== 'grid') next.view = view
+    if (searchQ.trim()) next.q = searchQ.trim()
+    if (filterStatus !== 'all') next.status = filterStatus
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, view, searchQ, filterStatus])
 
   // 年份模式：进入页面若该年份尚无数据，自动从数据包查询（首次会下载数据包缓存到服务器）
   const autoQ = useRef<Set<number>>(new Set())
