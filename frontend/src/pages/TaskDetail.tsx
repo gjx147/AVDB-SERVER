@@ -198,7 +198,9 @@ export function TaskDetail() {
     try {
       await api.tasks.delete(task.id)
       toastOk('已删除')
-      nav('/library')
+      // 回退到来源页（演员详情/影片库等，各自按 URL 恢复筛选状态）；无历史才兜底去影片库
+      if (window.history.length > 1) nav(-1)
+      else nav('/library')
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const download = async (magnet: string) => {
