@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
@@ -36,14 +36,22 @@ import { useNavMode } from '../i18n/whisper'
 export function ActorDetail() {
   const { id } = useParams()
   const nav = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [actor, setActor] = useState<Actor | null | undefined>(undefined)
   const [movies, setMovies] = useState<ActorMovie[]>([])
-  const [page, setPage] = useState(1)
+  // 作品列表状态从 URL 恢复（返回/刷新不丢）
+  const [page, setPage] = useState(() => {
+    const n = Number(searchParams.get('page'))
+    return Number.isFinite(n) && n > 0 ? n : 1
+  })
   const [total, setTotal] = useState(0)
-  const [sort, setSort] = useState<'added' | 'release' | 'rating'>('added')
-  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>('all')
+  const [sort, setSort] = useState<'added' | 'release' | 'rating'>(() => {
+    const sv = searchParams.get('sort')
+    return sv === 'release' || sv === 'rating' ? sv : 'added'
+  })
+  const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(searchParams.get('lib') === 'in' ? 'in' : searchParams.get('lib') === 'out' ? 'out' : 'all')
   // 作品列表关键字搜索（番号/标题模糊匹配；q=当前生效值，qInput=输入框草稿）
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(() => searchParams.get('q') || '')
   const [qInput, setQInput] = useState('')
   const [subscribed, setSubscribed] = useState(false)
   const [autoAdd, setAutoAdd] = useState(false)
@@ -74,6 +82,13 @@ export function ActorDetail() {
       setSort(s)
       setInLib(lib)
       setQ((qv || '').trim())
+      // URL 同步：排序/在库/页码/关键字序列化（返回/刷新恢复）
+      const next: Record<string, string> = {}
+      if (s !== 'added') next.sort = s
+      if (lib !== 'all') next.lib = lib
+      if (p > 1) next.page = String(p)
+      if ((qv || '').trim()) next.q = (qv || '').trim()
+      setSearchParams(next, { replace: true })
       setSelected(new Set())
     } catch {
       setMovies([]); setTotal(0)
@@ -82,7 +97,13 @@ export function ActorDetail() {
 
   useEffect(() => {
     if (!id) return
-    setActor(undefined); setError(null); setMovies([]); setTotal(0); setPage(1)
+    setActor(undefined); setError(null); setMovies([]); setTotal(0)
+    // 从 URL 恢复作品列表状态（演员间跳转时参数可能不同）
+    const sort0 = searchParams.get('sort') === 'release' ? 'release' : searchParams.get('sort') === 'rating' ? 'rating' : 'added'
+    const lib0 = searchParams.get('lib') === 'in' ? 'in' : searchParams.get('lib') === 'out' ? 'out' : 'all'
+    const q0 = searchParams.get('q') || ''
+    const p0 = Math.max(1, Number(searchParams.get('page')) || 1)
+    setSort(sort0); setInLib(lib0); setQ(q0); setPage(p0); setQInput(q0)
     Promise.all([
       api.actors.get(+id).catch((e) => { setError(String((e as Error).message)); return null }),
       api.subscriptions.list(true).then((list: unknown) => {
@@ -98,7 +119,7 @@ export function ActorDetail() {
       setSubscribed((sub as { subscribed: boolean }).subscribed)
       setAutoAdd((sub as { autoAdd: boolean }).autoAdd)
     })
-    loadMovies(1, 'added')
+    loadMovies(p0, sort0, lib0, q0)
     // 该演员的新作发现列表
     setActorReleases(null)
     api.newReleases.list({ actor_id: +id, limit: 50 }).then((r) => setActorReleases(r.items || [])).catch(() => setActorReleases([]))

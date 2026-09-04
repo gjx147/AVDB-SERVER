@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Actor } from '../api/types'
 import { PageHead, Empty, ErrorEmpty } from '../components/States'
@@ -12,17 +12,23 @@ const PAGE = 90
 
 export function Actors() {
   const nav = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [actors, setActors] = useState<Actor[] | null>(null)
-  const [kw, setKw] = useState('')
+  // 列表状态从 URL 恢复（返回/刷新不丢）：kw=输入框草稿，activeKw=当前生效关键字
+  const [kw, setKw] = useState(() => searchParams.get('kw') || '')
+  const [activeKw, setActiveKw] = useState(() => searchParams.get('kw') || '')
   const [adding, setAdding] = useState(false)
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set())
-  const [onlyWithAvatar, setOnlyWithAvatar] = useState(true)  // 默认只显示有头像的演员
-  const [onlyFollowed, setOnlyFollowed] = useState(false)  // 只看关注的
+  const [onlyWithAvatar, setOnlyWithAvatar] = useState(searchParams.get('avatar') !== '0')  // 默认只显示有头像的演员
+  const [onlyFollowed, setOnlyFollowed] = useState(searchParams.get('followed') === '1')  // 只看关注的
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(() => {
+    const n = Number(searchParams.get('page'))
+    return Number.isFinite(n) && n > 0 ? n - 1 : 0
+  })
   const [total, setTotal] = useState(0)
   // 一键提取演员信息：后台任务 + 轮询进度
   const [profStatus, setProfStatus] = useState<{ running: boolean; total: number; idx: number; current_name: string | null; done: number; skipped: number; failed: number; last_summary: string | null } | null>(null)
@@ -41,7 +47,7 @@ export function Actors() {
     const wa = opts?.withAvatar !== undefined ? opts.withAvatar : onlyWithAvatar
     const fd = opts?.followed !== undefined ? opts.followed : onlyFollowed
     const pg = pageOverride !== undefined ? pageOverride : page
-    const q = keyword?.trim() || undefined
+    const q = (keyword !== undefined ? keyword.trim() : activeKw.trim()) || undefined
     api.actors.listPage(pg + 1, PAGE, wa, fd, q).then((r) => {
       if (reqId !== reqSeqRef.current) return
       setActors(r.items)
@@ -50,11 +56,23 @@ export function Actors() {
       if (reqId !== reqSeqRef.current) return
       setError(String((e as Error).message)); setActors([])
     })
-  }, [onlyWithAvatar, onlyFollowed, page])
+  }, [onlyWithAvatar, onlyFollowed, page, activeKw])
   useEffect(() => { load() }, [load])
+
+  // URL 同步：关键字/筛选/页码序列化（返回/刷新/分享恢复）
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    if (activeKw.trim()) next.kw = activeKw.trim()
+    if (!onlyWithAvatar) next.avatar = '0'
+    if (onlyFollowed) next.followed = '1'
+    if (page > 0) next.page = String(page + 1)
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKw, onlyWithAvatar, onlyFollowed, page])
 
   const goPage = (p: number) => { setPage(p); load(undefined, undefined, p) }
   const resetAndLoad = (keyword?: string, opts?: { withAvatar?: boolean; followed?: boolean }) => {
+    if (keyword !== undefined) setActiveKw(keyword.trim())
     setPage(0)
     load(keyword, opts, 0)
   }
