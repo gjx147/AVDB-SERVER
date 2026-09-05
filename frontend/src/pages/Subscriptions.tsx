@@ -75,6 +75,8 @@ export function Subscriptions() {
     setMaxCoStar(n)
     localStorage.setItem('maxCoStarLimit', String(n))
   }
+  // 发行日期下限（YYYY-MM-DD，留空=不过滤；仅本次全部补齐生效）
+  const [sinceDate, setSinceDate] = useState('')
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
   // 演员合并对话框
@@ -186,7 +188,7 @@ export function Subscriptions() {
   const fillAllWorks = async () => {
     if (filling) return
     try {
-      await api.subscriptions.fillAllWorks(waitLimitMin, maxCoStar)
+      await api.subscriptions.fillAllWorks(waitLimitMin, maxCoStar, sinceDate)
       toastOk(maxCoStar > 0 ? `已启动全部补齐作品（最大共演 ${maxCoStar} 人，后台串行执行）` : '已启动全部补齐作品（后台串行执行，切走页面不中断）')
       setFillStatus({ running: true, total: 0, idx: 0, current_actor_id: null, current_name: null, done: 0, skipped: 0, failed: 0, wait_limit_min: waitLimitMin, last_summary: null })
       startPolling()
@@ -230,6 +232,13 @@ export function Subscriptions() {
             style={{ width: 48, padding: '5px 8px', textAlign: 'center' }}
             onChange={(e) => setMaxCoStarVal(+e.target.value)}
             onBlur={(e) => { if (!e.target.value) setMaxCoStarVal(0) }} />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+          title="发行日期下限：只补齐该日期（含）之后发行的作品，早于该日期的跳过；留空=不过滤。仅本次全部补齐生效。">
+          日期下限
+          <input className="input" type="date" value={sinceDate}
+            onChange={(e) => setSinceDate(e.target.value)}
+            style={{ width: 128, padding: '5px 8px' }} />
         </label>
         <button className="btn btn--gold btn--sm" onClick={fillAllWorks} disabled={filling}
           title="后台逐位为未补齐的订阅演员补齐作品（已补齐标记的演员自动跳过；串行执行，切走页面/刷新不中断）">

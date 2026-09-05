@@ -128,14 +128,14 @@ export function ActorDetail() {
   const crawlWorks = async () => {
     if (!actor) return
     try {
-      await api.actors.crawlWorks(actor.id, maxCoStar)
+      await api.actors.crawlWorks(actor.id, maxCoStar, false, 'none', false, sinceDate)
       toastOk(maxCoStar > 0 ? `已开始补齐 ${actor.name} 的作品（最大共演 ${maxCoStar} 人）` : `已开始补齐 ${actor.name} 的作品`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
   const crawlSoloWorks = async () => {
     if (!actor) return
     try {
-      await api.actors.crawlWorks(actor.id, maxCoStar, true)
+      await api.actors.crawlWorks(actor.id, maxCoStar, true, 'none', false, sinceDate)
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
     } catch (e) { toastErr(String((e as Error).message)) }
   }
@@ -147,7 +147,7 @@ export function ActorDetail() {
     if (filterSubtitle) fs.push('subtitle')
     if (fs.length === 0) { await crawlWorks(); return }
     try {
-      await api.actors.crawlWorks(actor.id, maxCoStar, false, fs.join(','), excludeVr)
+      await api.actors.crawlWorks(actor.id, maxCoStar, false, fs.join(','), excludeVr, sinceDate)
       const names = fs.map((f) => f === 'solo' ? '单体' : f === 'magnet' ? '含磁链' : '含字幕').join('+')
       toastOk(`已开始补齐 ${actor.name} 的作品（${names}${excludeVr ? '，排除VR' : ''}）`)
     } catch (e) { toastErr(String((e as Error).message)) }
@@ -232,6 +232,8 @@ export function ActorDetail() {
   const [filterMagnet, setFilterMagnet] = useState(false)
   const [filterSubtitle, setFilterSubtitle] = useState(false)
   const [excludeVr, setExcludeVr] = useState(false)
+  // 发行日期下限（YYYY-MM-DD，留空=不过滤；仅本次补齐生效，不持久化）
+  const [sinceDate, setSinceDate] = useState('')
   // 最大共演人数限制（补齐作品时作品女演员数超过则跳过；0=不限）
   const [maxCoStar, setMaxCoStar] = useState<number>(() => {
     const v = parseInt(localStorage.getItem('maxCoStarLimit') ?? '', 10)
@@ -525,6 +527,13 @@ export function ActorDetail() {
                 onChange={(e) => setMaxCoStarVal(+e.target.value)}
                 onBlur={(e) => { if (!e.target.value) setMaxCoStarVal(0) }}
                 style={{ width: 48, padding: '5px 6px', textAlign: 'center' }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--t-mute)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+              title="发行日期下限：只补齐该日期（含）之后发行的作品，早于该日期的跳过；留空=不过滤。仅本次补齐生效。">
+              日期下限
+              <input className="input" type="date" value={sinceDate}
+                onChange={(e) => setSinceDate(e.target.value)}
+                style={{ width: 128, padding: '5px 6px' }} />
             </label>
             <button className={`btn ${autoAdd ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleAutoAdd} disabled={!subscribed}
               title={!subscribed ? '请先关注' : (autoAdd ? '点击关闭自动入库' : '点击开启：有新作自动入库+下载')}>

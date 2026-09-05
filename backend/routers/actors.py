@@ -273,6 +273,7 @@ class CrawlWorksRequest(BaseModel):
     solo_only: bool = False
     video_filter: str = "none"
     exclude_vr: bool = False
+    since: str = ""
 
 
 @router.post("/{actor_id}/crawl-works")
@@ -289,6 +290,9 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
     solo_only = bool(body.solo_only) if body else False
     video_filter = (getattr(body, "video_filter", "none") or "none") if body else "none"
     exclude_vr = bool(getattr(body, "exclude_vr", False)) if body else False
+    since = (getattr(body, "since", "") or "").strip() if body else ""
+    if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD（如 2020-01-01）")
     if video_filter != "none":
         _parts = [p.strip() for p in video_filter.split(",") if p.strip() in ("solo", "magnet", "subtitle")]
         video_filter = ",".join(_parts) if _parts else "none"
@@ -297,7 +301,7 @@ def crawl_actor_works(actor_id: int, body: CrawlWorksRequest | None, db: DbSessi
     from routers.crawl import start_actor_crawl
     return start_actor_crawl(url, actor_id=actor.id, max_co_star=max_co_star,
                              solo_only=solo_only, actor_name=actor.name,
-                             video_filter=video_filter, exclude_vr=exclude_vr)
+                             video_filter=video_filter, exclude_vr=exclude_vr, since=since)
 
 
 # ── 双源资料聚合：手动重试 + 队列状态（自动抓取由 actor_profile_sync 定时任务完成）──

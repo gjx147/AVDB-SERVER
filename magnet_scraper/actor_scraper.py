@@ -347,7 +347,7 @@ class ActorScraper:
 
     def crawl_actor_full(self, actor_url: str, actor_id: int | None = None, max_co_star: int = 0,
                          solo_only: bool = False, video_filter: str = "none",
-                         exclude_vr: bool = False) -> dict:
+                         exclude_vr: bool = False, since: str = "") -> dict:
         """完整爬取演员信息 + 作品列表。
 
         1. 爬取演员详情页（姓名/头像/身高/罩杯等）
@@ -406,7 +406,7 @@ class ActorScraper:
         # 多选（t= 多值 AND 组合，如 solo,magnet → t=s%2Cd）由 crawl_actor_movies 原生构造
         movies = self.crawl_actor_movies(actor_url, max_pages=50, max_co_star=max_co_star,
                                         solo_only=solo_only, video_filter=video_filter,
-                                        exclude_vr=exclude_vr)
+                                        exclude_vr=exclude_vr, since=since)
         logger.info(f"演员作品列表: {len(movies)} 部")
 
         # 可刷新的元数据（剔除 None，避免覆盖该演员已有的好数据）
@@ -631,7 +631,7 @@ class ActorScraper:
 
     def crawl_actor_movies(self, actor_url: str, max_pages: int = 50, max_co_star: int = 0,
                            solo_only: bool = False, video_filter: str = "none",
-                           exclude_vr: bool = False) -> list:
+                           exclude_vr: bool = False, since: str = "") -> list:
         """翻页爬取演员作品列表，返回详情页 URL 列表。
 
         max_co_star > 0 时开启共演人数限制：逐部访问作品详情页统计女演员数，
@@ -681,19 +681,47 @@ class ActorScraper:
                     break
 
                 page_urls = []
+                skipped_older = 0
+                dated_cnt = 0
                 for link in links:
                     try:
                         href = link.get_attribute("href") or ""
-                        if href:
-                            full_url = urljoin(self.BASE_URL, href)
-                            page_urls.append(full_url)
+                        if not href:
+                            continue
+                        full_url = urljoin(self.BASE_URL, href)
+                        # 发行日期过滤：从列表 tile 文本提取 YYYY-MM-DD（取不到日期时保留，绝不静默丢弃作品）
+                        if since:
+                            d = ""
+                            try:
+                                txt = link.evaluate(
+                                    "el => { const c = el.closest('div.item, div.grid-item, article, li') || el.parentElement; return (c ? c.innerText : el.innerText) || '' }"
+                                ) or ""
+                                m = re.search(r"\d{4}-\d{2}-\d{2}", txt)
+                                if m:
+                                    d = m.group(0)
+                            except Exception:
+                                d = ""
+                            if d:
+                                dated_cnt += 1
+                                if d < since:
+                                    skipped_older += 1
+                                    continue
+                        page_urls.append(full_url)
                     except Exception:
                         continue
+
+                if since:
+                    logger.info(f"第 {page_num} 页日期过滤: 早于 {since} 跳过 {skipped_older} 部（解析到日期 {dated_cnt} 个），保留 {len(page_urls)} 部")
 
                 if not page_urls:
                     break
 
                 all_urls.extend(page_urls)
+
+                # 列表按发行时间倒序：整页解析到的日期全部早于下限 → 后续页只会更旧，提前停止翻页
+                if since and dated_cnt >= 3 and skipped_older == dated_cnt:
+                    logger.info(f"第 {page_num} 页全部早于 {since}，提前停止翻页")
+                    break
                 logger.info(f"第 {page_num} 页提取 {len(page_urls)} 部作品，累计 {len(all_urls)} 部")
 
                 self.scraper._write_crawl_status(

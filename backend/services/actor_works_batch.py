@@ -48,7 +48,8 @@ def status() -> dict:
         return dict(_state)
 
 
-def start(wait_limit_min: int = 60, max_co_star: int = 0, force: bool = False) -> tuple[bool, str]:
+def start(wait_limit_min: int = 60, max_co_star: int = 0, force: bool = False,
+          since: str = "") -> tuple[bool, str]:
     """启动后台任务。已在运行返回 (False, 原因)。
 
     force=False：增量——跳过已标记 works_fetched 的演员（默认）
@@ -65,6 +66,7 @@ def start(wait_limit_min: int = 60, max_co_star: int = 0, force: bool = False) -
             "done": 0, "skipped": 0, "failed": 0, "marked_skipped": 0,
             "wait_limit_min": max(1, min(2880, int(wait_limit_min or 60))),
             "max_co_star": max(0, int(max_co_star or 0)),
+            "since": (since or "").strip(),
             "force": bool(force),
             "last_summary": None,
         })
@@ -127,6 +129,7 @@ def _run() -> None:
         _state["marked_skipped"] = int(marked)
     wait_min = _state["wait_limit_min"]
     max_co = _state["max_co_star"]
+    since = _state.get("since", "")
     logger.info("全部补齐作品开始: %d 位演员（已补齐跳过 %d 位；每演员等待上限 %d 分钟，最大共演 %s）",
                 len(sub_list), marked, wait_min, f"{max_co} 人" if max_co > 0 else "不限")
 
@@ -158,17 +161,17 @@ def _run() -> None:
         started = False
         try:
             if url:
-                start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+                start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co, since=since)
             else:
                 logger.info("补齐 %s: 无 JavDB URL，按名字搜索源站（命中后自动回写）", name)
-                start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name)
+                start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name, since=since)
             started = True
         except Exception as e:
             def _retry():
                 if url:
-                    start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co)
+                    start_actor_crawl(url, actor_id=actor_id, max_co_star=max_co, since=since)
                 else:
-                    start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name)
+                    start_actor_crawl(None, actor_id=actor_id, max_co_star=max_co, actor_name=name, since=since)
             if "已有爬取任务" in str(e) and _wait_lock_idle(wait_min):
                 try:
                     _retry()

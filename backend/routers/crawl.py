@@ -609,7 +609,8 @@ def crawl_ranking(body: dict, _user: CurrentUser):
 
 def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: int | None = None,
                       solo_only: bool = False, actor_name: str | None = None,
-                      video_filter: str = "none", exclude_vr: bool = False) -> dict:
+                      video_filter: str = "none", exclude_vr: bool = False,
+                      since: str = "") -> dict:
     """公共函数：触发演员作品爬取子进程（供 /api/crawl/actor 和 /api/actors/{id}/crawl-works 复用）。
 
     检查全局进程锁 → 启动 crawl-actor 子进程 → 记录运行状态。
@@ -634,6 +635,8 @@ def start_actor_crawl(actor_url: str, actor_id: int | None = None, max_co_star: 
         cmd += ["--video-filter", video_filter]
     if exclude_vr:
         cmd += ["--exclude-vr"]
+    if since:
+        cmd += ["--since", since]
     proc = _start_scraper_guarded(cmd, {
         "mode": "actor", "actor_url": actor_url or f"search:{actor_name}",
         "started_at": _now_iso(),

@@ -2177,6 +2177,7 @@ def main():
     actor_parser.add_argument("--video-filter", type=str, default="none",
                               help="作品列表过滤（需 javdb 登录，多选逗号分隔取交集）: solo=单体t=s / magnet=含磁链t=d / subtitle=含字幕t=c / none=不过滤，如 solo,magnet")
     actor_parser.add_argument("--exclude-vr", action="store_true", help="排除 VR 作品（演员页 VR 标签集合差；需登录）")
+    actor_parser.add_argument("--since", type=str, default="", help="发行日期下限 YYYY-MM-DD：列表页早于该日期的作品跳过（不建任务不关联）")
     actor_parser.add_argument("--no-extract", action="store_true", help="只入库作品列表，不提取详情（磁力/元数据/图片）；巡检用")
     actor_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
@@ -2400,7 +2401,8 @@ def main():
                                 + (f"（{_vf_desc}）" if _vf_desc else "")
                                 + ("（排除VR作品）" if _evr else ""))
                     result = a.crawl_actor_full(actor_url, actor_id=_actor_id, max_co_star=_max_co,
-                                                solo_only=_solo, video_filter=_vf, exclude_vr=_evr)
+                                                solo_only=_solo, video_filter=_vf, exclude_vr=_evr,
+                                                since=(getattr(args, "since", "") or "").strip())
                     logger.info(f"演员爬取完成: {result}")
                     # 默认提取详情（磁力/元数据/图片），与其他任务一致；--no-extract 跳过（巡检用，避免长时阻塞）
                     if not getattr(args, "no_extract", False):
