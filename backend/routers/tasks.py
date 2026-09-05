@@ -256,10 +256,15 @@ def task_cast(task_id: int, db: DbSession, _user: CurrentUser):
             select(Actor).where(Actor.name.like(f"%{name}%")).limit(1)
         ).scalar_one_or_none()
         if not actor:
-            # 合并档案后旧名记入主档案 alias：按 alias 兜底，找回历史作品的女主头像
-            actor = db.execute(
-                select(Actor).where(Actor.alias.like(f"%{name}%")).limit(1)
-            ).scalar_one_or_none()
+            # 合并档案后旧名记入主档案 alias：token 级匹配（避免子串误挂头像），按 id 确定性排序
+            cands = db.execute(
+                select(Actor).where(Actor.alias.like(f"%{name}%")).order_by(Actor.id)
+            ).scalars().all()
+            for cand in cands:
+                tokens = [p.strip() for p in (cand.alias or "").split("/") if p.strip()]
+                if name in tokens:
+                    actor = cand
+                    break
         if actor:
             exact_map[name] = actor
     # 按原始顺序返回

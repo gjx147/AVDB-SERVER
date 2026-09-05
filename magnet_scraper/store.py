@@ -421,23 +421,28 @@ class SqliteTaskStore:
             cols = ["name", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
             vals = [name, 0] + list(fields.values())
             placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
-            alias_cond = "(alias IS NOT NULL AND alias != '' AND alias LIKE '%' || ? || '%')"
+            # alias 按 '/' 分隔 token 级匹配（不用子串 LIKE：新演员名恰为某人别名子串时会被静默误归并）
+            alias_cond = ("(alias IS NOT NULL AND alias != '' AND (alias=? OR alias LIKE ?||'/%' "
+                          "OR alias LIKE '%/'||? OR alias LIKE '%/'||?||'/%'))")
             conn.execute(
                 f"INSERT INTO actors ({','.join(cols)}) "
                 f"SELECT {placeholders} WHERE NOT EXISTS ("
                 f"SELECT 1 FROM actors WHERE name=? OR {alias_cond})",
-                (*vals, name, name)
+                (*vals, name, name, name, name, name)
             )
             conn.commit()
-            # 查 id（INSERT 和 UPDATE 都走这条路径）
-            # name 精确命中优先，其次 alias 包含（合并档案的旧名再被爬到时归并到主档案，不再新建重复行）
+            # name 精确命中优先，其次 alias token 命中（合并档案的旧名再被爬到时归并到主档案，不再新建重复行）
             row = conn.execute(
-                f"SELECT id FROM actors WHERE name=? OR {alias_cond} ORDER BY (name=?) DESC LIMIT 1",
-                (name, name, name)
+                f"SELECT id, name FROM actors WHERE name=? OR {alias_cond} ORDER BY (name=?) DESC LIMIT 1",
+                (name, name, name, name, name, name)
             ).fetchone()
             if not row:
                 return 0
-            actor_id = row[0]
+            actor_id = row["id"]
+            # 旧名经 alias 归并到主档案时：跳过 source_url/avatar_url/note，
+            # 避免旧名页面的数据反写主档案（破坏名字-页面配对、覆盖本地头像）（审查 E2）
+            if row["name"] != name:
+                fields = {k: v for k, v in fields.items() if k not in ("source_url", "avatar_url", "note")}
             # 更新字段（如果有）
             if fields:
                 sets = ", ".join(f"{k}=?" for k in fields)

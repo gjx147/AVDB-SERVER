@@ -556,7 +556,13 @@ async def run_check_all(auto_add: bool = False) -> dict:
     total_new = 0
     total_pushed = 0
     for aid in actor_ids:
-        r = await check_actor_new_works(aid, auto_add=auto_add)
+        try:
+            r = await check_actor_new_works(aid, auto_add=auto_add)
+        except Exception as e:
+            # 单个演员失败（如巡检进行中该演员被合并/删除）不中断整轮巡检（审查 A4）
+            logger.warning(f"[新作监控] 演员 {aid} 巡检失败，跳过: {e}")
+            results.append({"actor_id": aid, "error": str(e)})
+            continue
         results.append(r)
         total_new += r.get("truly_new", r.get("new_count", 0))
         total_pushed += r.get("pushed", 0)

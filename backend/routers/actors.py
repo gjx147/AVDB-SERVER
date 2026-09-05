@@ -381,6 +381,7 @@ def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
     moved_subs = 0
     aliases_added: list[str] = []
     avatar = "kept"
+    pending_avatar_copy: tuple[Path, Path] | None = None
 
     for src in sources:
         # 1) 作品关联迁移（先去重再改写，避免产生 (actor_id, task_id) 双行）
@@ -411,6 +412,9 @@ def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
             else:
                 keep_sub.auto_add = keep_sub.auto_add or src_sub.auto_add
                 db.delete(src_sub)
+        # autoflush=False 会话：订阅转移只在内存放着，必须显式 flush 让下一轮
+        # source 的 keep_sub 重查能看到，否则多 source 场景 commit 撞唯一约束（审查 A1）
+        db.flush()
 
         # 4) 字段归并：主档案为空才填（避免污染主档案已有资料）
         for f in ("name_en", "gender", "birth_date", "height", "cup", "measurements", "debut_date",
@@ -424,19 +428,29 @@ def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
         keep.works_fetched = keep.works_fetched or src.works_fetched
         keep.profile_fetched = keep.profile_fetched or src.profile_fetched
 
-        # 5) 旧名留痕 → alias（'/' 分隔、去重、截 200）
-        parts = [p.strip() for p in (keep.alias or "").split("/") if p.strip()]
+        # 5) 旧名留痕 → alias（'/' 分隔、去重；逐名累加超限即停，避免截出残片别名被误匹配）
+        prev_parts = [p.strip() for p in (keep.alias or "").split("/") if p.strip()]
+        parts = list(prev_parts)
         for cand in (src.name, src.name_en):
             if cand and cand != keep.name and cand not in parts:
                 parts.append(cand)
-                aliases_added.append(cand)
-        keep.alias = ("/".join(parts)[:200] or None)
+        kept_parts: list[str] = []
+        total_len = 0
+        for p in parts:
+            add = len(p) + (1 if kept_parts else 0)
+            if total_len + add > 200:
+                break
+            kept_parts.append(p)
+            total_len += add
+        keep.alias = ("/".join(kept_parts) or None)
+        aliases_added.extend(c for c in (src.name, src.name_en)
+                             if c and c != keep.name and c in kept_parts and c not in prev_parts)
 
-        # 6) 头像：主档案无本地文件时继承被合并档案的本地头像（commit 前落盘，URL 提交即可回源）
+        # 6) 头像：主档案无本地文件时继承被合并档案的本地头像（文件落盘挪到 commit 后，避免回滚留孤儿文件）
         src_local = _local_avatar(src.id)
         if keep_local is None and src_local is not None:
             dest = avatar_dir / f"actor-{keep.id}{src_local.suffix.lower()}"
-            dest.write_bytes(src_local.read_bytes())
+            pending_avatar_copy = (src_local, dest)
             keep.avatar_url = f"/api/images/avatars/actor-{keep.id}{dest.suffix}?v={int(datetime.utcnow().timestamp())}"
             keep_local = dest
             avatar = "copied"
@@ -447,9 +461,17 @@ def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
         # 7) 删除被合并档案（残余关联行走 DB 级联清理）
         db.delete(src)
 
-    db.commit()  # 单事务一次提交；文件清理放提交后
+    db.commit()  # 单事务一次提交；文件操作放提交后（失败不影响已提交的合并）
 
-    # 7) 清理被合并档案的头像文件（内容已按需转移）
+    # 7) 头像文件落盘（URL 已入库；此刻复制失败仅图片暂时 404，可重新上传）
+    if pending_avatar_copy:
+        src_local, dest = pending_avatar_copy
+        try:
+            dest.write_bytes(src_local.read_bytes())
+        except Exception as e:
+            logger.warning(f"头像文件复制失败（URL 已入库）: {e}")
+
+    # 8) 清理被合并档案的头像文件（内容已按需转移）
     for sid in payload.source_ids:
         for p in avatar_dir.glob(f"actor-{sid}.*"):
             try:

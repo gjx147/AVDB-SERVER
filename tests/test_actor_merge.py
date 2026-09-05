@@ -176,3 +176,63 @@ def test_search_alias(client):
     d = r.json()
     items = d['items'] if isinstance(d, dict) else d
     assert any(a['id'] == keep for a in items)
+def test_merge_multi_source_both_subscribed(client):
+    """A1 回归：keep 无订阅 + 两个 source 各有订阅（autoflush=False 下曾撞唯一约束）。"""
+    keep = _mk_actor('保留主档')
+    d1 = _mk_actor('重复甲')
+    d2 = _mk_actor('重复乙')
+    s = SessionLocal()
+    s.add(Subscription(name='重复甲', sub_type='actor', actor_id=d1, auto_add=True))
+    s.add(Subscription(name='重复乙', sub_type='actor', actor_id=d2, auto_add=False))
+    s.commit()
+    s.close()
+    r = client.post('/api/actors/merge', json={'keep_id': keep, 'source_ids': [d1, d2]})
+    assert r.status_code == 200, r.text
+    s = SessionLocal()
+    subs = s.query(Subscription).filter(Subscription.actor_id.in_([keep, d1, d2])).all()
+    assert len(subs) == 1
+    assert subs[0].actor_id == keep and subs[0].auto_add is True  # 第一个转移 + 第二个 OR 合并
+    assert s.get(Actor, d1) is None and s.get(Actor, d2) is None
+    s.close()
+
+
+def test_store_upsert_alias_token_exact():
+    """alias token 级判重：精确 token 命中归并；子串不误归并。"""
+    import tempfile
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'magnet_scraper'))
+    import store as store_mod
+    db_path = os.path.join(tempfile.gettempdir(), 'avdb_store_token_test.db')
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    st = store_mod.SqliteTaskStore(db_path)
+    main_id = st.upsert_actor('JULIA')
+    with st._conn() as conn:
+        conn.execute("UPDATE actors SET alias=? WHERE id=?", ('JUL-1/JULIA', main_id))
+        conn.commit()
+    assert st.upsert_actor('JUL-1') == main_id  # token 命中 -> 归并
+    juli = st.upsert_actor('JULI')              # 子串但非 token -> 新建，不误归并
+    assert juli != main_id
+    with st._conn() as conn:
+        cnt = conn.execute("SELECT COUNT(*) FROM actors").fetchone()[0]
+    assert cnt == 2
+
+
+def test_store_upsert_alias_hit_skips_profile_fields():
+    """E2：旧名经 alias 归并后再被爬到，不反写主档案 source_url/avatar_url/note。"""
+    import tempfile
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'magnet_scraper'))
+    import store as store_mod
+    db_path = os.path.join(tempfile.gettempdir(), 'avdb_store_e2e_test.db')
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    st = store_mod.SqliteTaskStore(db_path)
+    main_id = st.upsert_actor('A演员', source_url='https://x/A')
+    with st._conn() as conn:
+        conn.execute("UPDATE actors SET alias=? WHERE id=?", ('B演员', main_id))
+        conn.commit()
+    st.upsert_actor('B演员', source_url='https://x/B', avatar_url='https://x/b.jpg', note='source_url: https://x/B')
+    with st._conn() as conn:
+        row = conn.execute("SELECT source_url, avatar_url, note FROM actors WHERE id=?", (main_id,)).fetchone()
+    assert row["source_url"] == 'https://x/A'
+    assert row["avatar_url"] is None
+    assert row["note"] is None
