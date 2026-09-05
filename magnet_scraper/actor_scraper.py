@@ -421,7 +421,7 @@ class ActorScraper:
                 "measurements": info.get("measurements"),
                 "debut_date": info.get("debut_date"),
                 "movie_count": len(movies),
-                "works_fetched": 1,  # 作品已补齐标记：「全部补齐」下次跳过该演员
+                "works_fetched": (None if since else 1),  # since 部分补齐不打「已补齐」标记，避免全部补齐永久跳过  # 作品已补齐标记：「全部补齐」下次跳过该演员
             }.items() if v is not None
         }
 
@@ -718,10 +718,6 @@ class ActorScraper:
 
                 all_urls.extend(page_urls)
 
-                # 列表按发行时间倒序：整页解析到的日期全部早于下限 → 后续页只会更旧，提前停止翻页
-                if since and dated_cnt >= 3 and skipped_older == dated_cnt:
-                    logger.info(f"第 {page_num} 页全部早于 {since}，提前停止翻页")
-                    break
                 logger.info(f"第 {page_num} 页提取 {len(page_urls)} 部作品，累计 {len(all_urls)} 部")
 
                 self.scraper._write_crawl_status(
