@@ -18,6 +18,14 @@ interface Subscription {
   last_result: string | null
 }
 
+/** 精简演员档案（合并对话框用） */
+interface ActorLite {
+  id: number
+  name: string
+  name_en?: string | null
+  avatar_url?: string | null
+}
+
 const TYPE_LABEL: Record<string, string> = {
   actor: '演员',
   ranking: '榜单',
@@ -69,6 +77,9 @@ export function Subscriptions() {
   }
   const toastOk = useStore((s) => s.toastOk)
   const toastErr = useStore((s) => s.toastErr)
+  // 演员合并对话框
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [actorsAll, setActorsAll] = useState<ActorLite[]>([])
 
   // 后台任务进度轮询：运行中每 3s 拉一次，结束弹总结并刷新
   const startPolling = () => {
@@ -116,6 +127,7 @@ export function Subscriptions() {
       }
       setAvatars(m)
       setFilledIds(f)
+      setActorsAll(list.map((a) => a as ActorLite))
     }).catch(() => {})
   }
   useEffect(() => { load() }, [])
@@ -141,6 +153,22 @@ export function Subscriptions() {
       await api.subscriptions.delete(s.id)
       setSubs((prev) => prev ? prev.filter((x) => x.id !== s.id) : prev)
       toastOk('已删除')
+    } catch (e) { toastErr(String((e as Error).message)) }
+  }
+
+  // 演员合并：把重复档案并入保留者后删除
+  const doMerge = async (keepId: number, sourceIds: number[]) => {
+    if (!(await useStore.getState().confirm('合并演员',
+      `将把 ${sourceIds.length} 个重复档案的作品/订阅并入保留者并删除重复记录，操作不可撤销。确定合并？`))) return
+    try {
+      const r = await api.actors.merge(keepId, sourceIds)
+      const bits = [`迁移 ${r.moved_movies} 部作品`]
+      if (r.moved_subs > 0) bits.push('订阅已转移')
+      if (r.aliases_added.length > 0) bits.push(`别名记录 ${r.aliases_added.join('、')}`)
+      toastOk(`合并完成：${bits.join('，')}`)
+      api.actors.invalidateListAllCache()
+      setMergeOpen(false)
+      load()
     } catch (e) { toastErr(String((e as Error).message)) }
   }
 
@@ -179,6 +207,10 @@ export function Subscriptions() {
     <div className="page">
       <PageHead eyebrow={`Subscriptions · ${subs?.length ?? 0} 条`} title={<>订<em>阅</em></>}
         sub="订阅演员，有新作自动通知/下载。巡检时与 Emby 媒体库比对，避免重复入库。">
+        <button className="btn btn--ghost btn--sm" onClick={() => setMergeOpen(true)}
+          title="同一演员被建了多个档案时，把重复档案并入保留者：作品、订阅、头像、备注迁移，重复记录删除">
+          合并演员
+        </button>
         <button className="btn btn--ghost btn--sm" onClick={checkAll} disabled={checking || filling}>
           <Icon.refresh />{checking ? '巡检中…' : '立即巡检全部'}
         </button>
@@ -262,6 +294,87 @@ export function Subscriptions() {
           })}
         </div>
       )}
+      {mergeOpen && subs && (
+        <ActorMergeDialog actors={actorsAll} subs={subs} onClose={() => setMergeOpen(false)} onDone={doMerge} />
+      )}
+    </div>
+  )
+}
+
+/** 合并演员对话框：保留一个主档案，把重复档案并入后删除（结构参照 ShareCardModal 挂载 + cd-card 样式） */
+function ActorMergeDialog({ actors, subs, onClose, onDone }: {
+  actors: ActorLite[]
+  subs: Subscription[]
+  onClose: () => void
+  onDone: (keepId: number, sourceIds: number[]) => void
+}) {
+  const [keepId, setKeepId] = useState<number | null>(null)
+  const [picked, setPicked] = useState<Set<number>>(new Set())
+  const [q, setQ] = useState('')
+  const subscribedIds = new Set(subs.filter((x) => x.sub_type === 'actor' && x.actor_id).map((x) => x.actor_id as number))
+  const sorted = [...actors].sort((a, b) => {
+    const sa = subscribedIds.has(a.id) ? 0 : 1
+    const sb = subscribedIds.has(b.id) ? 0 : 1
+    return sa - sb || a.name.localeCompare(b.name, 'zh-Hans-CN')
+  })
+  const kw = q.trim().toLowerCase()
+  // 默认只列已订阅（最常见场景：同一人订阅了两个名字）；输入关键字后筛全部档案（含未订阅）
+  const match = (a: ActorLite) => kw
+    ? a.name.toLowerCase().includes(kw) || (a.name_en || '').toLowerCase().includes(kw)
+    : subscribedIds.has(a.id)
+  const candidates = sorted.filter((a) => a.id !== keepId && match(a))
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="cd-overlay" onClick={onClose}>
+      <div className="cd-card" role="dialog" aria-modal="true" aria-label="合并演员" onClick={(e) => e.stopPropagation()}>
+        <div className="cd-title">合并演员</div>
+        <div className="cd-message">同一演员被建了多个档案时，把重复档案并入保留者：作品关联、订阅、头像、备注会迁移过去，重复记录删除，不可撤销。</div>
+        <div className="field">
+          <label>保留谁</label>
+          <select className="select" value={keepId ?? ''} onChange={(e) => { setKeepId(+e.target.value); setPicked(new Set()) }}>
+            <option value="" disabled>选择保留的档案…</option>
+            {sorted.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}{a.name_en ? ` (${a.name_en})` : ''}{subscribedIds.has(a.id) ? ' · 已订阅' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>合并谁（可多选，不含保留者）</label>
+          <input className="input" style={{ marginBottom: 6 }} placeholder="输入名字筛选重复档案…"
+            value={q} onChange={(e) => setQ(e.target.value)} />
+          <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--line, #ddd)', borderRadius: 8, padding: '4px 10px' }}>
+            {candidates.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--t-mute)', padding: '8px 0' }}>
+                无匹配项{!kw ? '——默认只列已订阅档案，输入关键字可筛选全部演员' : ''}
+              </div>
+            ) : candidates.map((a) => (
+              <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '5px 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={picked.has(a.id)}
+                  onChange={() => setPicked((prev) => { const n = new Set(prev); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n })} />
+                {a.avatar_url ? (
+                  <img src={a.avatar_url} alt="" width={24} height={32} style={{ borderRadius: 4, objectFit: 'cover' }}
+                    referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                ) : null}
+                <span>{a.name}{a.name_en ? ` (${a.name_en})` : ''}</span>
+                <span className={`chip ${subscribedIds.has(a.id) ? 'chip-green' : ''}`} style={{ fontSize: 10 }}>
+                  {subscribedIds.has(a.id) ? '已订阅' : '未订阅'}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="cd-actions">
+          <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+          <button className="btn btn--gold btn--sm" disabled={!keepId || picked.size === 0}
+            onClick={() => keepId && onDone(keepId, [...picked])}>合并 {picked.size} 个档案</button>
+        </div>
+      </div>
     </div>
   )
 }

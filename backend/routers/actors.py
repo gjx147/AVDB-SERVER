@@ -13,11 +13,16 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 
 from deps import CurrentUser, DbSession, Pagination
-from models import Actor, Subscription, Task, actor_movies
+from models import Actor, NewRelease, Subscription, Task, actor_movies
 from schemas import ActorDetailOut, ActorListResponse, ActorOut, ActorProfileUpdate
 
 router = APIRouter(prefix="/api/actors", tags=["actors"])
 logger = logging.getLogger("avdb.actors")
+
+
+def _avatar_dir() -> Path:
+    """本地上传头像目录（项目根 data/images/avatars/，Docker 持久卷 /app/data）。"""
+    return Path(__file__).resolve().parents[2] / "data" / "images" / "avatars"
 
 
 @router.get("", response_model=ActorListResponse)
@@ -37,7 +42,7 @@ def list_actors(
     has_sub_sq = select(Subscription.actor_id).where(Subscription.sub_type == "actor")
     if q:
         like = f"%{q}%"
-        cond = or_(Actor.name.like(like), Actor.name_en.like(like))
+        cond = or_(Actor.name.like(like), Actor.name_en.like(like), Actor.alias.like(like))
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
     if followed is True:
@@ -313,7 +318,7 @@ async def avatar_upload(actor_id: int, db: DbSession, _user: CurrentUser,
     if not actor:
         raise HTTPException(status_code=404, detail="演员不存在")
     # 项目根/data = Docker 挂载卷 /app/data（持久）
-    d = Path(__file__).resolve().parents[2] / "data" / "images" / "avatars"
+    d = _avatar_dir()
     d.mkdir(parents=True, exist_ok=True)
     for old_f in d.glob(f"actor-{actor_id}.*"):
         try:
@@ -326,6 +331,130 @@ async def avatar_upload(actor_id: int, db: DbSession, _user: CurrentUser,
     actor.avatar_url = url
     db.commit()
     return {"ok": True, "avatar_url": url}
+
+
+class ActorMergeIn(BaseModel):
+    keep_id: int
+    source_ids: list[int]
+
+
+@router.post("/merge")
+def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
+    """合并重复演员档案：把 source_ids 的作品关联/新作发现/订阅迁移到 keep_id，旧名记入 alias，删除被合并档案。
+
+    语义要点：
+    - actor_movies 无唯一约束：先删 keep 侧已有的重复关联行，再改写剩余行；
+    - new_releases.actor_id 级联删除：删档案前必须迁移，video_code 重复的丢弃；
+    - 订阅受 (sub_type, actor_id) 唯一约束：keep 无订阅时转移，都有则删被合并侧并 OR 合并 auto_add；
+    - 不迁移 source_url：保留主档案自己的「名字-页面」配对，避免巡检名字安全闸 actor_name_mismatch；
+    - 旧名写入 alias（/ 分隔、去重、截 200）：配合 store.py 爬虫判重与 cast/搜索的 alias 匹配生效。
+    """
+    if payload.keep_id in payload.source_ids:
+        raise HTTPException(status_code=400, detail="保留档案不能同时出现在合并列表里")
+    if not payload.source_ids:
+        raise HTTPException(status_code=400, detail="请选择要合并的重复档案")
+    if len(set(payload.source_ids)) != len(payload.source_ids):
+        raise HTTPException(status_code=400, detail="合并列表里有重复档案")
+    keep = db.get(Actor, payload.keep_id)
+    if not keep:
+        raise HTTPException(status_code=404, detail="保留档案不存在")
+    sources = []
+    for sid in payload.source_ids:
+        a = db.get(Actor, sid)
+        if not a:
+            raise HTTPException(status_code=404, detail=f"待合并档案 {sid} 不存在")
+        sources.append(a)
+
+    avatar_dir = _avatar_dir()
+
+    def _local_avatar(actor_id: int) -> Path | None:
+        for p in sorted(avatar_dir.glob(f"actor-{actor_id}.*")):
+            return p
+        return None
+
+    keep_local = _local_avatar(keep.id)
+    moved_movies = 0
+    moved_subs = 0
+    aliases_added: list[str] = []
+    avatar = "kept"
+
+    for src in sources:
+        # 1) 作品关联迁移（先去重再改写，避免产生 (actor_id, task_id) 双行）
+        db.execute(actor_movies.delete().where(
+            actor_movies.c.actor_id == src.id,
+            actor_movies.c.task_id.in_(select(actor_movies.c.task_id).where(actor_movies.c.actor_id == keep.id)),
+        ))
+        res = db.execute(actor_movies.update().where(actor_movies.c.actor_id == src.id).values(actor_id=keep.id))
+        moved_movies += res.rowcount or 0
+
+        # 2) 新作发现迁移（FK 级联会在删档案时清掉，必须先迁；video_code 重复的丢弃）
+        keep_codes = select(NewRelease.video_code).where(
+            NewRelease.actor_id == keep.id, NewRelease.video_code.isnot(None))
+        db.execute(NewRelease.__table__.delete().where(
+            NewRelease.actor_id == src.id, NewRelease.video_code.in_(keep_codes)))
+        db.execute(NewRelease.__table__.update().where(NewRelease.actor_id == src.id).values(actor_id=keep.id))
+
+        # 3) 订阅归并（受唯一约束，不能盲改 actor_id）
+        src_sub = db.execute(select(Subscription).where(
+            Subscription.sub_type == "actor", Subscription.actor_id == src.id)).scalars().first()
+        keep_sub = db.execute(select(Subscription).where(
+            Subscription.sub_type == "actor", Subscription.actor_id == keep.id)).scalars().first()
+        if src_sub:
+            if keep_sub is None:
+                src_sub.actor_id = keep.id
+                src_sub.name = keep.name
+                moved_subs += 1
+            else:
+                keep_sub.auto_add = keep_sub.auto_add or src_sub.auto_add
+                db.delete(src_sub)
+
+        # 4) 字段归并：主档案为空才填（避免污染主档案已有资料）
+        for f in ("name_en", "gender", "birth_date", "height", "cup", "measurements", "debut_date",
+                  "bio", "timeline", "agency", "hobbies", "debut_work", "twitter", "website", "tags", "intro"):
+            if not getattr(keep, f, None) and getattr(src, f, None):
+                setattr(keep, f, getattr(src, f))
+        if not keep.note and src.note:
+            keep.note = src.note
+        keep.movie_count = max(keep.movie_count or 0, src.movie_count or 0)
+        keep.is_blacklisted = keep.is_blacklisted or src.is_blacklisted
+        keep.works_fetched = keep.works_fetched or src.works_fetched
+        keep.profile_fetched = keep.profile_fetched or src.profile_fetched
+
+        # 5) 旧名留痕 → alias（'/' 分隔、去重、截 200）
+        parts = [p.strip() for p in (keep.alias or "").split("/") if p.strip()]
+        for cand in (src.name, src.name_en):
+            if cand and cand != keep.name and cand not in parts:
+                parts.append(cand)
+                aliases_added.append(cand)
+        keep.alias = ("/".join(parts)[:200] or None)
+
+        # 6) 头像：主档案无本地文件时继承被合并档案的本地头像（commit 前落盘，URL 提交即可回源）
+        src_local = _local_avatar(src.id)
+        if keep_local is None and src_local is not None:
+            dest = avatar_dir / f"actor-{keep.id}{src_local.suffix.lower()}"
+            dest.write_bytes(src_local.read_bytes())
+            keep.avatar_url = f"/api/images/avatars/actor-{keep.id}{dest.suffix}?v={int(datetime.utcnow().timestamp())}"
+            keep_local = dest
+            avatar = "copied"
+        elif not keep.avatar_url and src.avatar_url:
+            keep.avatar_url = src.avatar_url
+            avatar = "inherited"
+
+        # 7) 删除被合并档案（残余关联行走 DB 级联清理）
+        db.delete(src)
+
+    db.commit()  # 单事务一次提交；文件清理放提交后
+
+    # 7) 清理被合并档案的头像文件（内容已按需转移）
+    for sid in payload.source_ids:
+        for p in avatar_dir.glob(f"actor-{sid}.*"):
+            try:
+                p.unlink()
+            except Exception:
+                pass
+
+    return {"ok": True, "moved_movies": moved_movies, "moved_subs": moved_subs,
+            "aliases_added": aliases_added, "avatar": avatar}
 
 
 @router.get("/{actor_id}/avatar-options")

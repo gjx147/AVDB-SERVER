@@ -255,6 +255,11 @@ def task_cast(task_id: int, db: DbSession, _user: CurrentUser):
         actor = db.execute(
             select(Actor).where(Actor.name.like(f"%{name}%")).limit(1)
         ).scalar_one_or_none()
+        if not actor:
+            # 合并档案后旧名记入主档案 alias：按 alias 兜底，找回历史作品的女主头像
+            actor = db.execute(
+                select(Actor).where(Actor.alias.like(f"%{name}%")).limit(1)
+            ).scalar_one_or_none()
         if actor:
             exact_map[name] = actor
     # 按原始顺序返回

@@ -190,6 +190,8 @@ export const api = {
         return out
       })()
     },
+    /** 清空 listAll 缓存（合并/删除/头像变更后调用） */
+    invalidateListAllCache: () => { api.actors._listAllCache = null; api.actors._listAllCacheTs = 0 },
     search: (keyword: string) =>
       http.get<Actor[]>('/api/actors', { params: { q: keyword, page: 1, page_size: 120 } }).then((r) => {
         const d = r.data as unknown
@@ -227,6 +229,11 @@ export const api = {
       http.post<ApiOk>('/api/crawl/actor-search', { actor_name }).then((r) => r.data),
     remove: (actorId: number) =>
       http.delete<ApiOk>(`/api/actors/${actorId}`).then((r) => r.data),
+    /** 合并重复演员：把 source_ids 档案的作品/订阅迁移到 keep_id 后删除被合并记录 */
+    merge: (keepId: number, sourceIds: number[]) =>
+      http.post<{ ok: boolean; moved_movies: number; moved_subs: number; aliases_added: string[]; avatar: string }>(
+        '/api/actors/merge', { keep_id: keepId, source_ids: sourceIds }
+      ).then((r) => r.data),
     /** 手动编辑演员资料（未传字段不更新；字符串空值=清空） */
     update: (actorId: number, patch: Record<string, string | null | boolean | undefined>) =>
       http.patch<ApiOk>(`/api/actors/${actorId}`, patch).then((r) => r.data),

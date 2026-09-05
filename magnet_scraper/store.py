@@ -176,6 +176,7 @@ class SqliteTaskStore:
             "actors": {
                 "source_url": "TEXT",
                 "works_fetched": "INTEGER",
+                "alias": "VARCHAR(200)",  # 合并档案的旧名留痕（upsert 判重会查）
             },
         }
         for table, cols in needed.items():
@@ -420,14 +421,20 @@ class SqliteTaskStore:
             cols = ["name", "is_blacklisted"] + list(fields.keys()) + ["created_at", "updated_at"]
             vals = [name, 0] + list(fields.values())
             placeholders = ",".join(["?"] * (len(cols) - 2) + ["datetime('now')", "datetime('now')"])
+            alias_cond = "(alias IS NOT NULL AND alias != '' AND alias LIKE '%' || ? || '%')"
             conn.execute(
                 f"INSERT INTO actors ({','.join(cols)}) "
-                f"SELECT {placeholders} WHERE NOT EXISTS (SELECT 1 FROM actors WHERE name=?)",
-                (*vals, name)
+                f"SELECT {placeholders} WHERE NOT EXISTS ("
+                f"SELECT 1 FROM actors WHERE name=? OR {alias_cond})",
+                (*vals, name, name)
             )
             conn.commit()
             # 查 id（INSERT 和 UPDATE 都走这条路径）
-            row = conn.execute("SELECT id FROM actors WHERE name=?", (name,)).fetchone()
+            # name 精确命中优先，其次 alias 包含（合并档案的旧名再被爬到时归并到主档案，不再新建重复行）
+            row = conn.execute(
+                f"SELECT id FROM actors WHERE name=? OR {alias_cond} ORDER BY (name=?) DESC LIMIT 1",
+                (name, name, name)
+            ).fetchone()
             if not row:
                 return 0
             actor_id = row[0]
