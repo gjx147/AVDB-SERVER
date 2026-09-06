@@ -166,10 +166,17 @@ class MagnetScraper:
             return (self.list_path.rstrip("/").split("/")[-1] or "").upper()
         return (getattr(config, "LIST_CODE", "") or "").upper()
 
-    def _process_single_url(self, url: str):
+    def _process_single_url(self, url: str, actor_id: Optional[int] = None,
+                            ensure_task: bool = False, list_source_id: Optional[int] = None):
         """提取单个 URL 的磁力链接并更新数据库"""
         if not self.page:
             self.init_browser()
+        self._last_actors_gender = []  # 防御：复用实例时上一 URL 的演员不串到当前任务
+
+        # 手动添加模式：URL 不存在时先建 pending 任务（否则下面的 UPDATE 0 行静默丢弃）
+        if ensure_task and list_source_id and self.store is not None and not self.store.task_exists_with_url(url):
+            self.store.add_pending_urls(list_source_id, [url])
+            logger.info(f"任务不存在，已创建 pending 任务: {url}")
 
         logger.info(f"单任务提取: {url}")
         self._write_crawl_status(phase="extract", list_code="single", crawl_type="extract-single", total=1)
@@ -196,6 +203,18 @@ class MagnetScraper:
                     ),
                 )
                 conn.commit()
+
+
+        # 演员关联（手动添加语义）：目标演员无条件关联；详情页解析到的演员也 upsert+link
+        if self.store is not None:
+            task_row = self.store.get_task_by_url(url)
+            if task_row:
+                if actor_id:
+                    self.store.link_actor_movie(actor_id, task_row["id"])
+                for aname, agender in (getattr(self, "_last_actors_gender", None) or [])[:10]:
+                    aid = self.store.upsert_actor(aname, gender=agender)
+                    if aid:
+                        self.store.link_actor_movie(aid, task_row["id"])
 
         if success:
             logger.info(f"单任务提取成功: {video_code or url}")
@@ -2190,6 +2209,9 @@ def main():
     # 单任务提取
     single_parser = subparsers.add_parser("extract-single", help="提取单个 URL 的磁力链接")
     single_parser.add_argument("--url", type=str, required=True, help="详情页 URL")
+    single_parser.add_argument("--actor-id", type=int, default=None, help="目标演员 ID：处理完成后把作品关联到该演员")
+    single_parser.add_argument("--ensure-task", action="store_true", help="URL 不存在时先创建 pending 任务（需 --list-source-id）")
+    single_parser.add_argument("--list-source-id", type=int, default=None, help="创建任务所用列表源 ID（配合 --ensure-task）")
     single_parser.add_argument("--visible", "-v", action="store_true", help="显示浏览器")
 
     # 刷新老数据的演员性别（用新的 ♀/♂ 标记）
@@ -2418,7 +2440,12 @@ def main():
                         logger.error("请提供 --url")
                         break
                     logger.info(f"提取单个任务: {single_url}")
-                    scraper._process_single_url(single_url)
+                    scraper._process_single_url(
+                        single_url,
+                        actor_id=getattr(args, "actor_id", None),
+                        ensure_task=bool(getattr(args, "ensure_task", False)),
+                        list_source_id=getattr(args, "list_source_id", None),
+                    )
                 elif args.command == "refresh-actor-gender":
                     logger.info("执行演员性别刷新（修正老数据）...")
                     result = scraper.refresh_actor_gender(

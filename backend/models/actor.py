@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -19,6 +19,7 @@ actor_movies = Table(
     Column("created_at", DateTime, nullable=False, default=datetime.utcnow, server_default=func.now()),
     Index("idx_actor_movies_actor", "actor_id"),
     Index("idx_actor_movies_task", "task_id"),
+    UniqueConstraint("actor_id", "task_id", name="uq_actor_movies_actor_task"),
 )
 
 

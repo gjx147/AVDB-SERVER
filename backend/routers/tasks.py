@@ -61,8 +61,7 @@ def _reap_and_clear(proc: subprocess.Popen, timeout: int = 1800) -> None:
     finally:
         # Phase 2 P1-3：按身份释放（get_proc() is proc 才 clear，防 ABA）
         from services import scraper_lock
-        if scraper_lock.get_proc() is proc:
-            scraper_lock.clear()
+        scraper_lock.clear_if_current(proc)  # 原子按身份释放（审查 B-1：两步非原子）
 
 
 # ── 静态路由（必须在 /{task_id} 之前！）──

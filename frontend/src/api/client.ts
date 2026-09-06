@@ -207,9 +207,9 @@ export const api = {
     // 切换自动入库（auto_add）
     toggleAutoAdd: (actorId: number) =>
       http.post<ApiOk & { actor_id: number; auto_add: boolean }>(`/api/actors/${actorId}/auto-add`).then((r) => r.data),
-    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added', inLibrary?: boolean, q?: string) =>
+    movies: (id: number, page = 1, page_size = 30, sort: 'added' | 'release' | 'rating' = 'added', inLibrary?: boolean, q?: string, cast: 'all' | 'solo' | 'multi' = 'all') =>
       http.get<{ items: ActorMovie[]; total: number; page: number; page_size: number }>(
-        `/api/actors/${id}/movies`, { params: { page, page_size, sort, in_library: inLibrary, q: q || undefined } }
+        `/api/actors/${id}/movies`, { params: { page, page_size, sort, in_library: inLibrary, q: q || undefined, cast: cast !== 'all' ? cast : undefined } }
       ).then((r) => r.data),
     crawl: (actor_url: string, list_source_id?: number) =>
       http.post<ApiOk>('/api/crawl/actor', { actor_url, list_source_id }).then((r) => r.data),
@@ -247,6 +247,11 @@ export const api = {
       fd.append('file', file)
       return http.post<{ ok: boolean; avatar_url: string }>(`/api/actors/${id}/avatar-upload`, fd).then((r) => r.data)
     },
+    /** 手动添加作品：粘贴 JavDB 作品页 URL 关联到该演员（未入库自动抓取详情） */
+    addWork: (actorId: number, url: string, extract = true) =>
+      http.post<{ ok: boolean; task_id: number; created: boolean; spawned: boolean; message: string }>(
+        `/api/actors/${actorId}/add-work`, { url, extract }
+      ).then((r) => r.data),
   },
 
   // ════════ Rankings ════════

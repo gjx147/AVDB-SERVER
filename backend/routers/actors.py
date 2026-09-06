@@ -10,10 +10,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import distinct, func, or_, select
 
 from deps import CurrentUser, DbSession, Pagination
-from models import Actor, NewRelease, Subscription, Task, actor_movies
+from models import Actor, ListSource, NewRelease, Subscription, Task, actor_movies
 from schemas import ActorDetailOut, ActorListResponse, ActorOut, ActorProfileUpdate
 
 router = APIRouter(prefix="/api/actors", tags=["actors"])
@@ -211,6 +211,8 @@ def actor_movies_list(
     sort: str = Query("added", description="排序：added=加入日期 / release=发行日期"),
     in_library: bool | None = Query(None, description="按 Emby 在库状态筛选"),
     q: str = Query("", max_length=100, description="关键字搜索：番号/标题模糊匹配"),
+    cast: str = Query("all", pattern="^(all|solo|multi)$",
+                      description="女优数筛选：all=全部 / solo=单体（女优1人）/ multi=多人（女优≥2）"),
 ):
     """演员的关联作品列表（分页，只含有磁力链接的作品）。"""
     actor = db.get(Actor, actor_id)
@@ -228,6 +230,19 @@ def actor_movies_list(
         kw = q.strip().replace("%", r"\%").replace("_", r"\_")
         pat = f"%{kw}%"
         conds.append(or_(Task.video_code.ilike(pat, escape="\\"), Task.title.ilike(pat, escape="\\")))
+    if cast != "all":
+        # 女优数口径：actor_movies × actors.gender 精确统计（详情提取时建立，含库外共演）。
+        # 不能用 tasks.actors 逗号数——该文本女优在前男优在后（实测 SONE-855 = 1女1男）。
+        am2 = actor_movies.alias("am2")
+        a2 = Actor.__table__.alias("a2")
+        cast_sq = (
+            select(func.count(distinct(am2.c.actor_id)))
+            .select_from(am2)
+            .join(a2, a2.c.id == am2.c.actor_id)
+            .where(am2.c.task_id == Task.id, a2.c.gender == "female")
+            .scalar_subquery()
+        )
+        conds.append(cast_sq == 1 if cast == "solo" else cast_sq >= 2)
     total = db.execute(
         select(func.count(Task.id))
         .select_from(Task)
@@ -481,6 +496,88 @@ def merge_actors(payload: ActorMergeIn, db: DbSession, _user: CurrentUser):
 
     return {"ok": True, "moved_movies": moved_movies, "moved_subs": moved_subs,
             "aliases_added": aliases_added, "avatar": avatar}
+
+
+class AddWorkRequest(BaseModel):
+    url: str
+    extract: bool = True  # 新任务是否自动拉起详情提取（默认是；纯关联场景可传 false）
+
+
+@router.post("/{actor_id}/add-work")
+def add_work_to_actor(actor_id: int, payload: AddWorkRequest, db: DbSession, _user: CurrentUser):
+    """手动添加作品：粘贴 JavDB 作品页 URL，关联到该演员名下。
+
+    - URL 已入库：只补关联，不重爬（link 幂等）；
+    - URL 未入库：建 pending 任务（列表源与 crawl-actor 补齐共用，命名对齐 ACTOR_{name[:20]}）
+      + 关联 + 拉起单 URL 详情提取（全局锁忙时任务仍入库，仅提取留待后续，spawned=false）。
+    """
+    from urllib.parse import urlparse
+
+    actor = db.get(Actor, actor_id)
+    if not actor:
+        raise HTTPException(status_code=404, detail="演员不存在")
+    url = (payload.url or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.path.startswith("/v/"):
+        raise HTTPException(status_code=400, detail="请提供 JavDB 作品页链接（路径以 /v/ 开头）")
+    # host 校验：与设置 javdb_url（镜像站可换）同源，兜底主站；www. 变体归一（防同作品双任务）
+    from models import Setting
+
+    def _norm_host(h: str) -> str:
+        h = (h or "").lower()
+        return h[4:] if h.startswith("www.") else h
+
+    allowed_hosts = {"javdb.com"}
+    _row = db.get(Setting, "javdb_url")
+    if _row and _row.value:
+        _p = urlparse(_row.value.strip())
+        if _p.netloc:
+            allowed_hosts.add(_norm_host(_p.netloc))
+    if _norm_host(parsed.netloc) not in allowed_hosts:
+        raise HTTPException(status_code=400, detail="仅支持 JavDB 作品页链接")
+    url = f"{parsed.scheme}://{_norm_host(parsed.netloc)}{parsed.path}"  # 规范化：去 query/fragment + www
+    if len(url) > 500:
+        raise HTTPException(status_code=400, detail="URL 过长")
+
+    task = db.execute(select(Task).where(Task.url == url)).scalars().first()
+    created = False
+    if task is None:
+        # 列表源与 crawl-actor 补齐共用同一命名（actor_scraper.py:472-473），保证后续补齐复用
+        list_code = f"ACTOR_{actor.name[:20]}".upper()
+        ls = db.execute(select(ListSource).where(ListSource.list_code == list_code)).scalars().first()
+        if ls is None:
+            ls = ListSource(list_code=list_code, list_path=actor.source_url or url)
+            db.add(ls)
+            db.flush()
+        task = Task(list_source_id=ls.id, url=url, status="pending")
+        db.add(task)
+        db.flush()
+        created = True
+    # 关联（actor_movies 无唯一约束，先查重；link_actor_movie 同语义幂等）
+    linked = db.execute(
+        select(actor_movies.c.id).where(
+            actor_movies.c.actor_id == actor_id, actor_movies.c.task_id == task.id)
+    ).first()
+    if not linked:
+        db.execute(actor_movies.insert().values(actor_id=actor_id, task_id=task.id))
+    db.commit()
+
+    spawned = False
+    message = ""
+    if task.status == "visited":
+        message = "作品已入库，已关联到该演员"
+    elif payload.extract:
+        from services import single_extract
+        r = single_extract.spawn_extract_single(url, actor_id=actor_id)
+        if r.get("ok"):
+            spawned = True
+            message = "已添加并开始抓取详情"
+        else:
+            # 作品本体已入库（pending），仅提取留待后续跑批
+            message = f"作品已入库；{r.get('message', '抓取繁忙，详情稍后自动补齐')}"
+    else:
+        message = "已关联到该演员"
+    return {"ok": True, "task_id": task.id, "created": created, "spawned": spawned, "message": message}
 
 
 @router.get("/{actor_id}/avatar-options")

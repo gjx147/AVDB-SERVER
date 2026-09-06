@@ -116,7 +116,8 @@ CREATE TABLE IF NOT EXISTS actor_movies (
     task_id INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (actor_id) REFERENCES actors(id) ON DELETE CASCADE,
-    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    UNIQUE(actor_id, task_id)
 );
 
 CREATE TABLE IF NOT EXISTS rankings (
@@ -481,9 +482,12 @@ class SqliteTaskStore:
             exists = conn.execute(
                 "SELECT 1 FROM actor_movies WHERE actor_id=? AND task_id=?", (actor_id, task_id)).fetchone()
             if not exists:
-                conn.execute(
-                    "INSERT INTO actor_movies (actor_id, task_id, created_at) VALUES (?,?,datetime('now'))", (actor_id, task_id))
-                conn.commit()
+                try:
+                    conn.execute(
+                        "INSERT INTO actor_movies (actor_id, task_id, created_at) VALUES (?,?,datetime('now'))", (actor_id, task_id))
+                    conn.commit()
+                except Exception:
+                    pass  # UNIQUE 兜底：并发同 actor+task 时先查后插仍可能撞，已存在即达目的
 
     # ---------- 排行榜 ----------
     def save_rankings(self, entries: List[dict], rank_type: str,

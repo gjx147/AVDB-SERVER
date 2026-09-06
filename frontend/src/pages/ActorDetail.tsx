@@ -50,6 +50,11 @@ export function ActorDetail() {
     return sv === 'release' || sv === 'rating' ? sv : 'added'
   })
   const [inLib, setInLib] = useState<'all' | 'in' | 'out'>(searchParams.get('lib') === 'in' ? 'in' : searchParams.get('lib') === 'out' ? 'out' : 'all')
+  // 女优数筛选：solo=单体（女优1人）/ multi=多人（女优≥2）
+  const [cast, setCast] = useState<'all' | 'solo' | 'multi'>(() => {
+    const cv = searchParams.get('cast')
+    return cv === 'solo' || cv === 'multi' ? cv : 'all'
+  })
   // 作品列表关键字搜索（番号/标题模糊匹配；q=当前生效值，qInput=输入框草稿）
   const [q, setQ] = useState(() => searchParams.get('q') || '')
   const [qInput, setQInput] = useState('')
@@ -72,28 +77,30 @@ export function ActorDetail() {
   const toastErr = useStore((s) => s.toastErr)
   const confirmBox = useStore((s) => s.confirm)
 
-  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all', qv: string = q) => {
+  const loadMovies = useCallback(async (p: number, s: 'added' | 'release' | 'rating', lib: 'all' | 'in' | 'out' = 'all', qv: string = q, cv: 'all' | 'solo' | 'multi' = cast) => {
     if (!id) return
     try {
-      const r = await api.actors.movies(+id, p, PAGE_SIZE, s, lib === 'all' ? undefined : lib === 'in', (qv || '').trim() || undefined)
+      const r = await api.actors.movies(+id, p, PAGE_SIZE, s, lib === 'all' ? undefined : lib === 'in', (qv || '').trim() || undefined, cv)
       setMovies(r.items)
       setTotal(r.total)
       setPage(p)
       setSort(s)
       setInLib(lib)
       setQ((qv || '').trim())
+      setCast(cv)
       // URL 同步：排序/在库/页码/关键字序列化（返回/刷新恢复）
       const next: Record<string, string> = {}
       if (s !== 'added') next.sort = s
       if (lib !== 'all') next.lib = lib
       if (p > 1) next.page = String(p)
       if ((qv || '').trim()) next.q = (qv || '').trim()
+      if (cv !== 'all') next.cast = cv
       setSearchParams(next, { replace: true })
       setSelected(new Set())
     } catch {
       setMovies([]); setTotal(0)
     }
-  }, [id, q])
+  }, [id, q, cast])
 
   useEffect(() => {
     if (!id) return
@@ -138,6 +145,18 @@ export function ActorDetail() {
       await api.actors.crawlWorks(actor.id, maxCoStar, true, 'none', false, sinceDate)
       toastOk(`已开始补齐 ${actor.name} 的单体作品（t=s 过滤）`)
     } catch (e) { toastErr(String((e as Error).message)) }
+  }
+  const doAddWork = async () => {
+    if (!actor || !addWorkUrl.trim() || addingWork) return
+    setAddingWork(true)
+    try {
+      const r = await api.actors.addWork(actor.id, addWorkUrl.trim())
+      if (r.spawned) toastOk('已添加并开始抓取详情，稍后自动出现在列表')
+      else toastOk(r.message || '已关联到该演员')
+      setAddWorkUrl('')
+      loadMovies(1, sort, inLib, q, cast)
+    } catch (e) { toastErr(String((e as Error).message)) }
+    finally { setAddingWork(false) }
   }
   const crawlFiltered = async () => {
     if (!actor) return
@@ -234,6 +253,9 @@ export function ActorDetail() {
   const [excludeVr, setExcludeVr] = useState(false)
   // 发行日期下限（YYYY-MM-DD，留空=不过滤；仅本次补齐生效，不持久化）
   const [sinceDate, setSinceDate] = useState('')
+  // 手动添加作品（粘贴 JavDB 作品页 URL）
+  const [addWorkUrl, setAddWorkUrl] = useState('')
+  const [addingWork, setAddingWork] = useState(false)
   // 最大共演人数限制（补齐作品时作品女演员数超过则跳过；0=不限）
   const [maxCoStar, setMaxCoStar] = useState<number>(() => {
     const v = parseInt(localStorage.getItem('maxCoStarLimit') ?? '', 10)
@@ -535,6 +557,14 @@ export function ActorDetail() {
                 onChange={(e) => setSinceDate(e.target.value)}
                 style={{ width: 128, padding: '5px 6px' }} />
             </label>
+            <input className="input" type="url" placeholder="粘贴作品链接手动添加" value={addWorkUrl}
+              onChange={(e) => setAddWorkUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') doAddWork() }}
+              style={{ width: 190, padding: '6px 10px' }} />
+            <button className="btn btn--ghost btn--sm" onClick={doAddWork} disabled={!addWorkUrl.trim() || addingWork}
+              title="把该作品添加到当前演员名下：已入库只补关联；未入库自动抓取详情">
+              {addingWork ? '添加中…' : '添加作品'}
+            </button>
             <button className={`btn ${autoAdd ? 'btn--gold' : 'btn--ghost'}`} onClick={toggleAutoAdd} disabled={!subscribed}
               title={!subscribed ? '请先关注' : (autoAdd ? '点击关闭自动入库' : '点击开启：有新作自动入库+下载')}>
               自动入库{autoAdd ? ' ✓' : ''}
@@ -767,6 +797,11 @@ export function ActorDetail() {
             <button className={sort === 'added' ? 'on' : ''} onClick={() => loadMovies(1, 'added', inLib)}>加入日期</button>
             <button className={sort === 'release' ? 'on' : ''} onClick={() => loadMovies(1, 'release', inLib)}>发行日期</button>
             <button className={sort === 'rating' ? 'on' : ''} onClick={() => loadMovies(1, 'rating', inLib)}>评分</button>
+          </div>
+          <div className="seg">
+            <button className={cast === 'all' ? 'on' : ''} onClick={() => loadMovies(1, sort, inLib, q, 'all')}>全部</button>
+            <button className={cast === 'solo' ? 'on' : ''} onClick={() => loadMovies(1, sort, inLib, q, 'solo')} title="女优 1 人">单体</button>
+            <button className={cast === 'multi' ? 'on' : ''} onClick={() => loadMovies(1, sort, inLib, q, 'multi')} title="女优 ≥ 2 人">多人</button>
           </div>
           <select className="select" value={inLib} onChange={(e) => loadMovies(1, sort, e.target.value as 'all' | 'in' | 'out')} aria-label="媒体库筛选">
             <option value="all">全部媒体库状态</option>
