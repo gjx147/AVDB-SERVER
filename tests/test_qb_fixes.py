@@ -301,3 +301,31 @@ def test_batch_push_passes_actor_name(client, monkeypatch):
     r = client.post('/api/tasks/batch-push', json={'task_ids': [tid], 'downloader': 'qbittorrent'})
     assert r.status_code == 200, r.text
     assert captured.get('actor') == 'Lana Rhoades'
+
+def test_qb_health_endpoint(client, monkeypatch):
+    """qb-health：返回版本/连接状态/DHT 节点数。"""
+    import routers.downloaders as dl_mod
+
+    class FakeQB:
+        def auth_log_in(self):
+            pass
+
+        def app_version(self):
+            return 'v5.0.3'
+
+        def sync_maindata(self):
+            return {"server_state": {"connection_status": "firewalled", "dht_nodes": 12}}
+
+        def auth_log_out(self):
+            pass
+
+    class FakeMod:
+        Client = lambda *a, **kw: FakeQB()  # noqa: E731
+
+    import qbittorrentapi
+    monkeypatch.setattr(qbittorrentapi, 'Client', FakeMod.Client)
+    r = client.post('/api/downloaders/qb-health')
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d['ok'] is True and d['version'] == 'v5.0.3'
+    assert d['connection_status'] == 'firewalled' and d['dht_nodes'] == 12

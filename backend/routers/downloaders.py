@@ -222,6 +222,40 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
+def _qb_health_sync(config: dict) -> dict:
+    """连通性自检：登录 + 版本 + server_state（连接状态/DHT 节点数，诊断 metaDL 卡死）。"""
+    if not config.get("qb_url"):
+        return {"ok": False, "message": "未配置 qBittorrent"}
+    import qbittorrentapi
+    qbc = qbittorrentapi.Client(
+        host=config.get("qb_url", ""),
+        username=config.get("qb_username", ""),
+        password=config.get("qb_password", ""),
+        REQUESTS_ARGS={"timeout": 10},
+    )
+    try:
+        qbc.auth_log_in()
+        version = qbc.app_version()
+        info: dict = {}
+        try:
+            md = qbc.sync_maindata()
+            ss = (md or {}).get("server_state", {}) or {}
+            info = {
+                "connection_status": ss.get("connection_status"),
+                "dht_nodes": ss.get("dht_nodes"),
+            }
+        except Exception as e:
+            info = {"error": str(e)[:80]}
+        return {"ok": True, "version": version, **info}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+    finally:
+        try:
+            qbc.auth_log_out()
+        except Exception:
+            pass
+
+
 def _test_qbittorrent_sync(config: dict) -> dict:
     """同步函数：测试 qBittorrent 连接（供 to_thread 调用）。"""
     import qbittorrentapi
@@ -250,6 +284,14 @@ def cd2_rename_all(_admin: CurrentAdmin):
         _aio.set_event_loop(loop)
     r = loop.run_until_complete(_aio.to_thread(run_rename_all))
     return r
+
+
+@router.post("/qb-health")
+async def qb_health(db: DbSession, _user: CurrentUser):
+    """qB 连通性自检（诊断「下载元数据」卡死：DHT 节点/连接状态/版本）。"""
+    import asyncio
+    config = {k: _get_setting(db, k) for k in ["qb_url", "qb_username", "qb_password"]}
+    return await asyncio.to_thread(_qb_health_sync, config)
 
 
 @router.post("/test")

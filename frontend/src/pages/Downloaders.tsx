@@ -35,7 +35,23 @@ export function Downloaders() {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
+  const qbHealth = async () => {
+  setTesting('qbittorrent')
+  try {
+    await api.settings.update(s)
+    const r = await api.downloaders.qbHealth()
+    if (!r.ok) { toastErr(r.message || '自检失败'); return }
+    const parts: string[] = []
+    if (r.version) parts.push(`版本 ${r.version}`)
+    if (r.connection_status) parts.push(`连接 ${r.connection_status}`)
+    if (r.dht_nodes != null) parts.push(`DHT 节点 ${r.dht_nodes}`)
+    if (r.dht_nodes != null && r.dht_nodes < 50) parts.push('⚠ DHT 节点极少，磁力元数据很可能拉不下来')
+    if (r.error) parts.push(`server_state: ${r.error}`)
+    toastOk('qB 连通性自检：' + parts.join(' · '))
+  } catch (e) { toastErr(String((e as Error).message)) }
+  finally { setTesting(null) }
+}
+const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
     if (!validate()) return
     try {
       // 先保存再测试（因为测试接口从 DB 读取配置）
@@ -114,6 +130,10 @@ export function Downloaders() {
           <button className="btn btn--ghost btn--sm" onClick={() => test('qbittorrent')} disabled={testing !== null}>
             {testing === 'qbittorrent' ? '测试中…' : '测试连接'}
           </button>
+          <button className="btn btn--ghost btn--sm" onClick={qbHealth} disabled={testing !== null}>
+            {testing === 'qbittorrent' ? '自检中…' : '连通性自检'}
+          </button>
+
         </div>
       </div>
 
