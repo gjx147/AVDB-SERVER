@@ -38,6 +38,19 @@ def _extract_hash(magnet: str) -> str | None:
 # 演员分文件夹：一级总目录（口径确认：女优/演员名/）
 _ACTOR_SUBDIR = "女优"
 
+# 公共 tracker 默认列表（磁力无 tr= 时附加；来源 ngosang/trackerslist 常用稳定项，
+# 可用设置键 qb_global_trackers 覆盖为最新 trackers_best.txt）
+_DEFAULT_TRACKERS = ",".join([
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://opentracker.i2p.rocks:6969/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://tracker.dler.org:6969/announce",
+])
+
 
 _WIN_RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$")
 
@@ -98,7 +111,15 @@ def _push_qbittorrent_sync(magnet: str, config: dict, actor_name: str | None = N
         save_path = _build_qb_save_path(config, actor_name)
         if save_path is None:
             save_path = config.get("qbittorrent_save_path") or None
-        result = qbc.torrents_add(urls=magnet, save_path=save_path)
+        # metaDL 解药：磁力无 tracker（无 tr=，DHT 又连不上时永远找不到 peer）→ 附加公共 tracker
+        add_kwargs: dict = {}
+        if "tr=" not in magnet:
+            tracks = (config.get("qb_global_trackers") or "").strip()
+            tracks = tracks or _DEFAULT_TRACKERS
+            if tracks:
+                add_kwargs["trackers"] = ",".join(
+                    t.strip() for t in str(tracks).replace("\n", ",").split(",") if t.strip())
+        result = qbc.torrents_add(urls=magnet, save_path=save_path, **add_kwargs)
         # qBittorrent torrents_add 返回 "Ok." 或 "Fails."，但不同版本/已存在任务时
         # 返回值可能不同。只要没抛异常且返回值不明确含 "Fail" 就视为成功。
         result_str = str(result).strip()
@@ -167,6 +188,7 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     # 读配置
     config = {}
     for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
+              "qb_global_trackers",
               "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:

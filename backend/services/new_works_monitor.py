@@ -488,7 +488,7 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
             # 读下载器配置
             from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
             config_keys = [
-                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
+                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
                 "clouddrive_url", "clouddrive_token", "clouddrive_username",
                 "clouddrive_password", "clouddrive_save_path",
             ]

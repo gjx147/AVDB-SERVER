@@ -54,7 +54,7 @@ async def push_with_strategy(task_id: int) -> dict:
             return {"ok": False, "message": "任务无磁力"}
         downloader = pick_downloader(db, t)
         config_keys = (
-            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
+            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
             "clouddrive_url", "clouddrive_token", "clouddrive_username",
             "clouddrive_password", "clouddrive_save_path",
         )

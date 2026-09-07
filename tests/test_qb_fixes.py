@@ -253,7 +253,7 @@ def test_push_sync_fallback_and_nested(client, monkeypatch):
         def auth_log_in(self):
             pass
 
-        def torrents_add(self, urls=None, save_path=None):
+        def torrents_add(self, urls=None, save_path=None, **kw):
             captured['save_path'] = save_path
             return "Ok."
 
@@ -329,3 +329,41 @@ def test_qb_health_endpoint(client, monkeypatch):
     d = r.json()
     assert d['ok'] is True and d['version'] == 'v5.0.3'
     assert d['connection_status'] == 'firewalled' and d['dht_nodes'] == 12
+
+def test_push_sync_appends_trackers():
+    """metaDL 解药：无 tr= 的磁力附加公共 tracker；已有 tr= 不重复附加。"""
+    import routers.downloaders as dl_mod
+    from routers.downloaders import _DEFAULT_TRACKERS
+    captured = {}
+
+    class FakeQB:
+        def auth_log_in(self):
+            pass
+
+        def torrents_add(self, urls=None, save_path=None, trackers=None):
+            captured['trackers'] = trackers
+            return "Ok."
+
+        def auth_log_out(self):
+            pass
+
+    class FakeMod:
+        Client = lambda *a, **kw: FakeQB()  # noqa: E731
+
+    import qbittorrentapi
+    import unittest.mock as um
+    orig = qbittorrentapi.Client
+    try:
+        qbittorrentapi.Client = FakeMod.Client
+        # 无 tracker 磁力：附加默认
+        dl_mod._push_qbittorrent_sync('magnet:?xt=urn:btih:' + 'a' * 40, {})
+        assert captured['trackers'] and 'opentrackr' in captured['trackers'].split(',')[0]
+        # 已有 tr=：不附加
+        dl_mod._push_qbittorrent_sync('magnet:?xt=urn:btih:' + 'b' * 40 + '&tr=http://x/announce', {})
+        assert captured['trackers'] is None
+        # 自定义覆盖
+        dl_mod._push_qbittorrent_sync('magnet:?xt=urn:btih:' + 'c' * 40,
+                                      {"qb_global_trackers": "udp://my.tracker:1/announce, udp://my2:2/announce"})
+        assert captured['trackers'] == 'udp://my.tracker:1/announce,udp://my2:2/announce'
+    finally:
+        qbittorrentapi.Client = orig

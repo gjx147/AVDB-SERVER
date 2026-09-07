@@ -451,7 +451,7 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
         select(Task).where(Task.id.in_(payload.task_ids))
     ).scalars().all()
     config_keys = (
-        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
+        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
         "clouddrive_url", "clouddrive_token", "clouddrive_username",
         "clouddrive_password", "clouddrive_save_path",
     )
