@@ -355,9 +355,11 @@ def test_push_sync_appends_trackers():
     orig = qbittorrentapi.Client
     try:
         qbittorrentapi.Client = FakeMod.Client
-        # 无 tracker 磁力：附加默认
+        # 无 tracker 磁力：附加默认（HTTPS/TCP 优先）
         dl_mod._push_qbittorrent_sync('magnet:?xt=urn:btih:' + 'a' * 40, {})
-        assert captured['trackers'] and 'opentrackr' in captured['trackers'].split(',')[0]
+        tl = (captured['trackers'] or '').split(',')
+        assert len(tl) == 20, '应附加 20 条 tracker'
+        assert tl[0].startswith('https://'), 'HTTPS/TCP 项应排首位（UDP 封锁仍可用）'
         # 已有 tr=：不附加
         dl_mod._push_qbittorrent_sync('magnet:?xt=urn:btih:' + 'b' * 40 + '&tr=http://x/announce', {})
         assert captured['trackers'] is None

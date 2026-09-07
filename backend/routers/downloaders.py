@@ -38,17 +38,31 @@ def _extract_hash(magnet: str) -> str | None:
 # 演员分文件夹：一级总目录（口径确认：女优/演员名/）
 _ACTOR_SUBDIR = "女优"
 
-# 公共 tracker 默认列表（磁力无 tr= 时附加；来源 ngosang/trackerslist 常用稳定项，
-# 可用设置键 qb_global_trackers 覆盖为最新 trackers_best.txt）
+# 公共 tracker 默认列表（磁力无 tr= 时附加；来源 ngosang/trackerslist trackers_best.txt，
+# 2026-09-07 实时拉取 20 条）。HTTPS/TCP 项排前：服务器 UDP 被封锁时 TCP 443 仍可连接，
+# 是「qB 卡元数据而迅雷（走私有加速网）能下」这一场景的最优解；可用设置键
+# qb_global_trackers 覆盖为最新 trackers_best.txt 全量列表。
 _DEFAULT_TRACKERS = ",".join([
+    "https://tracker.pmman.tech:443/announce",
+    "https://tracker.nekomi.cn:443/announce",
+    "https://tracker.bt4g.com:443/announce",
+    "https://pybittrack.retiolus.net:443/announce",
+    "https://ht.therarbg.to:443/announce",
+    "https://004430.xyz:443/announce",
+    "udp://zer0day.ch:1337/announce",
+    "udp://tracker.therarbg.to:6969/announce",
+    "udp://tracker.publictracker.xyz:6969/announce",
     "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://opentracker.i2p.rocks:6969/announce",
-    "udp://tracker.openbittorrent.com:6969/announce",
-    "udp://exodus.desync.com:6969/announce",
     "udp://open.demonii.com:1337/announce",
+    "udp://tracker2.dler.org:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.qu.ax:6969/announce",
     "udp://tracker.dler.org:6969/announce",
+    "udp://tracker.auctor.tv:6969/announce",
+    "udp://retracker01-msk-virt.corbina.net:80/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce",
 ])
 
 
