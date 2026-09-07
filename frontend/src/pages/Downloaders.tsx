@@ -104,6 +104,12 @@ export function Downloaders() {
             <div className="field"><label htmlFor="qb-password">密码</label><input id="qb-password" className="input" type="password" value={s.qbittorrent_password} onChange={(e) => upd({ qbittorrent_password: e.target.value })} /></div>
           </div>
           <div className="field"><label htmlFor="qb-save-path">下载保存路径</label><input id="qb-save-path" className="input" value={s.qbittorrent_save_path} onChange={(e) => upd({ qbittorrent_save_path: e.target.value })} /></div>
+<div className="field"><label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}
+  title="开启后每次推送下载自动保存到 保存路径/女优/演员名/（目录由 qB 自动创建）；未填充基础路径时无效">
+  <input type="checkbox" checked={s.qb_actor_subfolder === 'true'}
+    onChange={(e) => upd({ qb_actor_subfolder: e.target.checked ? 'true' : '' })} />
+  按演员分文件夹（女优/演员名/）
+</label></div>
           <div className="hint">路径以 / 开头视为绝对路径，否则拼接默认目录</div>
           <button className="btn btn--ghost btn--sm" onClick={() => test('qbittorrent')} disabled={testing !== null}>
             {testing === 'qbittorrent' ? '测试中…' : '测试连接'}

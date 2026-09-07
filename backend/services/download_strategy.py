@@ -45,7 +45,7 @@ async def push_with_strategy(task_id: int) -> dict:
     """按策略推送单个任务（规则引擎动作与批量推送共用）。"""
     from database import SessionLocal
     from models import Download, Task
-    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_qbittorrent
+    from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
 
     db = SessionLocal()
     try:
@@ -54,7 +54,7 @@ async def push_with_strategy(task_id: int) -> dict:
             return {"ok": False, "message": "任务无磁力"}
         downloader = pick_downloader(db, t)
         config_keys = (
-            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
             "clouddrive_url", "clouddrive_token", "clouddrive_username",
             "clouddrive_password", "clouddrive_save_path",
         )
@@ -64,7 +64,7 @@ async def push_with_strategy(task_id: int) -> dict:
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
                 downloader = "qbittorrent"
-                result = await _push_qbittorrent(t.best_magnet, config)
+                result = await _push_qbittorrent(t.best_magnet, config, _first_actor_name(t))
         except Exception as e:
             return {"ok": False, "message": str(e)[:120]}
         if result.get("ok"):

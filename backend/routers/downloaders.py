@@ -35,13 +35,52 @@ def _extract_hash(magnet: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+# 演员分文件夹：一级总目录（口径确认：女优/演员名/）
+_ACTOR_SUBDIR = "女优"
+
+
+_WIN_RESERVED = re.compile(r"(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$")
+
+
+def _safe_folder_name(name: str) -> str | None:
+    """文件系统消毒：非法字符替换 _、去首尾空白与点、限长；空/点/点点/Windows 保留名拒绝。"""
+    n = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", (name or "").strip()).strip(". ")
+    if not n or n in (".", "..") or _WIN_RESERVED.fullmatch(n):
+        return None
+    return n[:100].rstrip(". ") or None  # 截断后不留尾部点/空格（Windows 不允许）
+
+
+def _first_actor_name(task) -> str | None:
+    """作品首位女优（JavDB 演员文本女优在前，逗号分隔）。"""
+    if task is None or not task.actors:
+        return None
+    return (task.actors.split(",")[0] or "").strip() or None
+
+
+def _build_qb_save_path(config: dict, actor_name: str | None) -> str | None:
+    """按演员分文件夹：{基础路径}/女优/{演员名}。未开启/无基础路径/无名 -> None（维持原行为）。"""
+    if str(config.get("qb_actor_subfolder") or "").strip().lower() not in ("1", "true"):
+        return None  # 仅显式 true/1 生效（防 "0"/"false" 被当作开）
+    base = (config.get("qbittorrent_save_path") or "").strip()
+    if not base:
+        return None
+    name = _safe_folder_name(actor_name or "")
+    if not name:
+        return None
+    stripped = base.rstrip("/\\")
+    if not stripped:
+        # base 为纯分隔符：'/' 可用（结果 /女优/Name），'\' 病态配置回退
+        return None if base == "\\" else f"/{_ACTOR_SUBDIR}/{name}"
+    return f"{stripped}/{_ACTOR_SUBDIR}/{name}"
+
+
 class PushRequest(BaseModel):
     magnet: str
     task_id: int | None = None
     downloader: str = "qbittorrent"  # qbittorrent/aria2/transmission
 
 
-def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
+def _push_qbittorrent_sync(magnet: str, config: dict, actor_name: str | None = None) -> dict:
     """同步函数：推送磁力到 qBittorrent（供 asyncio.to_thread 调用）。
 
     架构修复：加 REQUESTS_ARGS timeout，防止网络挂起阻塞。
@@ -55,7 +94,10 @@ def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
     )
     try:
         qbc.auth_log_in()
-        save_path = config.get("qbittorrent_save_path") or None
+        # 演员分文件夹（开关+基础路径+演员名齐全时）：{基础}/女优/{演员名}，qB 自动建目录
+        save_path = _build_qb_save_path(config, actor_name)
+        if save_path is None:
+            save_path = config.get("qbittorrent_save_path") or None
         result = qbc.torrents_add(urls=magnet, save_path=save_path)
         # qBittorrent torrents_add 返回 "Ok." 或 "Fails."，但不同版本/已存在任务时
         # 返回值可能不同。只要没抛异常且返回值不明确含 "Fail" 就视为成功。
@@ -71,10 +113,10 @@ def _push_qbittorrent_sync(magnet: str, config: dict) -> dict:
             pass
 
 
-async def _push_qbittorrent(magnet: str, config: dict) -> dict:
+async def _push_qbittorrent(magnet: str, config: dict, actor_name: str | None = None) -> dict:
     """推送到 qBittorrent（同步 API 包 asyncio.to_thread，不阻塞事件循环）。"""
     import asyncio
-    return await asyncio.to_thread(_push_qbittorrent_sync, magnet, config)
+    return await asyncio.to_thread(_push_qbittorrent_sync, magnet, config, actor_name)
 
 
 async def _push_aria2(magnet: str, config: dict) -> dict:
@@ -124,7 +166,7 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     """推送磁力到下载器并记录到 downloads 表。"""
     # 读配置
     config = {}
-    for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+    for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
               "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:
@@ -135,8 +177,11 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
 
     # 推送
     logger.info(f"推送磁力到 {downloader}: {req.magnet[:80]}... (task_id={req.task_id})")
+    # 提前取任务：推送前解析首位女优（演员分文件夹用）
+    task = db.get(Task, req.task_id) if req.task_id else None
+    actor_name = _first_actor_name(task)
     if downloader == "qbittorrent":
-        result = await _push_qbittorrent(req.magnet, config)
+        result = await _push_qbittorrent(req.magnet, config, actor_name)
     elif downloader == "aria2":
         result = await _push_aria2(req.magnet, config)
     elif downloader == "clouddrive":
@@ -152,7 +197,6 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
         logger.error(f"推送失败 [{downloader}]: {result.get('message', '')}")
 
     # 记录到 downloads 表
-    task = db.get(Task, req.task_id) if req.task_id else None
     dl = Download(
         task_id=req.task_id,
         video_code=task.video_code if task else None,

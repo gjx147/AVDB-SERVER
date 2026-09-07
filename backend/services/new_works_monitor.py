@@ -486,9 +486,9 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
                 logger.warning(f"[新作监控] 推送前 Emby 复核失败（继续推送）: {e}")
 
             # 读下载器配置
-            from routers.downloaders import _get_setting, _push_clouddrive, _push_qbittorrent, _extract_hash
+            from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
             config_keys = [
-                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
                 "clouddrive_url", "clouddrive_token", "clouddrive_username",
                 "clouddrive_password", "clouddrive_save_path",
             ]
@@ -499,7 +499,7 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
             if downloader == "clouddrive":
                 result = await _push_clouddrive(task.best_magnet, config)
             else:
-                result = await _push_qbittorrent(task.best_magnet, config)
+                result = await _push_qbittorrent(task.best_magnet, config, _first_actor_name(task))
 
             if result.get("ok"):
                 # 记录 download

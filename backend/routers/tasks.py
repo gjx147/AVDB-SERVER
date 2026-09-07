@@ -445,13 +445,13 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
     if force_dl and force_dl not in ("clouddrive", "qbittorrent"):
         raise HTTPException(status_code=400, detail="downloader 仅支持 clouddrive / qbittorrent")
     from models import Download
-    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_qbittorrent
+    from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
 
     tasks = db.execute(
         select(Task).where(Task.id.in_(payload.task_ids))
     ).scalars().all()
     config_keys = (
-        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path",
+        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
         "clouddrive_url", "clouddrive_token", "clouddrive_username",
         "clouddrive_password", "clouddrive_save_path",
     )
@@ -472,7 +472,7 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
             if dl == "clouddrive":
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
-                result = await _push_qbittorrent(t.best_magnet, config)
+                result = await _push_qbittorrent(t.best_magnet, config, _first_actor_name(t))
             if result.get("ok"):
                 db.add(Download(
                     task_id=t.id, video_code=t.video_code, magnet=t.best_magnet,

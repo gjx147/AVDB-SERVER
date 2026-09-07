@@ -259,6 +259,7 @@ export interface Settings {
   qbittorrent_username: string
   qbittorrent_password: string
   qbittorrent_save_path: string
+  qb_actor_subfolder?: string  // 按演员分文件夹（女优/演员名/）
   default_downloader: string
   // CD2 下载文件整理（推送成功后 ≥200MB 视频重命名为番号，其余删除）
   cd2_rename_enabled: boolean
