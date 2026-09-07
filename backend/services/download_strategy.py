@@ -26,7 +26,9 @@ def pick_downloader(db, task, strategy: dict | None = None, default: str | None 
         strategy = get_strategy(db)
     if default is None:
         from routers.downloaders import _get_setting
-        default = _get_setting(db, "default_downloader") or "qbittorrent"
+        default = _get_setting(db, "default_downloader") or "xunlei"
+    if default == "qbittorrent":
+        default = "xunlei"  # qB 退役归一（S3）
     # 演员优先
     t_actors = [a.strip() for a in (task.actors or "").split(",") if a.strip()]
     for a in t_actors:
@@ -45,7 +47,7 @@ async def push_with_strategy(task_id: int) -> dict:
     """按策略推送单个任务（规则引擎动作与批量推送共用）。"""
     from database import SessionLocal
     from models import Download, Task
-    from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
+    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_xunlei
 
     db = SessionLocal()
     try:
@@ -54,7 +56,7 @@ async def push_with_strategy(task_id: int) -> dict:
             return {"ok": False, "message": "任务无磁力"}
         downloader = pick_downloader(db, t)
         config_keys = (
-            "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
+            "xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
             "clouddrive_url", "clouddrive_token", "clouddrive_username",
             "clouddrive_password", "clouddrive_save_path",
         )
@@ -63,8 +65,10 @@ async def push_with_strategy(task_id: int) -> dict:
             if downloader == "clouddrive":
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
-                downloader = "qbittorrent"
-                result = await _push_qbittorrent(t.best_magnet, config, _first_actor_name(t))
+                downloader = "xunlei"
+                if t.video_code:
+                    config["_task_name"] = t.video_code
+                result = await _push_xunlei(t.best_magnet, config)
         except Exception as e:
             return {"ok": False, "message": str(e)[:120]}
         if result.get("ok"):

@@ -84,74 +84,27 @@ def _first_actor_name(task) -> str | None:
     return (task.actors.split(",")[0] or "").strip() or None
 
 
-def _build_qb_save_path(config: dict, actor_name: str | None) -> str | None:
-    """按演员分文件夹：{基础路径}/女优/{演员名}。未开启/无基础路径/无名 -> None（维持原行为）。"""
-    if str(config.get("qb_actor_subfolder") or "").strip().lower() not in ("1", "true"):
-        return None  # 仅显式 true/1 生效（防 "0"/"false" 被当作开）
-    base = (config.get("qbittorrent_save_path") or "").strip()
-    if not base:
-        return None
-    name = _safe_folder_name(actor_name or "")
-    if not name:
-        return None
-    stripped = base.rstrip("/\\")
-    if not stripped:
-        # base 为纯分隔符：'/' 可用（结果 /女优/Name），'\' 病态配置回退
-        return None if base == "\\" else f"/{_ACTOR_SUBDIR}/{name}"
-    return f"{stripped}/{_ACTOR_SUBDIR}/{name}"
-
-
 class PushRequest(BaseModel):
     magnet: str
     task_id: int | None = None
-    downloader: str = "qbittorrent"  # qbittorrent/aria2/transmission
+    downloader: str = "xunlei"  # xunlei/clouddrive/aria2（qB 已退役）
 
 
-def _push_qbittorrent_sync(magnet: str, config: dict, actor_name: str | None = None) -> dict:
-    """同步函数：推送磁力到 qBittorrent（供 asyncio.to_thread 调用）。
-
-    架构修复：加 REQUESTS_ARGS timeout，防止网络挂起阻塞。
-    """
-    import qbittorrentapi
-    qbc = qbittorrentapi.Client(
-        host=config.get("qb_url", ""),
-        username=config.get("qb_username", ""),
-        password=config.get("qb_password", ""),
-        REQUESTS_ARGS={"timeout": 10},
-    )
+async def _push_xunlei(magnet: str, config: dict) -> dict:
+    """推送到迅雷容器（cnk3x/xunlei Web 接口）。"""
+    from services.xunlei_client import XunleiClient
+    url = config.get("xunlei_url", "")
+    if not url:
+        return {"ok": False, "message": "迅雷未配置"}
     try:
-        qbc.auth_log_in()
-        # 演员分文件夹（开关+基础路径+演员名齐全时）：{基础}/女优/{演员名}，qB 自动建目录
-        save_path = _build_qb_save_path(config, actor_name)
-        if save_path is None:
-            save_path = config.get("qbittorrent_save_path") or None
-        # metaDL 解药：磁力无 tracker（无 tr=，DHT 又连不上时永远找不到 peer）→ 附加公共 tracker
-        add_kwargs: dict = {}
-        if "tr=" not in magnet:
-            tracks = (config.get("qb_global_trackers") or "").strip()
-            tracks = tracks or _DEFAULT_TRACKERS
-            if tracks:
-                add_kwargs["trackers"] = ",".join(
-                    t.strip() for t in str(tracks).replace("\n", ",").split(",") if t.strip())
-        result = qbc.torrents_add(urls=magnet, save_path=save_path, **add_kwargs)
-        # qBittorrent torrents_add 返回 "Ok." 或 "Fails."，但不同版本/已存在任务时
-        # 返回值可能不同。只要没抛异常且返回值不明确含 "Fail" 就视为成功。
-        result_str = str(result).strip()
-        ok = "fail" not in result_str.lower()
-        return {"ok": ok, "message": result_str or "已添加"}
+        client = XunleiClient(url,
+                              basic_user=config.get("xunlei_basic_user", ""),
+                              basic_pass=config.get("xunlei_basic_pass", ""))
+        # 任务名 = 番号（轮询按 video_code 匹配）；无名则固定前缀
+        name = config.get("_task_name", "") or "avdb-task"
+        return client.add_task(magnet, name)
     except Exception as e:
-        return {"ok": False, "message": str(e)}
-    finally:
-        try:
-            qbc.auth_log_out()
-        except Exception:
-            pass
-
-
-async def _push_qbittorrent(magnet: str, config: dict, actor_name: str | None = None) -> dict:
-    """推送到 qBittorrent（同步 API 包 asyncio.to_thread，不阻塞事件循环）。"""
-    import asyncio
-    return await asyncio.to_thread(_push_qbittorrent_sync, magnet, config, actor_name)
+        return {"ok": False, "message": str(e)[:200]}
 
 
 async def _push_aria2(magnet: str, config: dict) -> dict:
@@ -201,23 +154,28 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     """推送磁力到下载器并记录到 downloads 表。"""
     # 读配置
     config = {}
-    for k in ["qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder",
-              "qb_global_trackers",
+    for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
               "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:
         config[k] = _get_setting(db, k)
 
     # 下载器：空时读 DB 的 default_downloader
-    downloader = req.downloader or _get_setting(db, "default_downloader") or "qbittorrent"
+    downloader = req.downloader or _get_setting(db, "default_downloader") or "xunlei"
+    if downloader == "qbittorrent":
+        downloader = "xunlei"  # qB 退役归一（旧默认值/策略残留，S3）
 
     # 推送
     logger.info(f"推送磁力到 {downloader}: {req.magnet[:80]}... (task_id={req.task_id})")
-    # 提前取任务：推送前解析首位女优（演员分文件夹用）
+    # 提前取任务：推送时以番号作为迅雷任务名（轮询按 video_code 匹配）
     task = db.get(Task, req.task_id) if req.task_id else None
-    actor_name = _first_actor_name(task)
-    if downloader == "qbittorrent":
-        result = await _push_qbittorrent(req.magnet, config, actor_name)
+    if task and task.video_code:
+        config["_task_name"] = task.video_code
+    if downloader == "xunlei":
+        if not task or not task.video_code:
+            return {"ok": False, "message": "迅雷通道需要作品番号（无番号作品请用「导出磁力」手动添加）"}
+        config["_task_name"] = task.video_code
+        result = await _push_xunlei(req.magnet, config)
     elif downloader == "aria2":
         result = await _push_aria2(req.magnet, config)
     elif downloader == "clouddrive":
@@ -258,56 +216,6 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     return {"ok": result["ok"], "download_id": dl.id, "message": result.get("message")}
 
 
-def _qb_health_sync(config: dict) -> dict:
-    """连通性自检：登录 + 版本 + server_state（连接状态/DHT 节点数，诊断 metaDL 卡死）。"""
-    if not config.get("qb_url"):
-        return {"ok": False, "message": "未配置 qBittorrent"}
-    import qbittorrentapi
-    qbc = qbittorrentapi.Client(
-        host=config.get("qb_url", ""),
-        username=config.get("qb_username", ""),
-        password=config.get("qb_password", ""),
-        REQUESTS_ARGS={"timeout": 10},
-    )
-    try:
-        qbc.auth_log_in()
-        version = qbc.app_version()
-        info: dict = {}
-        try:
-            md = qbc.sync_maindata()
-            ss = (md or {}).get("server_state", {}) or {}
-            info = {
-                "connection_status": ss.get("connection_status"),
-                "dht_nodes": ss.get("dht_nodes"),
-            }
-        except Exception as e:
-            info = {"error": str(e)[:80]}
-        return {"ok": True, "version": version, **info}
-    except Exception as e:
-        return {"ok": False, "message": str(e)}
-    finally:
-        try:
-            qbc.auth_log_out()
-        except Exception:
-            pass
-
-
-def _test_qbittorrent_sync(config: dict) -> dict:
-    """同步函数：测试 qBittorrent 连接（供 to_thread 调用）。"""
-    import qbittorrentapi
-    qbc = qbittorrentapi.Client(
-        host=config["qb_url"], username=config["qb_username"], password=config["qb_password"],
-        REQUESTS_ARGS={"timeout": 10},
-    )
-    try:
-        qbc.auth_log_in()
-        version = qbc.app_version()
-        qbc.auth_log_out()
-        return {"ok": True, "version": version}
-    except Exception as e:
-        return {"ok": False, "message": str(e)}
-
-
 @router.post("/rename-all")
 def cd2_rename_all(_admin: CurrentAdmin):
     """CD2 一键整理：全部已推送未整理的 clouddrive 记录立即整理。"""
@@ -322,14 +230,6 @@ def cd2_rename_all(_admin: CurrentAdmin):
     return r
 
 
-@router.post("/qb-health")
-async def qb_health(db: DbSession, _user: CurrentUser):
-    """qB 连通性自检（诊断「下载元数据」卡死：DHT 节点/连接状态/版本）。"""
-    import asyncio
-    config = {k: _get_setting(db, k) for k in ["qb_url", "qb_username", "qb_password"]}
-    return await asyncio.to_thread(_qb_health_sync, config)
-
-
 @router.post("/test")
 @router.post("/test-connection")  # 兼容前端旧路径
 async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
@@ -340,13 +240,21 @@ async def test_connection(body: dict, db: DbSession, _user: CurrentUser):
     import asyncio
     downloader = body.get("downloader", "")
     config = {}
-    for k in ["qb_url", "qb_username", "qb_password", "aria2_url", "aria2_secret",
+    for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass", "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password",
               "cd2_download_folder"]:
         config[k] = _get_setting(db, k)
-    if downloader == "qbittorrent":
-        result = await asyncio.to_thread(_test_qbittorrent_sync, config)
-        logger.info(f"测试连接 [qbittorrent]: ok={result.get('ok')} msg={result.get('message','')}")
+    if downloader == "xunlei":
+        from services.xunlei_client import XunleiClient
+        result = await asyncio.to_thread(
+            lambda: XunleiClient(config.get("xunlei_url", ""),
+                                 config.get("xunlei_basic_user", ""),
+                                 config.get("xunlei_basic_pass", "")).test())
+        if result.get("ok"):
+            result = {**result, "message": f"迅雷连通：版本 {result.get('version')}，设备 {result.get('device')}"}
+
+
+        logger.info(f"测试连接 [xunlei]: ok={result.get('ok')} msg={result.get('message','')}")
         return result
     elif downloader == "aria2":
         if not config["aria2_url"]:

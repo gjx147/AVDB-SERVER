@@ -34,18 +34,9 @@ export function Downloads() {
     input.click()
   }
 
-  // N19: 种子健康（做种数 <5 低健康）
-  const [unhealthy, setUnhealthy] = useState<Set<number>>(new Set())
-  useEffect(() => {
-    let alive = true
-    api.torrentHealth().then((r) => {
-      if (alive && r.items) setUnhealthy(new Set(r.items.filter((i) => !i.healthy).map((i) => i.dl_id)))
-    }).catch(() => {})
-    return () => { alive = false }
-  }, [])
-  const [filter, setFilter] = useState(() => searchParams.get('status') || '')
-  const toastErr = useStore((s) => s.toastErr)
   const toastOk = useStore((s) => s.toastOk)
+  const toastErr = useStore((s) => s.toastErr)
+  const [filter, setFilter] = useState(() => searchParams.get('status') || '')
 
   const load = useCallback(() => {
     setData(null); setError(null)
@@ -104,10 +95,9 @@ export function Downloads() {
                 </div>
               </div>
               <div className="row-tags">
-                <span className="chip" style={{ fontSize: 10 }}>{d.downloader === 'qbittorrent' ? 'qB' : 'CD2'}</span>
+                <span className="chip" style={{ fontSize: 10 }}>{({ qbittorrent: 'qB', clouddrive: 'CD2', xunlei: '迅雷' } as Record<string, string>)[d.downloader || ''] || d.downloader}</span>
                 {d.organized && <span className="chip chip-green" style={{ fontSize: 10 }}>已整理</span>}
                 {d.organized && <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '1px 8px' }} onClick={() => uploadSub(d)}>字幕</button>}
-                {unhealthy.has(d.id) && <span className="chip chip-red" style={{ fontSize: 10 }}>低健康</span>}
                 <span className={`chip ${statusCls[d.status] || ''}`}>{statusLabel[d.status] || d.status}</span>
                 {d.status === 'downloading' && d.progress > 0 && (
                   <span className="chip chip-amber" style={{ fontFamily: 'var(--ff-mono)' }}>{Math.round(d.progress)}%</span>

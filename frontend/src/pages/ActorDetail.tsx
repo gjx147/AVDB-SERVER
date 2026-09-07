@@ -4,6 +4,7 @@ import { api, coverFileUrl, withImageAuth } from '../api/client'
 import type { Actor, ActorMovie, NewRelease } from '../api/types'
 import { PageHead, Loading, Empty, ErrorEmpty } from '../components/States'
 import { Icon } from '../components/Icons'
+import { MagnetExportModal } from '../components/MagnetExportModal'
 import { Lightbox } from '../components/Lightbox'
 import { Pager } from '../components/Pager'
 import { useStore } from '../store/useStore'
@@ -65,6 +66,7 @@ export function ActorDetail() {
   const [actorReleases, setActorReleases] = useState<NewRelease[] | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   // 简介（intro）与职业生涯（bio/timeline）手动编辑
   const [editingIntro, setEditingIntro] = useState(false)
   const [introDraft, setIntroDraft] = useState('')
@@ -369,22 +371,6 @@ export function ActorDetail() {
   }
   // 批量推送 CD2：强制走 CloudDrive2 离线下载（不受智能策略路由影响）
   // 批量推送 qB：强制走 qBittorrent（开启「按演员分文件夹」时自动按演员归档）
-  const batchPushQB = async () => {
-    if (!selected.size) return
-    const ids = [...selected]
-    setBatchBusy(true)
-    try {
-      const ok = await confirmBox('批量推送 qB',
-        `将把所选 ${ids.length} 个任务推送到 qBittorrent 下载（未提取到磁力的自动跳过；开启「按演员分文件夹」时自动按演员归档）。确定继续？`)
-      if (!ok) return
-      const r = await api.tasks.batchPush(ids, 'qbittorrent')
-      if (r.pushed > 0) toastOk(`已推送 ${r.pushed} 部到 qB${r.skipped ? `（跳过 ${r.skipped} 部无磁力/失败）` : ''}`)
-      else toastErr(`没有推送成功：${r.skipped} 部无磁力或推送失败`)
-      if (r.pushed > 0) setSelected(new Set())
-    } catch (e) { toastErr(String((e as Error).message)) }
-    finally { setBatchBusy(false) }
-  }
-
   const batchPushCD2 = async () => {
     const ids = [...selected]
     if (!ids.length) return
@@ -901,12 +887,15 @@ export function ActorDetail() {
       <div className={`batchbar${selected.size ? ' show' : ''}`}>
         <span className="sel-count">已选 {selected.size} 项</span>
         <button className="btn btn--gold btn--sm" onClick={batchPushCD2} disabled={batchBusy}>推送 CD2</button>
-<button className="btn btn--ghost btn--sm" onClick={batchPushQB} disabled={batchBusy}>推送 qB</button>
+<button className="btn btn--ghost btn--sm" onClick={() => setExportOpen(true)} disabled={batchBusy}>导出磁力</button>
               
         <button className="btn btn--ghost btn--sm" onClick={() => batch('favorite')} disabled={batchBusy}>批量收藏</button>
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
         <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>
       </div>
+      {exportOpen && (
+        <MagnetExportModal open={exportOpen} taskIds={[...selected]} onClose={() => setExportOpen(false)} />
+      )}
     </div>
   )
 }

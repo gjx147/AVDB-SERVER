@@ -23,9 +23,9 @@ export function Downloaders() {
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {}
-    if (!s.clouddrive_url && !s.qbittorrent_url) errs.general = '至少配置一个下载器'
+    if (!s.clouddrive_url && !s.xunlei_url) errs.general = '至少配置一个下载器'
     if (s.clouddrive_url && !s.clouddrive_url.includes(':')) errs.cdUrl = '格式: host:port'
-    if (s.qbittorrent_url && !s.qbittorrent_url.startsWith('http')) errs.qbUrl = '需以 http:// 或 https:// 开头'
+    if (s.xunlei_url && !s.xunlei_url.startsWith('http')) errs.xlUrl = '需以 http:// 或 https:// 开头'
     setValidation(errs)
     return Object.keys(errs).length === 0
   }
@@ -35,31 +35,15 @@ export function Downloaders() {
     try { await api.settings.update(s); toastOk('设置已保存') } catch (e) { toastErr(String((e as Error).message)) }
   }
 
-  const qbHealth = async () => {
-  setTesting('qbittorrent')
-  try {
-    await api.settings.update(s)
-    const r = await api.downloaders.qbHealth()
-    if (!r.ok) { toastErr(r.message || '自检失败'); return }
-    const parts: string[] = []
-    if (r.version) parts.push(`版本 ${r.version}`)
-    if (r.connection_status) parts.push(`连接 ${r.connection_status}`)
-    if (r.dht_nodes != null) parts.push(`DHT 节点 ${r.dht_nodes}`)
-    if (r.dht_nodes != null && r.dht_nodes < 50) parts.push('⚠ DHT 节点极少，磁力元数据很可能拉不下来')
-    if (r.error) parts.push(`server_state: ${r.error}`)
-    toastOk('qB 连通性自检：' + parts.join(' · '))
-  } catch (e) { toastErr(String((e as Error).message)) }
-  finally { setTesting(null) }
-}
-const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
+const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
     if (!validate()) return
     try {
       // 先保存再测试（因为测试接口从 DB 读取配置）
       await api.settings.update(s)
       setTesting(kind)
-      const sp = kind === 'clouddrive' ? s.clouddrive_save_path : kind === 'qbittorrent' ? s.qbittorrent_save_path : ''
+      const sp = kind === 'clouddrive' ? s.clouddrive_save_path : ''
       await api.downloaders.testConnection(kind, sp || undefined)
-      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'cd2_rename' ? 'CD2 整理' : 'qBittorrent'
+      const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'cd2_rename' ? 'CD2 整理' : '迅雷'
       toastOk(`${label} 连接成功`)
     } catch (e) {
       const msg = String((e as Error).message)
@@ -78,7 +62,7 @@ const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
   return (
     <div className="page">
       <PageHead eyebrow="Downloaders" title={<>下载器<em>配置</em></>}
-        sub="将磁力链接推送到 CloudDrive2（离线下载）或 qBittorrent。">
+        sub="将磁力链接推送到 CloudDrive2（离线下载）或迅雷。">
         <button className="btn btn--gold" onClick={save}><Icon.download />保存</button>
       </PageHead>
 
@@ -109,29 +93,19 @@ const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
 
         {/* qBittorrent */}
         <div className="card">
-          <div className="card-head"><div className="card-title"><Icon.download /> qBittorrent</div></div>
+          <div className="card-head"><div className="card-title"><Icon.download /> 迅雷（Docker 容器）</div></div>
           <div className="field">
-            <label htmlFor="qb-url">WebUI 地址</label>
-            <input id="qb-url" className="input" value={s.qbittorrent_url} onChange={(e) => upd({ qbittorrent_url: e.target.value })} placeholder="http://host:8080" />
-            {validation.qbUrl && <span style={{ color: 'var(--red)', fontSize: 11 }}>{validation.qbUrl}</span>}
+            <label htmlFor="xl-url">容器地址</label>
+            <input id="xl-url" className="input" value={(s.xunlei_url || '')} onChange={(e) => upd({ xunlei_url: e.target.value })} placeholder="http://host:2345" />
+            {validation.xlUrl && <span style={{ color: 'var(--red)', fontSize: 11 }}>{validation.xlUrl}</span>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-            <div className="field"><label htmlFor="qb-username">用户名</label><input id="qb-username" className="input" value={s.qbittorrent_username} onChange={(e) => upd({ qbittorrent_username: e.target.value })} /></div>
-            <div className="field"><label htmlFor="qb-password">密码</label><input id="qb-password" className="input" type="password" value={s.qbittorrent_password} onChange={(e) => upd({ qbittorrent_password: e.target.value })} /></div>
+            <div className="field"><label htmlFor="xl-user">Basic 用户名（可选）</label><input id="xl-user" className="input" value={(s.xunlei_basic_user || '')} onChange={(e) => upd({ xunlei_basic_user: e.target.value })} /></div>
+            <div className="field"><label htmlFor="xl-pass">Basic 密码（可选）</label><input id="xl-pass" className="input" type="password" value={(s.xunlei_basic_pass || '')} onChange={(e) => upd({ xunlei_basic_pass: e.target.value })} /></div>
           </div>
-          <div className="field"><label htmlFor="qb-save-path">下载保存路径</label><input id="qb-save-path" className="input" value={s.qbittorrent_save_path} onChange={(e) => upd({ qbittorrent_save_path: e.target.value })} /></div>
-<div className="field"><label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}
-  title="开启后每次推送下载自动保存到 保存路径/女优/演员名/（目录由 qB 自动创建）；未填充基础路径时无效">
-  <input type="checkbox" checked={s.qb_actor_subfolder === 'true'}
-    onChange={(e) => upd({ qb_actor_subfolder: e.target.checked ? 'true' : '' })} />
-  按演员分文件夹（女优/演员名/）
-</label></div>
-          <div className="hint">路径以 / 开头视为绝对路径，否则拼接默认目录</div>
-          <button className="btn btn--ghost btn--sm" onClick={() => test('qbittorrent')} disabled={testing !== null}>
-            {testing === 'qbittorrent' ? '测试中…' : '测试连接'}
-          </button>
-          <button className="btn btn--ghost btn--sm" onClick={qbHealth} disabled={testing !== null}>
-            {testing === 'qbittorrent' ? '自检中…' : '连通性自检'}
+          <div className="hint">容器需先登录迅雷账号；下载目录由容器环境变量 XL_DIR_DOWNLOAD 决定（面板内可配置）。</div>
+          <button className="btn btn--ghost btn--sm" onClick={() => test('xunlei')} disabled={testing !== null}>
+            {testing === 'xunlei' ? '测试中…' : '测试连接'}
           </button>
 
         </div>
@@ -141,7 +115,7 @@ const test = async (kind: 'clouddrive' | 'qbittorrent' | 'cd2_rename') => {
         <div className="card-head"><div className="card-title">默认下载器</div></div>
         <div className="seg">
           <button className={s.default_downloader === 'clouddrive' ? 'on' : ''} onClick={() => upd({ default_downloader: 'clouddrive' })}>CloudDrive2</button>
-          <button className={s.default_downloader === 'qbittorrent' ? 'on' : ''} onClick={() => upd({ default_downloader: 'qbittorrent' })}>qBittorrent</button>
+          <button className={s.default_downloader === 'xunlei' ? 'on' : ''} onClick={() => upd({ default_downloader: 'xunlei' })}>迅雷</button>
         </div>
         <div className="hint" style={{ marginTop: 10 }}>推送到下载器时，若未单独指定则使用此默认项</div>
       </div>

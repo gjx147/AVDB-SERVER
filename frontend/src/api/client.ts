@@ -119,8 +119,13 @@ export const api = {
       http.post<ApiOk>('/api/tasks/batch/favorite', task_ids).then((r) => r.data),
     batchView: (task_ids: number[], status = 'viewed') =>
       http.post<{ ok: boolean; updated: number }>('/api/tasks/batch-view', { task_ids, status }).then((r) => r.data),
-    batchPush: (task_ids: number[], downloader?: 'clouddrive' | 'qbittorrent') =>
+    batchPush: (task_ids: number[], downloader?: 'clouddrive' | 'xunlei') =>
       http.post<{ ok: boolean; pushed: number; skipped: number }>('/api/tasks/batch-push', { task_ids, downloader }).then((r) => r.data),
+
+    batchMagnets: (task_ids: number[]) =>
+      http.post<{ items: { task_id: number; video_code: string | null; magnet: string | null; has_magnet: boolean }[] }>(
+        '/api/tasks/batch-magnets', { task_ids }
+      ).then((r) => r.data),
 
     stats: (list_source_id?: number) =>
       http.get<TaskStats[]>('/api/tasks/stats', { params: { list_source_id } }).then((r) => r.data),
@@ -293,8 +298,6 @@ export const api = {
       http.post<ApiOk & { task_id?: number }>('/api/downloaders/download', { magnet, downloader, save_path, task_id }).then((r) => r.data),
     testConnection: (downloader: string, save_path?: string) =>
       http.post<ApiOk>('/api/downloaders/test-connection', { downloader, save_path }).then((r) => r.data),
-    qbHealth: () =>
-      http.post<{ ok: boolean; version?: string; connection_status?: string; dht_nodes?: number | null; error?: string; message?: string }>('/api/downloaders/qb-health').then((r) => r.data),
     logs: (limit = 100) =>
       http.get<{ lines: string[]; total: number }>('/api/downloaders/logs', { params: { limit } }).then((r) => r.data),
   },

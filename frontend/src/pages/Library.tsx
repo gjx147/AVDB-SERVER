@@ -5,6 +5,7 @@ import type { Task, ListSourceWithStats } from '../api/types'
 import { PosterCard } from '../components/PosterCard'
 import { Pager } from '../components/Pager'
 import { Lightbox } from '../components/Lightbox'
+import { MagnetExportModal } from '../components/MagnetExportModal'
 import { QueueOverlay } from '../components/QueueOverlay'
 import { PageHead, Empty, ErrorEmpty } from '../components/States'
 import { SkeletonGallery } from '../components/Skeleton'
@@ -39,6 +40,7 @@ export function Library() {
   const [queueRunning, setQueueRunning] = useState(false)
   const [retryingNow, setRetryingNow] = useState(false)
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
   const [queueInfo, setQueueInfo] = useState<{ current: number; total: number; current_video_code: string | null; stage: string; done: number[]; failed: number[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const toastOk = useStore((s) => s.toastOk)
@@ -362,6 +364,9 @@ export function Library() {
       )}
 
       {zoomSrc && <Lightbox src={zoomSrc} alt="海报大图" onClose={() => setZoomSrc(null)} />}
+      {exportOpen && (
+        <MagnetExportModal open={exportOpen} taskIds={[...selected]} onClose={() => setExportOpen(false)} />
+      )}
       <div className={`batchbar${selected.size ? ' show' : ''}`}>
         <span className="sel-count">已选 {selected.size} 项</span>
         <button className="btn btn--gold btn--sm" onClick={() => queueProcess()} disabled={queueRunning}>
@@ -372,6 +377,7 @@ export function Library() {
         <button className="btn btn--ghost btn--sm" onClick={() => batch('visit')}>强制入库</button>
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')}>批量删除</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('push')} disabled={selected.size === 0}>批量推送下载</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => setExportOpen(true)} disabled={selected.size === 0}>导出磁力</button>
         <button className="btn btn--ghost btn--sm" onClick={() => batch('view')} disabled={selected.size === 0}>标记已看</button>
         <button className="btn btn--ghost btn--sm" onClick={selectAllFiltered} disabled={total === 0}>全选全部</button>
         <button className="btn btn--ghost btn--icon" onClick={() => setSelected(new Set())}>✕</button>

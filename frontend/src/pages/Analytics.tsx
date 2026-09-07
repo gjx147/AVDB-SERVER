@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { PageHead, Loading } from '../components/States'
+import { MagnetExportModal } from '../components/MagnetExportModal'
 import { useStore } from '../store/useStore'
 
 const useToastOk = () => useStore((st) => st.toastOk)
@@ -199,7 +200,9 @@ function GapsPanel() {
     api.wishlistGaps().then((r) => { if (alive) setD(r) }).catch(() => setD(null))
     return () => { alive = false }
   }, [])
+  const [exportOpen, setExportOpen] = useState(false)  // S2：hooks 必须在早退之前
   if (!d) return <Panel title="观看缺口"><Loading /></Panel>
+  const exportIds = d.items.filter((i) => i.has_magnet).map((i) => i.task_id)
   const pushAll = async () => {
     const ids = d.items.filter((i) => i.has_magnet).map((i) => i.task_id)
     if (ids.length === 0) return
@@ -213,7 +216,10 @@ function GapsPanel() {
   return (
     <Panel title={`观看缺口 · ${d.total} 部想看`}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-        {d.items.slice(0, 10).map((t) => (
+        {exportOpen && (
+        <MagnetExportModal open={exportOpen} taskIds={exportIds} onClose={() => setExportOpen(false)} />
+      )}
+      {d.items.slice(0, 10).map((t) => (
           <span key={t.task_id} style={{ fontSize: 11, border: '1px solid var(--line, #eee)', borderRadius: 99, padding: '2px 8px' }}>
             {t.video_code}
             {!t.has_magnet && <span style={{ color: 'var(--red, #dc2626)' }}> ⚠无磁力</span>}
@@ -223,7 +229,7 @@ function GapsPanel() {
       </div>
       <button className="btn btn--gold btn--sm" onClick={pushAll} disabled={busy}>
         {busy ? '推送中…' : '批量推送可下载项'}
-      </button>
+      </button><button className="btn btn--ghost btn--sm" onClick={() => setExportOpen(true)} disabled={exportIds.length === 0}>导出磁力</button>
     </Panel>
   )
 }

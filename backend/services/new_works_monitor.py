@@ -486,20 +486,23 @@ async def _delayed_push_if_ready(task_id: int, video_code: str, delay: int = 180
                 logger.warning(f"[新作监控] 推送前 Emby 复核失败（继续推送）: {e}")
 
             # 读下载器配置
-            from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
+            from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_xunlei
             config_keys = [
-                "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
+                "xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
                 "clouddrive_url", "clouddrive_token", "clouddrive_username",
                 "clouddrive_password", "clouddrive_save_path",
             ]
             config = {k: _get_setting(db, k) for k in config_keys}
-            downloader = _get_setting(db, "default_downloader") or "qbittorrent"
+            downloader = _get_setting(db, "default_downloader") or "xunlei"
+            if downloader == "qbittorrent":
+                downloader = "xunlei"  # qB 退役归一（S3）
 
             logger.info(f"[新作监控] 自动推送 {video_code} 到 {downloader}")
             if downloader == "clouddrive":
                 result = await _push_clouddrive(task.best_magnet, config)
             else:
-                result = await _push_qbittorrent(task.best_magnet, config, _first_actor_name(task))
+                config["_task_name"] = video_code
+                result = await _push_xunlei(task.best_magnet, config)
 
             if result.get("ok"):
                 # 记录 download

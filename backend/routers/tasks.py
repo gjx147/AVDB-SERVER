@@ -419,7 +419,7 @@ def update_note(task_id: int, db: DbSession, _user: CurrentUser, note: str = Que
 class BatchViewRequest(BaseModel):
     task_ids: list[int]
     status: str = "viewed"
-    downloader: str | None = None  # 强制指定下载器（clouddrive/qbittorrent）；None=智能策略路由
+    downloader: str | None = None  # 强制指定下载器（clouddrive/xunlei）；None=智能策略路由
 
 
 @router.post("/batch-view")
@@ -436,22 +436,57 @@ def batch_set_view(payload: BatchViewRequest, db: DbSession, _user: CurrentUser)
     return {"ok": True, "updated": n}
 
 
+class BatchMagnetsRequest(BaseModel):
+    task_ids: list[int]
+
+
+def _first_magnet(magnets_json: str | None) -> str | None:
+    """从 magnets_json 取第一条合法磁力（兼容 string/{magnet,name}/{link} 形态）。"""
+    if not magnets_json:
+        return None
+    try:
+        arr = json.loads(magnets_json)
+    except Exception:
+        return None
+    if not isinstance(arr, list) or not arr:
+        return None
+    first = arr[0]
+    if isinstance(first, str):
+        return first if first.startswith("magnet:") else None
+    if isinstance(first, dict):
+        v = first.get("magnet") or first.get("link") or ""
+        return str(v) if str(v).startswith("magnet:") else None
+    return None
+
+
+@router.post("/batch-magnets")
+def batch_magnets(payload: BatchMagnetsRequest, db: DbSession, _user: CurrentUser):
+    """批量导出最佳磁力（合并复制到迅雷/手机远程批量添加）。"""
+    rows = db.execute(select(Task).where(Task.id.in_(payload.task_ids))).scalars().all()
+    items = []
+    for t in rows:
+        magnet = t.best_magnet or _first_magnet(t.magnets_json)
+        items.append({"task_id": t.id, "video_code": t.video_code,
+                      "magnet": magnet, "has_magnet": bool(magnet)})
+    return {"items": items}
+
+
 @router.post("/batch-push")
 async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUser):
     """批量推送下载（F6）：把选中任务（需已有磁力）推送到下载器。
     payload.downloader 强制指定（clouddrive/qbittorrent，如演员页批量推送 CD2）；
     不传则按智能策略路由（演员/厂牌优先，否则默认下载器）。"""
     force_dl = (payload.downloader or "").strip().lower() or None
-    if force_dl and force_dl not in ("clouddrive", "qbittorrent"):
-        raise HTTPException(status_code=400, detail="downloader 仅支持 clouddrive / qbittorrent")
+    if force_dl and force_dl not in ("clouddrive", "xunlei"):
+        raise HTTPException(status_code=400, detail="downloader 仅支持 clouddrive / xunlei")
     from models import Download
-    from routers.downloaders import _extract_hash, _first_actor_name, _get_setting, _push_clouddrive, _push_qbittorrent
+    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_xunlei
 
     tasks = db.execute(
         select(Task).where(Task.id.in_(payload.task_ids))
     ).scalars().all()
     config_keys = (
-        "qb_url", "qb_username", "qb_password", "qbittorrent_save_path", "qb_actor_subfolder", "qb_global_trackers",
+        "xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
         "clouddrive_url", "clouddrive_token", "clouddrive_username",
         "clouddrive_password", "clouddrive_save_path",
     )
@@ -460,7 +495,9 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
     # 打磨：策略与默认下载器循环外读取一次，避免每任务重复查询
     from services.download_strategy import get_strategy, pick_downloader
     strategy = get_strategy(db)
-    default_dl = _get_setting(db, "default_downloader") or "qbittorrent"
+    default_dl = _get_setting(db, "default_downloader") or "xunlei"
+    if default_dl == "qbittorrent":
+        default_dl = "xunlei"  # qB 退役归一（S3）
     pushed = 0
     skipped = 0
     for t in tasks:
@@ -468,11 +505,14 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
             skipped += 1
             continue
         dl = force_dl or pick_downloader(db, t, strategy, default_dl)
+        if dl == "qbittorrent":
+            dl = "xunlei"  # qB 退役归一（策略 JSON 旧值，S3）
         try:
             if dl == "clouddrive":
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
-                result = await _push_qbittorrent(t.best_magnet, config, _first_actor_name(t))
+                config["_task_name"] = t.video_code or "avdb-task"  # A1：无条件写，防跨任务沿用
+                result = await _push_xunlei(t.best_magnet, config)
             if result.get("ok"):
                 db.add(Download(
                     task_id=t.id, video_code=t.video_code, magnet=t.best_magnet,

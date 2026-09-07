@@ -468,7 +468,7 @@ export function TaskDetail() {
                 <select className="select" value={dlDownloader} onChange={(e) => setDlDownloader(e.target.value)}>
                   <option value="">默认</option>
                   <option value="clouddrive">CloudDrive2</option>
-                  <option value="qbittorrent">qBittorrent</option>
+                  <option value="xunlei">迅雷</option>
                 </select>
               </div>
             )}

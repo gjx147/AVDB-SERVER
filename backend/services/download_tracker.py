@@ -26,107 +26,77 @@ _state = {"running": False, "last_run": None, "updated": 0}
 # T4: torrent 从 qB 消失的连续未命中计数（dl_id → 轮次），3 轮未命中标记失败
 _missing_count: dict[int, int] = {}
 
-# qBittorrent 状态映射
-_QB_COMPLETED = {"uploading", "queuedUP", "stalledUP", "forcedUP", "pausedUP", "checkingUP"}
-_QB_DOWNLOADING = {"downloading", "metaDL", "forcedDL", "queuedDL", "stalledDL", "checkingDL"}
-_QB_FAILED = {"missingFiles", "error"}
+# 迅雷状态映射（phase → 内部状态）
+_XL_COMPLETE = {"PHASE_TYPE_COMPLETE"}
+_XL_ERROR = {"PHASE_TYPE_ERROR"}
 
 
-def _poll_qbittorrent_sync(config: dict, hashes: list[tuple[int, str]]) -> list[dict]:
-    """同步函数：连接 qBittorrent 查询状态（供 asyncio.to_thread 调用）。
-
-    hashes: [(download_id, info_hash), ...]
-    返回: [{id, status, progress, error}, ...]
-    """
-    import qbittorrentapi
-
-    results: list[dict] = []
-    qbc = qbittorrentapi.Client(
-        host=config["qb_url"],
-        username=config["qb_username"],
-        password=config["qb_password"],
-        REQUESTS_ARGS={"timeout": 10},  # 10s 超时，防止网络挂起
-    )
-    try:
-        qbc.auth_log_in()
-        torrents = {t.infohash_v1.lower(): t for t in qbc.torrents_info() if t.infohash_v1}
-        for dl_id, info_hash in hashes:
-            t = torrents.get(info_hash)
-            if not t:
-                # T4 兜底：torrent 已从 qB 消失（被删除/手动移除）——连续 3 轮未命中标记失败，
-                # 避免下载记录永久卡在 downloading 且每轮重复查询
-                _missing_count[dl_id] = _missing_count.get(dl_id, 0) + 1
-                if _missing_count[dl_id] >= 3:
-                    results.append({"id": dl_id, "status": "failed", "progress": 0,
-                                    "error": "torrent 已从 qB 消失（被删除或手动移除）"})
-                continue
-            _missing_count.pop(dl_id, None)
-            state = str(t.state)
-            progress = round(float(t.progress) * 100, 1) if t.progress else 0
-            if state in _QB_COMPLETED:
-                results.append({"id": dl_id, "status": "completed", "progress": progress, "error": None})
-            elif state in _QB_DOWNLOADING:
-                results.append({"id": dl_id, "status": "downloading", "progress": progress, "error": None})
-            elif state in _QB_FAILED:
-                results.append({"id": dl_id, "status": "failed", "progress": progress, "error": f"qB state: {state}"})
-    finally:
-        try:
-            qbc.auth_log_out()
-        except Exception:
-            pass
-    return results
+def _poll_xunlei_sync(config: dict) -> list[dict]:
+    """同步拉取迅雷运行中任务列表。返回 [{name, phase, progress, speed, real_path}]。"""
+    from services.xunlei_client import XunleiClient
+    client = XunleiClient(config.get("xunlei_url", ""),
+                          config.get("xunlei_basic_user", ""),
+                          config.get("xunlei_basic_pass", ""))
+    out = []
+    for t in client.list_tasks("active"):
+        p = t.get("params") or {}
+        out.append({
+            "name": t.get("name", ""),
+            "phase": t.get("phase", ""),
+            "progress": int(t.get("progress") or 0),
+            "speed": int(p.get("speed") or 0),
+            "real_path": p.get("real_path", ""),
+        })
+    return out
 
 
-async def _poll_qbittorrent(db) -> int:
-    """轮询 qBittorrent，更新所有 pushed/downloading 的 qB 下载记录。返回更新数。
-
-    架构修复：同步 qB API 调用包 asyncio.to_thread，不阻塞事件循环。
-    """
-    config = {k: _get_setting(db, k) for k in ["qb_url", "qb_username", "qb_password"]}
-    if not config["qb_url"]:
+async def _poll_xunlei(db) -> int:
+    """轮询迅雷任务并回写 Download/Task（匹配键 = Download.video_code 与迅雷任务名）。"""
+    config = {k: _get_setting(db, k) for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass"]}
+    if not config["xunlei_url"]:
         return 0
-
-    # 取所有需要追踪的 qB 下载记录
     pending = db.execute(
         select(Download).where(
-            Download.downloader == "qbittorrent",
+            Download.downloader == "xunlei",
             Download.status.in_(["pushed", "downloading"]),
         )
     ).scalars().all()
     if not pending:
         return 0
-
-    hashes = [(dl.id, dl.info_hash) for dl in pending if dl.info_hash]
-    if not hashes:
-        return 0
-
-    # 关键修复：同步调用放线程池，不阻塞事件循环
     try:
-        results = await asyncio.to_thread(_poll_qbittorrent_sync, config, hashes)
+        results = await asyncio.to_thread(_poll_xunlei_sync, config)
     except Exception as e:
-        logger.warning(f"qBittorrent 轮询失败: {e}")
+        logger.warning(f"迅雷轮询失败: {e}")
         return 0
-
-    # 回写 DB
+    by_name = {r["name"]: r for r in results if r["name"]}
     updated = 0
-    dl_map = {dl.id: dl for dl in pending}
-    for r in results:
-        dl = dl_map.get(r["id"])
-        if not dl:
-            continue
-        dl.progress = r["progress"]
-        dl.status = r["status"]
-        dl.error_message = r["error"]
-        # 同步 Task.download_status（盘点修复②：接通前端状态横幅/海报角标，此前为死字段）
+    for dl in pending:
+        r = by_name.get(dl.video_code)
+        if not r:
+            # A3：未匹配轮次计数，连续 3 轮未命中判失败（恢复 qB 时代的兜底）
+            _missing_count[dl.id] = _missing_count.get(dl.id, 0) + 1
+            if _missing_count[dl.id] < 3:
+                continue
+            dl.status = "failed"
+            dl.error_message = "迅雷任务未找到（可能已在容器中被删除）"
+            _missing_count.pop(dl.id, None)
+        else:
+            _missing_count.pop(dl.id, None)
+            if r["phase"] in _XL_COMPLETE or r["progress"] >= 100:
+                dl.status = "completed"
+                dl.progress = 100
+                dl.completed_at = datetime.utcnow()
+            elif r["phase"] in _XL_ERROR:
+                dl.status = "failed"
+                dl.error_message = "迅雷任务错误"
+            else:
+                dl.status = "downloading"
+                dl.progress = r["progress"]
+        # 同步 Task.download_status（接通前端状态横幅/海报角标）
         if dl.task_id:
             _t = db.get(Task, dl.task_id)
             if _t:
-                _t.download_status = r["status"]
-        if r["status"] == "completed":
-            dl.completed_at = datetime.utcnow()
-            # F7: 触发自动整理（硬链接进媒体库；不阻塞轮询，失败不影响下载状态）
-            from services.organizer import trigger_organize
-            asyncio.create_task(trigger_organize(dl.id, dl.info_hash))
+                _t.download_status = dl.status
         updated += 1
     if updated:
         db.commit()
@@ -141,7 +111,7 @@ async def run_track_cycle() -> dict:
     try:
         db = SessionLocal()
         try:
-            updated = await _poll_qbittorrent(db)
+            updated = await _poll_xunlei(db)
         finally:
             db.close()
         _state["last_run"] = datetime.utcnow().isoformat()
