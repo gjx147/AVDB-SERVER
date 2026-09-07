@@ -263,6 +263,7 @@ export interface Settings {
   xunlei_url?: string
   xunlei_basic_user?: string
   xunlei_basic_pass?: string
+  xunlei_mcp_url?: string
   default_downloader: string
   // CD2 下载文件整理（推送成功后 ≥200MB 视频重命名为番号，其余删除）
   cd2_rename_enabled: boolean

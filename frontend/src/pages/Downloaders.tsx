@@ -51,6 +51,24 @@ const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
     } finally { setTesting(null) }
   }
 
+  const [mcpBusy, setMcpBusy] = useState(false)
+  const [mcpTools, setMcpTools] = useState<{ name: string; description: string }[] | null>(null)
+  const mcpPilot = async () => {
+    setMcpBusy(true)
+    setMcpTools(null)  // S8：失败不留旧数据
+    try {
+      // S3：输入框可能回显脱敏的 ***，仅在实际有值且非哨兵时保存（哨兵时后端读 settings 存量）
+      if (s.xunlei_mcp_url && s.xunlei_mcp_url !== '***') {
+        await api.settings.update({ ...s, xunlei_mcp_url: s.xunlei_mcp_url })
+      }
+      const r = await api.downloaders.xunleiMcpPilot()
+      if (!r.ok) { toastErr(r.message || 'MCP 试点失败'); return }
+      setMcpTools(r.tools || [])
+      toastOk(`MCP 试点成功：${(r.tools || []).length} 个工具`)
+    } catch (e) {
+      toastErr(String((e as Error).message) || 'MCP 试点失败')
+    } finally { setMcpBusy(false) }
+  }
   const renameAll = async () => {
     setRenaming(true)
     try {
@@ -104,9 +122,19 @@ const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
             <div className="field"><label htmlFor="xl-pass">Basic 密码（可选）</label><input id="xl-pass" className="input" type="password" value={(s.xunlei_basic_pass || '')} onChange={(e) => upd({ xunlei_basic_pass: e.target.value })} /></div>
           </div>
           <div className="hint">容器需先登录迅雷账号；下载目录由容器环境变量 XL_DIR_DOWNLOAD 决定（面板内可配置）。</div>
+          <div className="field"><label htmlFor="xl-mcp">MCP 链接（可选，官方试点）</label><input id="xl-mcp" className="input" value={(s.xunlei_mcp_url || '')} onChange={(e) => upd({ xunlei_mcp_url: e.target.value })} placeholder="https://api-xmodels.xunlei.com/models/sse/..." /></div>
+
           <button className="btn btn--ghost btn--sm" onClick={() => test('xunlei')} disabled={testing !== null}>
             {testing === 'xunlei' ? '测试中…' : '测试连接'}
           </button>
+          <button className="btn btn--ghost btn--sm" onClick={mcpPilot} disabled={mcpBusy}>
+            {mcpBusy ? '试点中…' : 'MCP 试点'}
+          </button>
+          {mcpTools && (
+            <div style={{ fontSize: 12, color: 'var(--t-mute)', marginTop: 6 }}>
+              可用工具：{mcpTools.map((t) => t.name).join('、') || '（无）'}
+            </div>
+          )}
 
         </div>
       </div>

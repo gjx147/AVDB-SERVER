@@ -230,6 +230,37 @@ def cd2_rename_all(_admin: CurrentAdmin):
     return r
 
 
+@router.post("/xunlei-mcp-pilot")
+async def xunlei_mcp_pilot(db: DbSession, _admin: CurrentAdmin):
+    """A 形态试点（仅管理员）：连接迅雷官方 MCP，列出可用工具（不执行下载）。
+
+    连接串只读 settings xunlei_mcp_url（S4：不接受 body 注入防 SSRF）；15s 总超时。
+    """
+    import asyncio as _aio
+    url = _get_setting(db, "xunlei_mcp_url")
+    if not url or url == "***":
+        return {"ok": False, "message": "未配置迅雷 MCP 链接（下载器设置页填写并保存）"}
+    logger.info("迅雷 MCP 试点：连接并列出工具")
+    try:
+        from services.xunlei_mcp import XunleiMCPClient
+
+        async def _run():
+            async with XunleiMCPClient(url, timeout=12.0) as c:
+                tools = await c.list_tools()
+                return c.server_info, tools
+
+        server, tools = await _aio.wait_for(_run(), timeout=15.0)
+        return {"ok": True, "server": server,
+                "tools": [{"name": t.get("name"), "description": (t.get("description") or "")[:200]}
+                          for t in tools]}
+    except asyncio.TimeoutError:
+        logger.error(f"迅雷 MCP 试点超时（url 长度 {len(url)}）")
+        return {"ok": False, "message": "迅雷 MCP 连接超时（请检查链接与迅雷客户端「开启远程下载」）"}
+    except Exception as e:
+        logger.error(f"迅雷 MCP 试点失败: {e!r}")
+        return {"ok": False, "message": str(e)[:300] or "迅雷 MCP 连接失败（详见后端日志）"}
+
+
 @router.post("/test")
 @router.post("/test-connection")  # 兼容前端旧路径
 async def test_connection(body: dict, db: DbSession, _user: CurrentUser):

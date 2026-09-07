@@ -35,7 +35,7 @@ def set_setting(db: Session, key: str, value: str) -> None:
 
 
 # 敏感配置键统一判定（settings 路由 / agent_service / 回滚端点共用，防止清单漂移）
-_SENSITIVE_PATTERNS = ("pass", "password", "token", "secret", "key", "apikey", "api_key",
+_SENSITIVE_PATTERNS = ("pass", "password", "token", "secret", "key", "apikey", "api_key", "mcp",
                        "cookie", "session", "passwd", "credential", "auth", "jwt")
 
 
