@@ -22,11 +22,6 @@ VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".ts", ".m2ts", ".
 _CODE_RE = re.compile(r"(?<![A-Z0-9])([A-Z]{2,5}-\d{2,5}[A-Z0-9]?)(?![A-Z0-9])")
 
 
-def _get_setting(db, key: str, default: str = "") -> str:
-    row = db.get(Setting, key)
-    return row.value if row and row.value else default
-
-
 def _extract_code(filename: str) -> str | None:
     m = _CODE_RE.search(filename.upper())
     return m.group(1) if m else None

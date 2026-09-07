@@ -25,25 +25,9 @@ router = APIRouter(prefix="/api/downloaders", tags=["downloaders"])
 
 
 def _get_setting(db, key: str) -> str:
-    """读 settings 表，支持 key 别名（前端写 qbittorrent_* 后端读 qb_*）。"""
-    # key 别名映射：后端短名 → 前端长名
-    aliases = {
-        "qb_url": "qbittorrent_url",
-        "qb_username": "qbittorrent_username",
-        "qb_password": "qbittorrent_password",
-        "aria2_url": "aria2_rpc_url",
-        "aria2_secret": "aria2_token",
-    }
-    row = db.get(Setting, key)
-    if row and row.value:
-        return row.value
-    # 尝试别名
-    alias = aliases.get(key)
-    if alias:
-        row = db.get(Setting, alias)
-        if row and row.value:
-            return row.value
-    return ""
+    """读 settings 表（统一入口：含 qbittorrent_* 别名兼容，见 services/settings_util）。"""
+    from services.settings_util import get_setting
+    return get_setting(db, key)
 
 
 def _extract_hash(magnet: str) -> str | None:

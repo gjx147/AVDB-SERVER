@@ -854,11 +854,12 @@ def _push_download(db, args):
     try:
         # 与 TaskDetail「推送下载」按钮同一路径：downloaders.download
         from routers.downloaders import push_magnet as dl_push
+        from routers.downloaders import PushRequest
         import asyncio as _aio
         def _run():
             _bg_job_record(f"push:{t.id}", "running", "推送执行中")
             try:
-                r = _aio.run(dl_push({"magnet": magnet, "task_id": t.id}, "anonymous"))
+                r = _aio.run(dl_push(PushRequest(magnet=magnet, task_id=t.id), db, None))
                 if isinstance(r, dict):
                     if r.get("ok") is False or r.get("error"):
                         _bg_job_record(f"push:{t.id}", "failed", r.get("message") or r.get("error") or "推送失败")
@@ -885,8 +886,9 @@ def _batch_push(db, args):
     # 与 Library「批量推送下载」按钮同一路径：tasks/batch-push（同步执行，返回 pushed/skipped）
     try:
         from routers.tasks import batch_push as _tasks_batch_push
+        from routers.tasks import BatchViewRequest
         import asyncio as _aio
-        r = _aio.run(_tasks_batch_push({"task_ids": [t.id for t in rows[:50]]}, db, "anonymous"))
+        r = _aio.run(_tasks_batch_push(BatchViewRequest(task_ids=[t.id for t in rows[:50]]), db, None))
         pushed = r.get("pushed", 0)
         skipped = r.get("skipped", 0)
         _bg_job_record("batch_push", "done", f"已推送 {pushed} 部，跳过 {skipped} 部")

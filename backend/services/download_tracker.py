@@ -16,7 +16,8 @@ from datetime import datetime
 from sqlalchemy import select
 
 from database import SessionLocal
-from models import Download, Setting
+from models import Download, Setting, Task
+from services.settings_util import get_setting as _get_setting
 
 logger = logging.getLogger("avdb.download_tracker")
 
@@ -29,11 +30,6 @@ _missing_count: dict[int, int] = {}
 _QB_COMPLETED = {"uploading", "queuedUP", "stalledUP", "forcedUP", "pausedUP", "checkingUP"}
 _QB_DOWNLOADING = {"downloading", "metaDL", "forcedDL", "queuedDL", "stalledDL", "checkingDL"}
 _QB_FAILED = {"missingFiles", "error"}
-
-
-def _get_setting(db, key: str) -> str:
-    row = db.get(Setting, key)
-    return row.value if row and row.value else ""
 
 
 def _poll_qbittorrent_sync(config: dict, hashes: list[tuple[int, str]]) -> list[dict]:
@@ -121,6 +117,11 @@ async def _poll_qbittorrent(db) -> int:
         dl.progress = r["progress"]
         dl.status = r["status"]
         dl.error_message = r["error"]
+        # 同步 Task.download_status（盘点修复②：接通前端状态横幅/海报角标，此前为死字段）
+        if dl.task_id:
+            _t = db.get(Task, dl.task_id)
+            if _t:
+                _t.download_status = r["status"]
         if r["status"] == "completed":
             dl.completed_at = datetime.utcnow()
             # F7: 触发自动整理（硬链接进媒体库；不阻塞轮询，失败不影响下载状态）
