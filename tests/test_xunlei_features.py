@@ -155,7 +155,7 @@ def test_xunlei_client_uiauth_high_version():
 
 # ══ 3. 轮询映射 ══
 
-def test_tracker_poll_xunlei_maps_status():
+def test_tracker_poll_xunlei_maps_status(monkeypatch):
     """fake 迅雷任务列表 → Download/Task 状态同步（含 completed 写 completed_at）。"""
     import services.download_tracker as tracker_mod
     s = SessionLocal()
@@ -171,8 +171,8 @@ def test_tracker_poll_xunlei_maps_status():
         return [{"name": "XL-SYNC", "phase": "PHASE_TYPE_RUNNING", "progress": 45,
                  "speed": 1024, "real_path": "/xl/t.mkv"}]
 
-    tracker_mod._poll_xunlei_sync = fake_sync
-    tracker_mod._get_setting = lambda d, k, *a, **kw: 'http://x'  # noqa: E731
+    monkeypatch.setattr(tracker_mod, "_poll_xunlei_sync", fake_sync)
+    monkeypatch.setattr(tracker_mod, "_get_setting", lambda d, k, *a, **kw: 'http://x')  # noqa: E731
 
     s2 = SessionLocal()
     try:
@@ -190,7 +190,7 @@ def test_tracker_poll_xunlei_maps_status():
         s3.close()
 
 
-def test_tracker_poll_xunlei_complete():
+def test_tracker_poll_xunlei_complete(monkeypatch):
     import services.download_tracker as tracker_mod
     s = SessionLocal()
     tid = _mk_task('XL-DONE', magnet='magnet:?xt=urn:btih:' + 'c' * 40)
@@ -200,9 +200,9 @@ def test_tracker_poll_xunlei_complete():
     s.commit()
     s.close()
 
-    tracker_mod._poll_xunlei_sync = lambda config: [
-        {"name": "XL-DONE", "phase": "PHASE_TYPE_COMPLETE", "progress": 100, "speed": 0, "real_path": "/xl/d.mkv"}]
-    tracker_mod._get_setting = lambda d, k, *a, **kw: 'http://x'  # noqa: E731
+    monkeypatch.setattr(tracker_mod, "_poll_xunlei_sync", lambda config: [
+        {"name": "XL-DONE", "phase": "PHASE_TYPE_COMPLETE", "progress": 100, "speed": 0, "real_path": "/xl/d.mkv"}])
+    monkeypatch.setattr(tracker_mod, "_get_setting", lambda d, k, *a, **kw: 'http://x')  # noqa: E731
 
     s2 = SessionLocal()
     try:
@@ -255,7 +255,7 @@ def test_push_magnet_xunlei_branch(client, monkeypatch):
         captured['name'] = config.get('_task_name')
         return {"ok": True, "message": "已提交迅雷下载"}
 
-    dl_mod._push_xunlei = fake_push
+    monkeypatch.setattr(dl_mod, "_push_xunlei", fake_push)
     r = client.post('/api/downloaders/push', json={'magnet': 'MAG-XL-PUSH', 'task_id': tid})
     assert r.status_code == 200, r.text
     assert captured['magnet'] == 'MAG-XL-PUSH'
@@ -271,7 +271,7 @@ def test_batch_push_whitelist_xunlei(client, monkeypatch):
         captured['name'] = config.get('_task_name')
         return {"ok": True, "message": "ok"}
 
-    dl_mod._push_xunlei = fake_push
+    monkeypatch.setattr(dl_mod, "_push_xunlei", fake_push)
     r = client.post('/api/tasks/batch-push', json={'task_ids': [tid], 'downloader': 'xunlei'})
     assert r.status_code == 200, r.text
     assert captured['name'] == 'XL-BATCH'
@@ -293,7 +293,7 @@ def test_push_legacy_default_downloader_normalized(client, monkeypatch):
         captured['name'] = config.get('_task_name')
         return {"ok": True, "message": "ok"}
 
-    dl_mod._push_xunlei = fake_push
+    monkeypatch.setattr(dl_mod, "_push_xunlei", fake_push)
     r = client.post('/api/downloaders/push', json={'magnet': 'MAG-XL-LEGACY', 'task_id': tid})
     assert r.status_code == 200, r.text
     assert captured['name'] == 'XL-LEGACY'
@@ -310,7 +310,7 @@ def test_push_xunlei_requires_video_code(client):
     assert r.json().get('ok') is False and '番号' in (r.json().get('message') or '')
 
 
-def test_poll_missing_three_rounds_fail():
+def test_poll_missing_three_rounds_fail(monkeypatch):
     """A3 回归：连续 3 轮未匹配到迅雷任务 → failed。"""
     import services.download_tracker as tracker_mod
     s = SessionLocal()
@@ -322,8 +322,8 @@ def test_poll_missing_three_rounds_fail():
     dl_id = dl.id
     s.close()
 
-    tracker_mod._poll_xunlei_sync = lambda config: []  # 容器在线但无该任务
-    tracker_mod._get_setting = lambda d, k, *a, **kw: 'http://x'  # noqa: E731
+    monkeypatch.setattr(tracker_mod, "_poll_xunlei_sync", lambda config: [])  # 容器在线但无该任务
+    monkeypatch.setattr(tracker_mod, "_get_setting", lambda d, k, *a, **kw: 'http://x')  # noqa: E731
     for _ in range(3):
         s2 = SessionLocal()
         try:
@@ -347,6 +347,20 @@ def test_organize_run_all_no_name_error():
 
 
 # ══ 6. 迅雷 MCP 客户端（A 形态试点） ══
+
+def asyncio_run_sync(fn):
+    import asyncio
+    return asyncio.run(fn())
+
+
+def _sync_poll(db):
+    import asyncio
+    from services import download_tracker as dt
+
+    async def run():
+        return await dt._poll_xunlei(db)
+    return run()
+
 
 def test_xunlei_mcp_client_initialize_and_list_tools():
     """MockTransport：initialize / tools/list 直接响应路径。"""
@@ -531,6 +545,183 @@ def test_xunlei_mcp_client_legacy_endpoint_event():
     assert urls and urls[0] == post_url, f'_post 应使用 endpoint 事件地址: {urls}'
 
 
+def _mk_task_mcp():
+    import time
+    code = 'MCP-%d' % (int(time.time() * 1000) % 1000000)
+    return _mk_task(code), code
+
+
+def _set_setting(key, value):
+    st = SessionLocal()
+    row = st.get(Setting, key)
+    if row:
+        row.value = value
+    else:
+        st.add(Setting(key=key, value=value))
+    st.commit()
+    st.close()
+
+
+def _get_setting_val(key):
+    st = SessionLocal()
+    row = st.get(Setting, key)
+    v = row.value if row else None
+    st.close()
+    return v
+
+
+def _restore_settings(old_map):
+    for k, v in old_map.items():
+        if v is None:
+            st = SessionLocal()
+            row = st.get(Setting, k)
+            if row:
+                st.delete(row)
+                st.commit()
+            st.close()
+        else:
+            _set_setting(k, v)
+
+
+def test_push_magnet_mcp_channel(client, monkeypatch):
+    """MCP 通道推送：list_devices → create（含 target/urls/names）；失败回退容器。"""
+    import services.xunlei_mcp as xm
+    calls = []
+
+    class FakeMCP:
+        def __init__(self, url, timeout=30.0):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def list_devices(self):
+            return [{"name": "群晖", "target": "device_id#abc"}]
+
+        async def create_download(self, target, urls, names=None):
+            calls.append((target, urls, names))
+            return {"tasks": [{"id": "T1"}]}
+
+    monkeypatch.setattr(xm, 'XunleiMCPClient', FakeMCP)
+    old_map = {k: _get_setting_val(k) for k in ('xunlei_mcp_url', 'xunlei_push_channel')}
+    _set_setting('xunlei_mcp_url', 'https://x/sse/abc')
+    _set_setting('xunlei_push_channel', 'mcp')
+    try:
+        task_id, code = _mk_task_mcp()
+        r = client.post('/api/downloaders/download',
+                        json={'magnet': 'magnet:?xt=urn:btih:abcdef0123456789',
+                              'downloader': 'xunlei', 'task_id': task_id})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d['ok'] is True, d
+        assert calls and calls[0][0] == 'device_id#abc' and calls[0][1] == ['magnet:?xt=urn:btih:abcdef0123456789']
+        assert calls[0][2] == [code], '任务名应为番号用于轮询匹配'
+    finally:
+        _restore_settings(old_map)
+
+
+def test_push_magnet_mcp_fallback_container(client, monkeypatch):
+    """MCP 通道失败 → 自动回退容器通道。"""
+    import services.xunlei_mcp as xm
+    import services.xunlei_client as xc
+
+    class FakeMCP:
+        def __init__(self, url, timeout=30.0):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def list_devices(self):
+            raise RuntimeError('mcp down')
+
+    monkeypatch.setattr(xm, 'XunleiMCPClient', FakeMCP)
+    # 容器也失败 → 整体失败提示
+    class FakeXunlei:
+        def __init__(self, *a, **kw):
+            pass
+
+        def add_task(self, url, name):
+            return {'ok': False, 'message': '容器不可达'}
+
+    monkeypatch.setattr(xc, 'XunleiClient', FakeXunlei)
+    old_map = {k: _get_setting_val(k) for k in ('xunlei_mcp_url', 'xunlei_push_channel', 'xunlei_url')}
+    _set_setting('xunlei_mcp_url', 'https://x/sse/abc')
+    _set_setting('xunlei_push_channel', 'mcp')
+    _set_setting('xunlei_url', 'http://nas:2345')
+    try:
+        task_id, _code = _mk_task_mcp()
+        r = client.post('/api/downloaders/download',
+                        json={'magnet': 'magnet:?xt=urn:btih:abcdef0123456789',
+                              'downloader': 'xunlei', 'task_id': task_id})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d['ok'] is False and '容器回退也失败' in d.get('message', ''), d
+    finally:
+        _restore_settings(old_map)
+
+
+def test_poll_xunlei_mcp_channel_completed(db, monkeypatch):
+    """MCP 通道轮询：phase=4/progress=100 → completed 回写；数字 phase 兼容。"""
+    import services.download_tracker as dt
+    import services.xunlei_mcp as xm
+
+    class FakeMCP:
+        def __init__(self, url, timeout=30.0):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def list_devices(self):
+            return [{"name": "d", "target": "device_id#abc"}]
+
+        async def list_tasks_mcp(self, target, page_size=200):
+            return [{"id": "T1", "name": code, "phase": 4, "progress": 100,
+                     "status": "完成", "file_name": code}]
+
+    monkeypatch.setattr(xm, 'XunleiMCPClient', FakeMCP)
+    dt._missing_count.clear()
+    old_map = {k: _get_setting_val(k) for k in ('xunlei_mcp_url', 'xunlei_push_channel')}
+    _set_setting('xunlei_mcp_url', 'https://x/sse/abc')
+    _set_setting('xunlei_push_channel', 'mcp')
+    from models import Task, Download
+    tid, code = _mk_task_mcp()
+    st2 = SessionLocal()
+    dl = Download(task_id=tid, downloader='xunlei', video_code=code,
+                  magnet='MAG', info_hash='a' * 40, status='downloading')
+    st2.add(dl)
+    st2.commit()
+    dl_id = dl.id
+    st2.close()
+
+    try:
+        n = asyncio_run_sync(lambda: _sync_poll(db))
+        assert n >= 1
+        check = db.get(Download, dl_id)
+        assert check is not None and check.status == 'completed', check
+    finally:
+        s3 = SessionLocal()
+        d = s3.get(Download, dl_id)
+        if d:
+            s3.delete(d)
+        t = s3.get(Task, tid)
+        if t:
+            s3.delete(t)
+        s3.commit()
+        s3.close()
+        _restore_settings(old_map)
+
+
 def test_xunlei_mcp_pilot_endpoint(client, monkeypatch):
     """试点端点（S4 适配）：连接串只读 settings；未配置返回明确提示。"""
     import services.xunlei_mcp as xm
@@ -551,7 +742,11 @@ def test_xunlei_mcp_pilot_endpoint(client, monkeypatch):
 
     monkeypatch.setattr(xm, 'XunleiMCPClient', FakeMCP)
     s0 = SessionLocal()
-    s0.add(Setting(key='xunlei_mcp_url', value='https://x/sse/abc'))
+    row0 = s0.get(Setting, 'xunlei_mcp_url')
+    if row0:
+        row0.value = 'https://x/sse/abc'
+    else:
+        s0.add(Setting(key='xunlei_mcp_url', value='https://x/sse/abc'))
     s0.commit()
     s0.close()
     r = client.post('/api/downloaders/xunlei-mcp-pilot', json={})
@@ -591,7 +786,12 @@ def test_xunlei_mcp_pilot_timeout_returns_200(client, monkeypatch):
             return None
 
     monkeypatch.setattr(xm, 'XunleiMCPClient', SlowMCP)
-    r = client.post('/api/downloaders/xunlei-mcp-pilot', json={})
-    assert r.status_code == 200, f'超时路径必须 200，实际 {r.status_code}'
-    d = r.json()
-    assert d['ok'] is False and '超时' in (d.get('message') or '')
+    old_map = {k: _get_setting_val(k) for k in ('xunlei_mcp_url',)}
+    _set_setting('xunlei_mcp_url', 'https://x/sse/abc')
+    try:
+        r = client.post('/api/downloaders/xunlei-mcp-pilot', json={})
+    finally:
+        _restore_settings(old_map)
+        assert r.status_code == 200, f'超时路径必须 200，实际 {r.status_code}'
+        d = r.json()
+        assert d['ok'] is False and '超时' in (d.get('message') or '')

@@ -107,6 +107,29 @@ async def _push_xunlei(magnet: str, config: dict) -> dict:
         return {"ok": False, "message": str(e)[:200]}
 
 
+async def _push_xunlei_mcp(magnet: str, config: dict) -> dict:
+    """MCP 官方通道推送：list_devices → create（任务名=番号，便于轮询匹配）。失败回退容器通道。"""
+    from services.xunlei_mcp import XunleiMCPClient
+    url = config.get("xunlei_mcp_url", "")
+    if not url or url == "***":
+        return {"ok": False, "message": "MCP 通道未配置（下载器设置页填写迅雷 MCP 链接）"}
+    name = config.get("_task_name", "") or "avdb-task"
+    try:
+        async with XunleiMCPClient(url, timeout=15.0) as c:
+            devices = await c.list_devices()
+            if not devices:
+                return {"ok": False, "message": "MCP 无可用下载设备（检查迅雷客户端在线与「开启远程下载」）"}
+            res = await c.create_download(devices[0]["target"], [magnet], [name])
+        return {"ok": True, "message": f"MCP 已推送：设备 {devices[0].get('name') or devices[0].get('target')}",
+                "channel": "mcp", "detail": res}
+    except Exception as e:
+        logger.warning(f"MCP 推送失败，尝试回退容器通道: {e}")
+        fb = await _push_xunlei(magnet, config)
+        if fb.get("ok"):
+            return {**fb, "message": f"{fb.get('message', '')}（容器回退：MCP {str(e)[:60]}）"}
+        return {"ok": False, "message": f"MCP 推送失败，容器回退也失败：{str(e)[:120]}；{fb.get('message', '')}"}
+
+
 async def _push_aria2(magnet: str, config: dict) -> dict:
     """推送到 aria2（JSON-RPC）。"""
     import httpx
@@ -154,7 +177,8 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
     """推送磁力到下载器并记录到 downloads 表。"""
     # 读配置
     config = {}
-    for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
+    for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass", "xunlei_mcp_url",
+              "xunlei_push_channel",
               "aria2_url", "aria2_secret",
               "clouddrive_url", "clouddrive_token", "clouddrive_username", "clouddrive_password", "clouddrive_save_path",
               "transmission_url", "transmission_username", "transmission_password"]:
@@ -175,7 +199,11 @@ async def push_magnet(req: PushRequest, db: DbSession, _user: CurrentUser):
         if not task or not task.video_code:
             return {"ok": False, "message": "迅雷通道需要作品番号（无番号作品请用「导出磁力」手动添加）"}
         config["_task_name"] = task.video_code
-        result = await _push_xunlei(req.magnet, config)
+        channel = (config.get("xunlei_push_channel") or "container").lower()
+        if channel == "mcp":
+            result = await _push_xunlei_mcp(req.magnet, config)
+        else:
+            result = await _push_xunlei(req.magnet, config)
     elif downloader == "aria2":
         result = await _push_aria2(req.magnet, config)
     elif downloader == "clouddrive":

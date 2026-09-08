@@ -32,7 +32,9 @@ _XL_ERROR = {"PHASE_TYPE_ERROR"}
 
 
 def _poll_xunlei_sync(config: dict) -> list[dict]:
-    """同步拉取迅雷运行中任务列表。返回 [{name, phase, progress, speed, real_path}]。"""
+    """同步拉取迅雷运行中任务列表。返回 [{name, phase, progress, speed, real_path, status}]。"""
+    if (config.get("xunlei_push_channel") or "container").lower() == "mcp":
+        return _poll_xunlei_mcp(config)
     from services.xunlei_client import XunleiClient
     client = XunleiClient(config.get("xunlei_url", ""),
                           config.get("xunlei_basic_user", ""),
@@ -46,14 +48,51 @@ def _poll_xunlei_sync(config: dict) -> list[dict]:
             "progress": int(t.get("progress") or 0),
             "speed": int(p.get("speed") or 0),
             "real_path": p.get("real_path", ""),
+            "status": str(p.get("status") or t.get("message") or ""),
         })
     return out
 
 
+def _poll_xunlei_mcp(config: dict) -> list[dict]:
+    """MCP 通道轮询：list_devices → 各设备任务列表 → 统一格式（phase 数字兼容）。"""
+    import asyncio
+    from services.xunlei_mcp import XunleiMCPClient
+    url = config.get("xunlei_mcp_url", "")
+    if not url or url == "***":
+        return []
+
+    async def _run():
+        async with XunleiMCPClient(url, timeout=15.0) as c:
+            devices = await c.list_devices()
+            out = []
+            for dev in devices:
+                for t in await c.list_tasks_mcp(dev.get("target", ""), 200):
+                    out.append({
+                        "name": t.get("name") or t.get("file_name") or "",
+                        "phase": t.get("phase", ""),
+                        "progress": int(t.get("progress") or 0),
+                        "speed": int(t.get("speed") or 0),
+                        "real_path": t.get("file_name", ""),
+                        "status": str(t.get("status") or t.get("message") or ""),
+                    })
+            return out
+
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.warning(f"迅雷 MCP 轮询失败: {e}")
+        return []
+
+
 async def _poll_xunlei(db) -> int:
     """轮询迅雷任务并回写 Download/Task（匹配键 = Download.video_code 与迅雷任务名）。"""
-    config = {k: _get_setting(db, k) for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass"]}
-    if not config["xunlei_url"]:
+    config = {k: _get_setting(db, k) for k in ["xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
+                                                 "xunlei_mcp_url", "xunlei_push_channel"]}
+    channel = (config.get("xunlei_push_channel") or "container").lower()
+    if channel == "mcp":
+        if not config.get("xunlei_mcp_url") or config.get("xunlei_mcp_url") == "***":
+            return 0
+    elif not config.get("xunlei_url"):
         return 0
     pending = db.execute(
         select(Download).where(
@@ -82,11 +121,11 @@ async def _poll_xunlei(db) -> int:
             _missing_count.pop(dl.id, None)
         else:
             _missing_count.pop(dl.id, None)
-            if r["phase"] in _XL_COMPLETE or r["progress"] >= 100:
+            if r["phase"] in _XL_COMPLETE or r["phase"] == 4 or r["progress"] >= 100:
                 dl.status = "completed"
                 dl.progress = 100
                 dl.completed_at = datetime.utcnow()
-            elif r["phase"] in _XL_ERROR:
+            elif r["phase"] in _XL_ERROR or r["phase"] == 5 or "失败" in r.get("status", ""):
                 dl.status = "failed"
                 dl.error_message = "迅雷任务错误"
             else:

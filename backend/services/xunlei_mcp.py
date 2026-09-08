@@ -189,3 +189,65 @@ class XunleiMCPClient:
     async def call_tool(self, name: str, arguments: dict) -> dict:
         res = await self._rpc("tools/call", {"name": name, "arguments": arguments}, timeout=120)
         return res if isinstance(res, dict) else {"result": res}
+
+    async def call_text(self, name: str, arguments: dict) -> str:
+        """调用工具并提取 content[0].text（MCP 文本结果封装）；isError 抛错。"""
+        res = await self.call_tool(name, arguments)
+        if isinstance(res, dict) and res.get("isError"):
+            raise MCPError(str(res)[:400])
+        content = res.get("content") if isinstance(res, dict) else None
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    return str(item.get("text", ""))
+        return json.dumps(res, ensure_ascii=False)
+
+    async def list_devices(self) -> list[dict]:
+        """全部可用下载设备（分页拉全）。返回 [{name, target, ...}]。"""
+        out: list[dict] = []
+        token = ""
+        for _ in range(20):
+            args: dict = {"page_size": 100}
+            if token:
+                args["page_token"] = token
+            txt = await self.call_text("xunlei_download_list_device", args)
+            try:
+                data = json.loads(txt)
+            except Exception:
+                raise MCPError(f"设备列表解析失败: {txt[:200]}")
+            out.extend(data.get("device") or [])
+            token = data.get("next_page_token") or ""
+            if not token:
+                break
+        return out
+
+    async def list_tasks_mcp(self, target: str, page_size: int = 200) -> list[dict]:
+        """指定设备全部下载任务（分页拉全）。返回任务原始 dict（含 id/name/phase/progress）。"""
+        out: list[dict] = []
+        token = ""
+        for _ in range(50):
+            args: dict = {"target": target, "page_size": page_size}
+            if token:
+                args["page_token"] = token
+            txt = await self.call_text("xunlei_download_list", args)
+            try:
+                data = json.loads(txt)
+            except Exception:
+                raise MCPError(f"任务列表解析失败: {txt[:200]}")
+            out.extend(data.get("tasks") or [])
+            token = data.get("next_page_token") or ""
+            if not token:
+                break
+        return out
+
+    async def create_download(self, target: str, urls: list[str],
+                              names: list[str] | None = None) -> dict:
+        """创建下载任务（urls 支持 magnet/http/ed2k 等）。"""
+        args: dict = {"target": target, "urls": urls}
+        if names:
+            args["names"] = names
+        txt = await self.call_text("xunlei_download_create", args)
+        try:
+            return json.loads(txt)
+        except Exception:
+            return {"raw": txt}

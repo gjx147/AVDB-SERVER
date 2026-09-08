@@ -127,6 +127,7 @@ const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
           </div>
           <div className="hint">容器需先登录迅雷账号；下载目录由容器环境变量 XL_DIR_DOWNLOAD 决定（面板内可配置）。</div>
           <div className="field"><label htmlFor="xl-mcp">MCP 链接（可选，官方试点）</label><input id="xl-mcp" className="input" value={(s.xunlei_mcp_url || '')} onChange={(e) => upd({ xunlei_mcp_url: e.target.value })} placeholder="https://api-xmodels.xunlei.com/models/sse/..." /></div>
+          <div className="field"><label htmlFor="xl-channel">推送通道</label><select id="xl-channel" className="input" value={(s.xunlei_push_channel || 'container')} onChange={(e) => upd({ xunlei_push_channel: e.target.value })}><option value="container">容器（cnk3x/xunlei）</option><option value="mcp">MCP 官方通道</option></select><span className="hint">MCP 通道推送失败时自动回退容器通道。</span></div>
 
           <button className="btn btn--ghost btn--sm" onClick={() => test('xunlei')} disabled={testing !== null}>
             {testing === 'xunlei' ? '测试中…' : '测试连接'}
