@@ -390,6 +390,25 @@ export function ActorDetail() {
     }
   }
 
+  const batchPushXunlei = async () => {
+    const ids = [...selected]
+    if (!ids.length) return
+    const ok = await confirmBox('批量推送迅雷下载',
+      `将把所选 ${ids.length} 个任务推送到迅雷下载（走设置页配置的推送通道，MCP/容器；未提取到磁力的自动跳过）。确定继续？`)
+    if (!ok) return
+    setBatchBusy(true)
+    try {
+      const r = await api.tasks.batchPush(ids, 'xunlei')
+      if (r.pushed > 0) toastOk(`已推送 ${r.pushed} 部到迅雷${r.skipped ? `（跳过 ${r.skipped} 部无磁力/失败）` : ''}`)
+      else toastErr(`没有推送成功：${r.skipped} 部无磁力或推送失败`)
+      setSelected(new Set())
+    } catch (e) {
+      toastErr(String((e as Error).message))
+    } finally {
+      setBatchBusy(false)
+    }
+  }
+
   if (actor === undefined) return <div className="page"><Loading /></div>
   if (actor === null) return <div className="page"><Empty title="演员不存在" /></div>
   if (error) return <div className="page"><ErrorEmpty message={error} onRetry={() => nav('/actors')} /></div>
@@ -887,7 +906,8 @@ export function ActorDetail() {
       <div className={`batchbar${selected.size ? ' show' : ''}`}>
         <span className="sel-count">已选 {selected.size} 项</span>
         <button className="btn btn--gold btn--sm" onClick={batchPushCD2} disabled={batchBusy}>推送 CD2</button>
-<button className="btn btn--ghost btn--sm" onClick={() => setExportOpen(true)} disabled={batchBusy}>导出磁力</button>
+        <button className="btn btn--primary btn--sm" onClick={batchPushXunlei} disabled={batchBusy}>推送迅雷</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => setExportOpen(true)} disabled={batchBusy}>导出磁力</button>
               
         <button className="btn btn--ghost btn--sm" onClick={() => batch('favorite')} disabled={batchBusy}>批量收藏</button>
         <button className="btn btn--danger btn--sm" onClick={() => batch('delete')} disabled={batchBusy}>批量删除</button>
