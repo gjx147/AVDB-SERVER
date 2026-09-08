@@ -236,7 +236,7 @@ async def xunlei_mcp_pilot(db: DbSession, _admin: CurrentAdmin):
 
     连接串只读 settings xunlei_mcp_url（S4：不接受 body 注入防 SSRF）；15s 总超时。
     """
-    import asyncio as _aio
+    import asyncio
     url = _get_setting(db, "xunlei_mcp_url")
     if not url or url == "***":
         return {"ok": False, "message": "未配置迅雷 MCP 链接（下载器设置页填写并保存）"}
@@ -249,7 +249,7 @@ async def xunlei_mcp_pilot(db: DbSession, _admin: CurrentAdmin):
                 tools = await c.list_tools()
                 return c.server_info, tools
 
-        server, tools = await _aio.wait_for(_run(), timeout=15.0)
+        server, tools = await asyncio.wait_for(_run(), timeout=15.0)
         return {"ok": True, "server": server,
                 "tools": [{"name": t.get("name"), "description": (t.get("description") or "")[:200]}
                           for t in tools]}

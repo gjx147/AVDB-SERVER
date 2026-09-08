@@ -24,6 +24,7 @@ class XunleiMCPClient:
         self._client: httpx.AsyncClient | None = None
         self._pending: dict[int, asyncio.Future] = {}
         self._sse_task: asyncio.Task | None = None
+        self._sse_ready = asyncio.Event()
         self._seq = 0
         self.server_info: dict | None = None
         self.tools: list[dict] | None = None
@@ -40,6 +41,11 @@ class XunleiMCPClient:
             timeout=httpx.Timeout(self.timeout, connect=10))  # S4：不再 follow_redirects
         self._sse_task = asyncio.create_task(self._read_sse())
         try:
+            # 等 SSE GET 流建立后再发 initialize（部分服务器会忽略未注册会话的 POST）
+            try:
+                await asyncio.wait_for(self._sse_ready.wait(), timeout=5.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                raise MCPError("MCP 事件流未建立（SSE 连接失败）")
             res = await self._rpc("initialize", {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
@@ -119,6 +125,7 @@ class XunleiMCPClient:
             async with self._client.stream(
                     "GET", self.url, headers={"Accept": "text/event-stream"},
                     timeout=httpx.Timeout(None)) as resp:
+                self._sse_ready.set()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data:"):
                         continue

@@ -326,6 +326,8 @@ def test_xunlei_mcp_client_initialize_and_list_tools():
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == 'GET':
+            return httpx.Response(200, content=b'\n')
         method = _json.loads(request.content).get("method")
         if method == "initialize":
             seen['init'] = True
@@ -483,3 +485,32 @@ def test_xunlei_mcp_pilot_endpoint(client, monkeypatch):
     s1.close()
     r2 = client.post('/api/downloaders/xunlei-mcp-pilot', json={})
     assert r2.status_code == 200 and r2.json()['ok'] is False
+    # 恢复配置
+    s2 = SessionLocal()
+    row2 = s2.get(Setting, 'xunlei_mcp_url')
+    row2.value = 'https://x/sse/abc'
+    s2.commit()
+    s2.close()
+
+
+def test_xunlei_mcp_pilot_timeout_returns_200(client, monkeypatch):
+    """回归：连接超时（asyncio.TimeoutError）不得 500，返回 200 + 明确提示。"""
+    import asyncio
+    import services.xunlei_mcp as xm
+
+    class SlowMCP:
+        def __init__(self, url, timeout=30.0):
+            self.url = url
+            self.server_info = {}
+
+        async def __aenter__(self):
+            raise asyncio.TimeoutError()
+
+        async def __aexit__(self, *a):
+            return None
+
+    monkeypatch.setattr(xm, 'XunleiMCPClient', SlowMCP)
+    r = client.post('/api/downloaders/xunlei-mcp-pilot', json={})
+    assert r.status_code == 200, f'超时路径必须 200，实际 {r.status_code}'
+    d = r.json()
+    assert d['ok'] is False and '超时' in (d.get('message') or '')
