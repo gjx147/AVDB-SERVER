@@ -161,6 +161,10 @@ class XunleiMCPClient:
         # legacy SSE：endpoint 事件告知 JSON-RPC 消息的 POST 地址
         if event == "endpoint":
             url = data.strip()
+            # 真实服务器下发相对路径（如 /models/message?...），用 SSE 地址 origin 拼接
+            if url.startswith("/"):
+                from urllib.parse import urljoin
+                url = urljoin(self.url.split("?", 1)[0], url)
             if url.startswith(("http://", "https://")):
                 logger.info(f"迅雷 MCP endpoint 事件 → POST {url[:96]}")
                 self._post_url = url

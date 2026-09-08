@@ -467,8 +467,9 @@ def test_xunlei_mcp_client_legacy_endpoint_event():
             return False
 
         async def aiter_lines(self):
+            # 真实服务器形态：相对路径 endpoint（含 sessionId/key 查询串）
             yield 'event: endpoint'
-            yield 'data: https://api-xmodels.xunlei.com/models/sse/abc/messages'
+            yield 'data: /models/message?sessionId=abc&key=def'
             yield ''
 
     class FakeClient:
@@ -494,7 +495,8 @@ def test_xunlei_mcp_client_legacy_endpoint_event():
         return post_url, urls
 
     post_url, urls = asyncio.run(run())
-    assert post_url.endswith('/messages'), f'endpoint 事件应更新 POST 地址，实际 {post_url}'
+    assert post_url == 'https://api-xmodels.xunlei.com/models/message?sessionId=abc&key=def', \
+        f'相对路径应拼接 origin，实际 {post_url}'
     assert urls and urls[0] == post_url, f'_post 应使用 endpoint 事件地址: {urls}'
 
 
