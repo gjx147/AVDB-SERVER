@@ -104,6 +104,37 @@ def test_xunlei_client_add_task_mock():
     assert b["params"]["parent_folder_id"] == "ROOT1"
 
 
+def test_xunlei_client_basic_required():
+    """容器设置 dashboard 凭据时：client 必须带 Basic 认证，401 返回明确提示。"""
+    import httpx
+    from services.xunlei_client import XunleiClient
+
+    seen_auth = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_auth.append(request.headers.get("authorization"))
+        if request.url.path == "/webman/status":
+            if request.headers.get("authorization"):
+                return httpx.Response(200, text="hello xlp")
+            return httpx.Response(401)
+        if "/launcher/status" in request.url.path:
+            return httpx.Response(200, json={"running_version": "3.21.0"})
+        if "/drive/v1/tasks" in request.url.path:
+            return httpx.Response(200, json={"tasks": [{"params": {"target": "device#abc"}}]})
+        return httpx.Response(404, json={})
+
+    tr = httpx.MockTransport(handler)
+    # 带凭据：应 ok=True 且携带 Authorization
+    c1 = XunleiClient("http://nas:2345", basic_user="root", basic_pass="secret", transport=tr)
+    r1 = c1.test()
+    assert r1.get("ok") is True, f'带凭据应成功: {r1}'
+    assert seen_auth and seen_auth[0] and seen_auth[0].startswith("Basic"), '应携带 Basic Authorization'
+    # 不带凭据：401 → 明确提示
+    c2 = XunleiClient("http://nas:2345", transport=tr)
+    r2 = c2.test()
+    assert r2.get("ok") is False and "401" in r2.get("message", ""), f'无凭据应提示认证: {r2}'
+
+
 def test_xunlei_client_uiauth_high_version():
     """高版本（≥3.21.0）：从首页 HTML 的 uiauth 提取 token。"""
     import httpx

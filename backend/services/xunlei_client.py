@@ -59,7 +59,11 @@ class XunleiClient:
 
     # ---------- 鉴权 ----------
     def _client(self) -> httpx.Client:
-        return httpx.Client(base_url=self.base, transport=self._transport, timeout=15)
+        # 容器设置 dashboard 用户名/密码时（cnk3x/xunlei 常见），webman 全部路径
+        # 受 Basic 保护——必须携带认证，否则 401 → 误判不可达
+        auth = (self.basic_user, self.basic_pass) if self.basic_user else None
+        return httpx.Client(base_url=self.base, transport=self._transport,
+                            timeout=15, auth=auth)
 
     def _version(self, c: httpx.Client) -> str:
         try:
@@ -172,12 +176,17 @@ class XunleiClient:
             return []
 
     def test(self) -> dict:
-        """连通性自检：版本 + 设备。"""
+        """连通性自检：面板探测（带认证）+ 版本 + 设备。"""
         try:
             with self._client() as c:
+                r = c.get("/webman/status", timeout=6)
+                if r.status_code != 200:
+                    if r.status_code == 401:
+                        return {"ok": False, "message": "迅雷容器需要认证（HTTP 401）：请检查 Basic 用户名/密码是否与容器 dashboard 设置一致"}
+                    return {"ok": False, "message": f"迅雷面板响应异常（HTTP {r.status_code}），请检查地址与网络"}
+                if "hello xlp" not in r.text:
+                    return {"ok": False, "message": "目标地址不是迅雷容器服务（请确认地址指向迅雷面板 2345 端口）"}
                 ver = self._version(c)
-                if not verify_base(self.base):
-                    return {"ok": False, "message": "迅雷容器不可达"}
                 device = self.device_id(c)
             return {"ok": True, "version": ver or "?", "device": device or "未获取"}
         except Exception as e:
