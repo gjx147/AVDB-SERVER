@@ -480,13 +480,14 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
     if force_dl and force_dl not in ("clouddrive", "xunlei"):
         raise HTTPException(status_code=400, detail="downloader 仅支持 clouddrive / xunlei")
     from models import Download
-    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_xunlei
+    from routers.downloaders import _extract_hash, _get_setting, _push_clouddrive, _push_xunlei, _push_xunlei_mcp
 
     tasks = db.execute(
         select(Task).where(Task.id.in_(payload.task_ids))
     ).scalars().all()
     config_keys = (
         "xunlei_url", "xunlei_basic_user", "xunlei_basic_pass",
+        "xunlei_mcp_url", "xunlei_push_channel",
         "clouddrive_url", "clouddrive_token", "clouddrive_username",
         "clouddrive_password", "clouddrive_save_path",
     )
@@ -512,7 +513,10 @@ async def batch_push(payload: BatchViewRequest, db: DbSession, _user: CurrentUse
                 result = await _push_clouddrive(t.best_magnet, config)
             else:
                 config["_task_name"] = t.video_code or "avdb-task"  # A1：无条件写，防跨任务沿用
-                result = await _push_xunlei(t.best_magnet, config)
+                if (config.get("xunlei_push_channel") or "container").lower() == "mcp":
+                    result = await _push_xunlei_mcp(t.best_magnet, config)
+                else:
+                    result = await _push_xunlei(t.best_magnet, config)
             if result.get("ok"):
                 db.add(Download(
                     task_id=t.id, video_code=t.video_code, magnet=t.best_magnet,
