@@ -11,6 +11,8 @@ export function Downloaders() {
   const [testing, setTesting] = useState<string | null>(null)
   const [validation, setValidation] = useState<Record<string, string>>({})
   const [renaming, setRenaming] = useState(false)
+  const [mcpBusy, setMcpBusy] = useState(false)
+  const [mcpTools, setMcpTools] = useState<{ name: string; description: string }[] | null>(null)
   const toastOk = useStore((st) => st.toastOk)
   const toastErr = useStore((st) => st.toastErr)
 
@@ -51,8 +53,6 @@ const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
     } finally { setTesting(null) }
   }
 
-  const [mcpBusy, setMcpBusy] = useState(false)
-  const [mcpTools, setMcpTools] = useState<{ name: string; description: string }[] | null>(null)
   const mcpPilot = async () => {
     setMcpBusy(true)
     setMcpTools(null)  // S8：失败不留旧数据
