@@ -450,6 +450,54 @@ def test_xunlei_mcp_client_sse_channel():
     assert tools[0]['name'] == 'add_download_task', f'SSE 解包后应列出工具，实际 {tools}'
 
 
+def test_xunlei_mcp_client_legacy_endpoint_event():
+    """legacy SSE 核心语义：endpoint 事件更新 POST 地址，_post 使用新地址。"""
+    import asyncio
+    import httpx
+    import services.xunlei_mcp as xm
+    from services.xunlei_mcp import XunleiMCPClient
+
+    post_urls = []
+
+    class FakeSSE:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def aiter_lines(self):
+            yield 'event: endpoint'
+            yield 'data: https://api-xmodels.xunlei.com/models/sse/abc/messages'
+            yield ''
+
+    class FakeClient:
+        async def post(self, url, json=None):
+            post_urls.append(url)
+            return httpx.Response(202)
+
+        def stream(self, method, url, **kw):
+            return FakeSSE()
+
+        async def aclose(self):
+            return None
+
+    async def run():
+        c = XunleiMCPClient('https://api-xmodels.xunlei.com/models/sse/abc')
+        c._client = FakeClient()
+        c._sse_task = asyncio.create_task(c._read_sse())
+        await asyncio.sleep(0.1)  # 让 SSE 任务处理 endpoint 事件
+        post_url = c._post_url
+        await c._post({'jsonrpc': '2.0', 'id': 9, 'method': 'tools/list', 'params': {}})
+        urls = list(post_urls)
+        await c.close()
+        return post_url, urls
+
+    post_url, urls = asyncio.run(run())
+    assert post_url.endswith('/messages'), f'endpoint 事件应更新 POST 地址，实际 {post_url}'
+    assert urls and urls[0] == post_url, f'_post 应使用 endpoint 事件地址: {urls}'
+
+
 def test_xunlei_mcp_pilot_endpoint(client, monkeypatch):
     """试点端点（S4 适配）：连接串只读 settings；未配置返回明确提示。"""
     import services.xunlei_mcp as xm

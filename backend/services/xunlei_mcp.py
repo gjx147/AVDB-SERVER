@@ -20,11 +20,13 @@ class MCPError(Exception):
 class XunleiMCPClient:
     def __init__(self, url: str, timeout: float = 30.0):
         self.url = url
+        self._post_url = url  # legacy SSE 用 endpoint 事件指定，默认与 url 同
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._pending: dict[int, asyncio.Future] = {}
         self._sse_task: asyncio.Task | None = None
         self._sse_ready = asyncio.Event()
+        self._endpoint_evt = asyncio.Event()
         self._seq = 0
         self.server_info: dict | None = None
         self.tools: list[dict] | None = None
@@ -46,6 +48,11 @@ class XunleiMCPClient:
                 await asyncio.wait_for(self._sse_ready.wait(), timeout=5.0)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 raise MCPError("MCP 事件流未建立（SSE 连接失败）")
+            # legacy SSE：等 endpoint 事件告知 POST 地址（最多 1.5s，非 legacy 自动跳过）
+            try:
+                await asyncio.wait_for(self._endpoint_evt.wait(), timeout=1.5)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
             res = await self._rpc("initialize", {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
@@ -85,7 +92,7 @@ class XunleiMCPClient:
         self._pending.clear()
 
     async def _post(self, payload: dict) -> httpx.Response | None:
-        r = await self._client.post(self.url, json=payload)
+        r = await self._client.post(self._post_url, json=payload)
         ct = r.headers.get("content-type", "")
         if r.status_code == 200 and ct.startswith("application/json"):
             return r
@@ -120,32 +127,55 @@ class XunleiMCPClient:
             self._pending.pop(rid, None)
 
     async def _read_sse(self) -> None:
-        """后台读取 SSE 事件流，按请求 id 分发响应。"""
+        """后台读取 SSE 事件流：处理 endpoint 事件 + 按请求 id 分发响应。"""
         try:
             async with self._client.stream(
                     "GET", self.url, headers={"Accept": "text/event-stream"},
                     timeout=httpx.Timeout(None)) as resp:
                 self._sse_ready.set()
+                event = None
+                data_lines: list[str] = []
                 async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
+                    line = line.rstrip("\r")
+                    if line.startswith("event:"):
+                        event = line[6:].strip()
                         continue
-                    data = line[5:].strip()
-                    if not data:
+                    if line.startswith("data:"):
+                        data_lines.append(line[5:].strip())
                         continue
-                    try:
-                        msg = json.loads(data)
-                    except Exception:
-                        continue
-                    rid = msg.get("id")
-                    if isinstance(rid, int) and rid in self._pending:
-                        fut = self._pending[rid]
-                        if not fut.done():
-                            if "result" in msg or "error" in msg:
-                                fut.set_result(msg)  # 信封原样交付，_rpc 统一解包（S1）
+                    if line == "":
+                        if data_lines:
+                            self._handle_sse_event(event, "\n".join(data_lines))
+                        event = None
+                        data_lines = []
+                if data_lines:
+                    self._handle_sse_event(event, "\n".join(data_lines))
         except asyncio.CancelledError:
             pass
         except Exception as e:
             logger.warning(f"迅雷 MCP SSE 流中断: {e}")
+
+    def _handle_sse_event(self, event: str | None, data: str) -> None:
+        if not data or not data.strip():
+            return
+        # legacy SSE：endpoint 事件告知 JSON-RPC 消息的 POST 地址
+        if event == "endpoint":
+            url = data.strip()
+            if url.startswith(("http://", "https://")):
+                logger.info(f"迅雷 MCP endpoint 事件 → POST {url[:96]}")
+                self._post_url = url
+                self._endpoint_evt.set()
+            return
+        try:
+            msg = json.loads(data)
+        except Exception:
+            return
+        rid = msg.get("id")
+        if isinstance(rid, int) and rid in self._pending:
+            fut = self._pending[rid]
+            if not fut.done():
+                if "result" in msg or "error" in msg:
+                    fut.set_result(msg)  # 信封原样交付，_rpc 统一解包（S1）
 
     async def list_tools(self) -> list[dict]:
         res = await self._rpc("tools/list", {})

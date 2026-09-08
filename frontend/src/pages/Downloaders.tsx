@@ -44,8 +44,12 @@ const test = async (kind: 'clouddrive' | 'xunlei' | 'cd2_rename') => {
       await api.settings.update(s)
       setTesting(kind)
       const sp = kind === 'clouddrive' ? s.clouddrive_save_path : ''
-      await api.downloaders.testConnection(kind, sp || undefined)
       const label = kind === 'clouddrive' ? 'CloudDrive2' : kind === 'cd2_rename' ? 'CD2 整理' : '迅雷'
+      const r = await api.downloaders.testConnection(kind, sp || undefined)
+      if (!r.ok) {
+        toastErr(r.msg?.slice(0, 120) || `${label} 连接失败`)
+        return
+      }
       toastOk(`${label} 连接成功`)
     } catch (e) {
       const msg = String((e as Error).message)
